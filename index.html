@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OnSight - Gym Occupancy Monitoring</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    /* Additional styling for toggled “screens” (Login, Occupancy, Motion+Force) */
+    .screen {
+      display: none; /* We'll toggle these via JS */
+    }
+    .screen.active {
+      display: block;
+    }
+
+    /* Content box styling for occupant/motion screens */
+    .content-box {
+      background-color: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      color: #fff;
+      margin: 0 auto;
+      text-align: center;
+      max-width: 600px;
+    }
+
+    /* Make typed text in login inputs black for visibility */
+    #loginScreen input[type="text"],
+    #loginScreen input[type="password"] {
+      color: black;
+    }
+  </style>
+</head>
+<body class="bg-black text-white">
+  <!-- FIXED TOP NAV -->
+  <header class="fixed top-0 left-0 right-0 z-50 bg-black border-b border-gray-800">
+    <div class="container mx-auto px-6 h-16 flex items-center justify-between">
+      <!-- Smaller OnSight logo in top-left (clickable) -->
+      <div class="flex items-center">
+        <img 
+          src="Logo Draft11.PNG" 
+          alt="OnSight Logo" 
+          class="w-12 h-auto mr-3"
+          onclick="window.scrollTo({top:0,behavior:'smooth'})" 
+          style="cursor:pointer;"
+        />
+      </div>
+      <nav class="flex items-center gap-6">
+        <a href="#featuresSection" class="text-gray-300 hover:text-white">Features</a>
+        <a href="#aboutSection" class="text-gray-300 hover:text-white">About</a>
+        <a href="#teamSection" class="text-gray-300 hover:text-white">Team</a>
+        <a href="#waitlistSection" class="text-gray-300 hover:text-white">Waitlist</a>
+        <button 
+          class="bg-transparent hover:bg-white/10 text-gray-300 hover:text-white px-4 py-2 rounded" 
+          onclick="showScreen('loginScreen')"
+        >
+          Login
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section id="heroSection" class="pt-16 relative px-6 lg:px-8 py-24 lg:py-32 overflow-hidden bg-black text-white">
+    <div class="mx-auto max-w-7xl">
+      <div class="flex flex-col lg:flex-row items-center gap-12">
+        <!-- LEFT SIDE: text -->
+        <div class="flex-1 text-center lg:text-left">
+          <h1 class="text-4xl sm:text-6xl font-bold tracking-tight" style="line-height:1.3;">
+            <span class="block bg-gradient-to-r from-white to-white bg-clip-text text-transparent">
+              Stop Guessing.
+            <span class="block bg-gradient-to-r from-purple-400 to-purple-400 bg-clip-text text-transparent mb-[-4px]">
+              Start Knowing.
+          </h1>
+          <p class="mt-6 text-lg leading-8 text-gray-300 max-w-2xl mx-auto lg:mx-0">
+            Onsight provides gyms with real-time occupancy and equipment usage data 
+            to optimize resources, cut costs, and enhance member experiences.
+          </p>
+          <div class="mt-10 flex gap-6 justify-center lg:justify-start">
+            <a 
+              href="#waitlistSection" 
+              class="inline-flex items-center justify-center px-8 py-3 text-lg font-medium bg-white text-black rounded hover:bg-gray-200"
+            >
+              Join Waitlist
+            </a>
+            <a 
+              href="#featuresSection" 
+              class="inline-flex items-center justify-center px-8 py-3 text-lg font-medium border border-white text-white rounded hover:bg-white/10"
+            >
+              Learn More
+            </a>
+          </div>
+        </div>
+        <!-- RIGHT SIDE: OnSight logo instead of gym photo -->
+        <div class="flex-1 relative">
+          <div class="absolute inset-0 bg-gradient-to-tr from-purple-500/30 to-blue-500/30 rounded-2xl"></div>
+          <img
+            src="Logo Draft11.PNG"
+            alt="OnSight Logo"
+            class="rounded-2xl shadow-2xl relative z-10 aspect-[4/3] object-contain w-full bg-white/5 p-6"
+          />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES SECTION -->
+  <section id="featuresSection" class="relative py-24 px-6 lg:px-8 bg-black/95">
+    <div class="mx-auto max-w-7xl">
+      <div class="text-center mb-16">
+        <h2 class="text-3xl font-bold tracking-tight sm:text-4xl text-white">
+          Empowering Gyms with Smart Insights
+        </h2>
+        <p class="mt-4 text-lg text-gray-400">
+          Our sensor solutions provide the data you need to optimize your facility.
+        </p>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <svg class="h-12 w-12 mb-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path 
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17
+                 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7
+                 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 
+                 0a5.002 5.002 0 019.288 0M15 7a3 3 0
+                 11-6 0 3 3 0 016 0zm6 3a2 2 0
+                 11-4 0 2 2 0 014 0zM7 10a2 2 0
+                 11-4 0 2 2 0 014 0z"
+            />
+          </svg>
+          <h3 class="text-xl font-semibold text-white">Real-Time Occupancy</h3>
+          <p class="text-gray-400">Track door entries/exits for live occupancy data.</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <svg class="h-12 w-12 mb-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path 
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 
+                 00-2-2H5a2 2 0 00-2 
+                 2v6a2 2 0 002 2h2a2
+                 2 0 002-2zm0 0V9a2 2 0
+                 012-2h2a2 2 0 012 
+                 2v10m-6 0a2 2 0 002 
+                 2h2a2 2 0 002-2m0
+                 0V5a2 2 0 012-2h2a2
+                 2 0 012 2v14a2 2 
+                 0 01-2 2h-2a2 2 0 
+                 01-2-2z"
+            />
+          </svg>
+          <h3 class="text-xl font-semibold text-white">Machine Usage</h3>
+          <p class="text-gray-400">Monitor equipment usage patterns and track usage time.</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <svg class="h-12 w-12 mb-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path 
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M16 8v8m-4-5v5m-4-2v2m-2
+                 4h12a2 2 0 002-2V6a2
+                 2 0 00-2-2H6a2 2 0
+                 00-2 2v12a2 2 0 
+                 002 2z"
+            />
+          </svg>
+          <h3 class="text-xl font-semibold text-white">AI-Powered Insights</h3>
+          <p class="text-gray-400">
+            Comprehensive dashboards to spot usage patterns, optimize scheduling, 
+            and deliver data-driven recommendations.
+          </p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <svg class="h-12 w-12 mb-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path 
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+          <h3 class="text-xl font-semibold text-white">Live Performance</h3>
+          <p class="text-gray-400">Receive real-time updates & act quickly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABOUT SECTION -->
+  <section id="aboutSection" class="pt-16 px-6 py-24 bg-black">
+    <div class="mx-auto max-w-7xl flex flex-col lg:flex-row items-center gap-8 bg-gray-900 p-8 rounded">
+      <div class="flex-1">
+        <img 
+          src="aboutUs.jpg"
+          alt="About OnSight"
+          class="w-full rounded-lg shadow-lg"
+        />
+      </div>
+      <div class="flex-1 text-white">
+        <h2 class="text-3xl font-bold mb-4">About OnSight</h2>
+        <p class="text-gray-300 mb-4">
+          We began with a simple frustration: constantly arriving at a gym only to find it packed and machines unavailable. 
+          Determined to solve this all-too-common problem, we researched existing solutions and discovered a noticeable lack of 
+          real-time occupancy data for fitness facilities. We built OnSight to empower recreation centers by providing accurate 
+          insights on both occupancy and machine usage, enabling optimized resources, smoother operations, and more satisfied members. 
+        </p>
+        <p class="text-gray-300">
+          By leveraging on-the-ground feedback from gym managers, staff, and countless gym-goers, we refined our sensors and analytics 
+          to optimize resources, reduce overhead, and ultimately enhance the member experience. Our goal is to ensure gyms run at peak 
+          efficiency—no wasted space, no unexpected crowds, and no guesswork required.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEAM SECTION -->
+  <section id="teamSection" class="pt-16 px-6 py-24 bg-black">
+    <div class="mx-auto max-w-7xl">
+      <h2 class="text-3xl font-bold text-white mb-8 text-center">Our Team</h2>
+      <div class="flex flex-wrap justify-center gap-6">
+        <!-- Example: Angel -->
+        <div class="bg-gray-800 p-4 rounded text-center">
+          <img 
+            src="angel (1).jpg" 
+            alt="Angel Mendoza" 
+            class="w-48 h-auto rounded mb-2 mx-auto" 
+          />
+          <h3 class="text-lg font-semibold">Angel Mendoza</h3>
+          <p>Co-Founder & CEO</p>
+          <p>3rd Year Mechanical Engineering & Business at Northwestern University.</p>
+        </div>
+        <!-- Example: Matt -->
+        <div class="bg-gray-800 p-4 rounded text-center">
+          <img 
+            src="matt.jpg" 
+            alt="Matt Martinez" 
+            class="w-48 h-auto rounded mb-2 mx-auto" 
+          />
+          <h3 class="text-lg font-semibold">Matt Martinez</h3>
+          <p>Co-Founder & COO</p>
+          <p>3rd Year Mechanical Engineering & Psychology at Northwestern University.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WAITLIST SECTION -->
+  <section id="waitlistSection" class="pt-16 py-24 px-6 lg:px-8 bg-black">
+    <div class="mx-auto max-w-3xl text-center">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl text-white">
+        Want this at your gym?
+      </h2>
+      <p class="mt-4 text-lg text-gray-400">
+        Join our waitlist to be among the first to experience how OnSight can transform your facility.
+      </p>
+      <form class="mt-10 flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
+        <input
+          type="email"
+          placeholder="Enter email"
+          class="flex-1 px-4 py-3 bg-gray-900 border border-gray-800 rounded text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+          required
+        />
+        <button
+          type="submit"
+          class="px-8 py-3 bg-white text-black rounded hover:bg-gray-200 font-medium"
+        >
+          Join Now
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- LOGIN SCREEN (Hidden by default) -->
+  <section id="loginScreen" class="screen px-6 py-24">
+    <div class="content-box">
+      <h2 class="text-2xl font-bold mb-4">Login</h2>
+      <p>Please enter your username and password:</p>
+      <input 
+        type="text" 
+        id="usernameInput" 
+        placeholder="Username" 
+        class="block w-3/4 mx-auto mt-4" 
+      />
+      <input 
+        type="password" 
+        id="passwordInput" 
+        placeholder="Password" 
+        class="block w-3/4 mx-auto mt-4" 
+      />
+      <button 
+        class="mt-4 px-4 py-2 bg-purple-600 rounded hover:bg-purple-700" 
+        onclick="checkCredentials()"
+      >
+        Login
+      </button>
+    </div>
+  </section>
+
+  <!-- OCCUPANCY SCREEN (TheGarage) -->
+  <section id="occupancyScreen" class="screen px-6 py-24">
+    <div class="content-box">
+      <h2 class="text-2xl font-bold mb-4">The Residency of The Garage Live Count</h2>
+      <p id="occupancyCount" class="text-xl">0</p>
+    </div>
+  </section>
+
+  <!-- MOTION+FORCE SCREEN (SPAC) -->
+  <section id="motionScreen" class="screen px-6 py-24">
+    <div class="content-box">
+      <h2 class="text-2xl font-bold mb-4">SPAC Machine Usage</h2>
+      <!-- Label changed slightly to emphasize it’s a total stored on the server -->
+      <p>Total Motion Time: <span id="motionCount">0</span></p>
+      <p>Force Time: <span id="forceCount">0</span></p>
+    </div>
+  </section>
+
+  <script>
+    // validAccounts:
+    //   "TheGarage":"resident" => occupant
+    //   "SPAC":"recreation"   => motion & force
+    const validAccounts = {
+      "TheGarage": "resident",
+      "SPAC": "recreation"
+    };
+
+    // Show/hide the "screen" elements
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      const section = document.getElementById(screenId);
+      if (section) {
+        section.classList.add('active');
+        section.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    // Basic login
+    function checkCredentials() {
+      const user = document.getElementById("usernameInput").value;
+      const pass = document.getElementById("passwordInput").value;
+      if (validAccounts[user] && validAccounts[user] === pass) {
+        if (user === "TheGarage") {
+          showScreen("occupancyScreen");
+          fetchOccupancy();
+        } else if (user === "SPAC") {
+          showScreen("motionScreen");
+          fetchMotionAndForce();
+        }
+      } else {
+        alert("Incorrect username or password!");
+      }
+    }
+
+    // Occupancy fetch
+    async function fetchOccupancy() {
+      try {
+        const res = await fetch('/dataOccupancy', { cache: 'no-store' });
+        const data = await res.json();
+        document.getElementById("occupancyCount").textContent = data.occupancy;
+      } catch (err) {
+        console.error("Error fetching occupancy:", err);
+      }
+      // Continually re-fetch occupancy
+      setTimeout(fetchOccupancy, 5000);
+    }
+
+    // Motion + Force
+    async function fetchMotionAndForce() {
+      try {
+        // This returns the server-stored total for motion
+        const motionRes = await fetch('/dataMotion', { cache: 'no-store' });
+        const motionData = await motionRes.json();
+        // We display motionData.motionTime
+        document.getElementById("motionCount").textContent = motionData.motionTime;
+
+        // Force data, if present
+        const forceRes = await fetch('/dataForce', { cache: 'no-store' });
+        const forceData = await forceRes.json();
+        document.getElementById("forceCount").textContent = forceData.forceTime;
+      } catch (err) {
+        console.error("Error fetching motion/force data:", err);
+      }
+      // Continually re-fetch
+      setTimeout(fetchMotionAndForce, 5000);
+    }
+  </script>
+</body>
+</html>
