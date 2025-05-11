@@ -1,25 +1,25 @@
 /* Hero Section styles */
 #heroSection {
     padding-top: 4rem; /* 16px x 4 = 64px */
-    padding-bottom: 8rem; /* 16px x 8 = 128px */
+    padding-bottom: 6rem; /* 16px x 8 = 128px */
     position: relative;
-    padding-left: 7rem; /* 6px x 4 = 24px */
+    padding-left: 6rem; /* 6px x 4 = 24px */
     padding-right: 7rem; /* 6px x 4 = 24px */
     background-color: black; /* Ensure the background is black */
     color: white;
     overflow: hidden;
     width: 100%; /* Ensure the section spans the full width of the screen */
+    box-sizing: content-box;
 }
 
 #heroSection .container {
     max-width: 100%; /* Remove width restriction */
-    margin-left: auto;
-    margin-right: auto;
     display: flex;
     flex-direction: column; /* Default for smaller screens */
-    gap: 3rem; /* Add spacing between text and image */
+    gap: 1rem; /* Add spacing between text and image */
     padding-left: 1rem; /* Add padding for content alignment */
     padding-right: 1rem;
+    margin: 0 auto;
 }
 
 @media (min-width: 1024px) { /* For larger screens (lg and above) */
@@ -27,6 +27,10 @@
         flex-direction: row; /* Align text and image side by side */
         align-items: center; /* Vertically align text and image */
     }
+}
+
+body {
+    overflow-x: hidden;
 }
 
 #heroSection h1 {
