@@ -14,16 +14,10 @@ function Header() {
         </div>
         <nav>
           <a href="#featuresSection">Features</a>
-          <a href="#aboutSection">About</a>
-          <a href="#teamSection">Team</a>
+          <a href="#dashboardSection">Dashboard</a>
+          <a href="#foundersNoteSection">Founder's Note</a>
           <a href="#waitlistSection">Waitlist</a>
-          <button
-            onClick={() =>
-              document.getElementById('loginScreen').scrollIntoView({ behavior: 'smooth' })
-            }
-          >
-            Login
-          </button>
+          <a href="#loginSection">Login</a>
         </nav>
       </div>
     </header>
