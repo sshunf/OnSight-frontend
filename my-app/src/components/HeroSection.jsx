@@ -22,9 +22,9 @@ function HeroSection() {
         </div>
         {/* RIGHT SIDE: OnSight Logo */}
         <div className="relative">
-          <div className="absolute"></div>
+          <div></div>
           <img
-            src="/logo.png"
+            src="/logodraft.png"
             alt="OnSight Logo"
           />
         </div>

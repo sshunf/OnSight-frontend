@@ -16,10 +16,10 @@ function Header() {
         <nav>
           <Link to="/">Home</Link>
           <Link to="/features">Features</Link>
-          <a href="#dashboardSection">Dashboard</a>
-          <a href="#foundersNoteSection">Founder's Note</a>
-          <a href="#waitlistSection">Waitlist</a>
-          <a href="#loginSection">Login</a>
+          <Link to="/dashboard">Dashboard</Link>
+          <Link to="/foundersNote">Founders' Note</Link>
+          <Link to="/waitlist">Waitlist</Link>
+          <Link to="/login">Login</Link>
         </nav>
       </div>
     </header>

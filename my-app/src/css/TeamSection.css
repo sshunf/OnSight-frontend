@@ -1,0 +1,75 @@
+/* Team Section container */
+#teamSection {
+    padding-top: 4rem; /* 16px x 4 = 64px */
+    padding-bottom: 4rem; /* 16px x 4 = 64px */
+    padding-left: 1.5rem; /* 6px x 4 = 24px */
+    padding-right: 1.5rem; /* 6px x 4 = 24px */
+    background-color: black; /* Black background */
+    color: white; /* White text */
+  }
+  
+  /* Section title */
+  #teamSection h2 {
+    font-size: 2rem; /* 32px */
+    font-weight: 700; /* Bold */
+    text-align: center;
+    margin-bottom: 2rem; /* 16px x 2 = 32px */
+  }
+  
+  @media (min-width: 640px) { /* For small screens and above */
+    #teamSection h2 {
+      font-size: 2.5rem; /* 40px */
+    }
+  }
+  
+  /* Team members container */
+  #teamSection .team-container {
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping for smaller screens */
+    justify-content: center; /* Center the team members */
+    gap: 1.5rem; /* 16px x 1.5 = 24px */
+  }
+  
+  /* Individual team member card */
+  #teamSection .team-card {
+    background-color: #1f2937; /* Gray-800 */
+    border-radius: 0.5rem; /* 8px */
+    padding: 1.5rem; /* 16px x 1.5 = 24px */
+    text-align: center;
+    width: 100%; /* Full width by default */
+    max-width: 18rem; /* Limit the width to 288px */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+  }
+  
+  /* Team member image */
+#teamSection .team-card img {
+    width: 100%; /* Full width */
+    max-width: 4rem; /* Limit the width to 192px */
+    max-height: 4rem; /* Force a consistent height */
+    border-radius: 0.5rem; /* Rounded corners */
+    margin-bottom: 1rem; /* 16px */
+    object-fit: cover; /* Ensure the image fits within the container */
+  }
+  
+  /* Team member name */
+  #teamSection .team-card h3 {
+    font-size: 1.25rem; /* 20px */
+    font-weight: 600; /* Semi-bold */
+    margin-bottom: 0.5rem; /* 8px */
+    color: white;
+  }
+  
+  /* Team member role */
+  #teamSection .team-card p:first-of-type {
+    font-size: 1rem; /* 16px */
+    font-weight: 500; /* Medium */
+    color: #a3a3a3; /* Gray-400 */
+    margin-bottom: 0.5rem; /* 8px */
+  }
+  
+  /* Team member description */
+  #teamSection .team-card p:last-of-type {
+    font-size: 0.875rem; /* 14px */
+    color: #9ca3af; /* Gray-400 */
+    line-height: 1.5; /* 21px */
+  }
