@@ -1,4 +1,3 @@
-// filepath: /Users/Shun/Coding/OnSight-frontend/my-app/src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './css/App.css';
@@ -8,10 +7,12 @@ import HomePage from './pages/HomePage';
 import FeaturesPage from './pages/FeaturesPage';
 import FoundersNotePage from './pages/FoundersNotePage';
 import LoginScreen from './components/LoginScreen';
+import AsteriskBackground from './components/AsteriskBackground';
 
 function App() {
   return (
     <Router>
+      <AsteriskBackground />
       <Header />
       <Routes>
         <Route path="/" element={<HomePage />} />
