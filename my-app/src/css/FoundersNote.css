@@ -15,6 +15,7 @@ body, html {
   justify-content: center;
   align-items: center;
   margin-bottom: 2rem;
+  padding-top: 8rem; /* Add padding to move content below header */
 }
 
 .page-title {
