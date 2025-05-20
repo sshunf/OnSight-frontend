@@ -1,116 +1,19 @@
-.login-section {
-    padding-top: 6rem;
-    padding-bottom: 6rem;
-    position: relative;
-    min-height: 100vh;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-}
-  
-.content-box {
-    background-color: var(--box-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 0.5rem;
-    padding: 1.25rem;
-    color: var(--text-color);
-    margin: 0 auto;
-    text-align: center;
-    max-width: 30rem;
-  }
-  
-.content-box h2 {
-    font-size: 2rem;
-    font-weight: bold;
-    margin-bottom: 1rem;
-    position: relative;
-    z-index: 1;
-}
-  
-.input-field {
-    display: block;
-    width: 75%;
-    margin: 1rem auto;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.25rem;
-    color: #111; /* Dark text for contrast */
-    background-color: #ffffff; /* White background */
-    border: 1px solid var(--border-color);
-    position: relative;
-    z-index: 2;
-    padding: 0.75rem 0.75rem; /* Increased from 0.5rem to 0.75rem for more height */
-    margin: 1.25rem auto;
-}
-
-/* Add focus state for better UX */
-.input-field:focus {
-    outline: none;
-    border-color: #6366f1; /* Match the button color */
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-}
-
-.login-button,
-.logout-button {
-    margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    background-color: #6366f1;
-    color: white;
-    border-radius: 0.25rem;
-    transition: background-color 0.3s ease;
-}
-  
-.login-button:hover,
-.logout-button:hover {
-    background-color: #4f46e5;
-}
-  
-/* Asterisk Background */
-.asterisk-bg {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    overflow: hidden;
-}
-  
-.asterisk {
-    position: absolute;
-    color: var(--asterisk-color);
-    font-size: 1.5rem;
-    pointer-events: auto;
-    cursor: default;
-    transition: transform 0.3s ease, color 0.3s ease;
-    user-select: none;
-    z-index: 0;
-    animation: float 20s ease-in-out infinite;
-}
-  
-.asterisk:hover {
-    color: var(--asterisk-hover);
-    transform: translate(2px, -2px) scale(1.2);
-    animation-play-state: paused;
-}
-  
-@keyframes float {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(10px, 10px) rotate(5deg); }
-    50% { transform: translate(0, 15px) rotate(0deg); }
-    75% { transform: translate(-10px, 5px) rotate(-5deg); }
-    100% { transform: translate(0, 0) rotate(0deg); }
-}
-  
 /* CSS Variables */
 :root {
-    --bg-color: #000; /* Changed from #f8f9fa to #000 */
-    --text-color: #fff; /* Changed from #333 to #fff */
-    --box-bg: #111; /* Changed from #fff to #111 */
-    --border-color: #333; /* Changed from #ddd to #333 */
-    --asterisk-color: rgba(255, 255, 255, 0.1);
-    --asterisk-hover: rgba(255, 255, 255, 0.3);
+    /* Dark Mode (default) */
+    --bg-color: #000;
+    --text-color: #fff;
+    --box-bg: #111;
+    --border-color: #333;
+    --asterisk-color: rgba(255, 255, 255, 0.15);
+    --asterisk-hover: rgba(255, 255, 255, 0.4);
+    --input-bg: #ffffff;
+    --input-text: #111;
+    --button-bg: #6366f1;
+    --button-hover: #4f46e5;
 }
-  
-/* Light Mode (if needed) */
+
+/* Light Mode Theme */
 html.light {
     --bg-color: #f8f9fa;
     --text-color: #333;
@@ -118,4 +21,110 @@ html.light {
     --border-color: #ddd;
     --asterisk-color: rgba(0, 0, 0, 0.1);
     --asterisk-hover: rgba(0, 0, 0, 0.3);
+}
+
+/* Login Section Container */
+.login-section {
+    position: relative;
+    z-index: 1;
+    padding: 6rem 0;
+    min-height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+/* Login Content Box */
+.content-box {
+    position: relative;
+    z-index: 2;
+    max-width: 30rem;
+    margin: 0 auto;
+    padding: 1.5rem;
+    background-color: var(--box-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    text-align: center;
+}
+
+.content-box h2 {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+}
+
+/* Form Elements */
+.input-field {
+    display: block;
+    width: 75%;
+    margin: 1.25rem auto;
+    padding: 0.75rem;
+    color: var(--input-text);
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: var(--button-bg);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Buttons */
+.login-button,
+.logout-button {
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--button-bg);
+    color: white;
+    border: none;
+    border-radius: 0.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.login-button:hover,
+.logout-button:hover {
+    background-color: var(--button-hover);
+}
+
+/* Asterisk Background */
+.asterisk-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.asterisk {
+    position: absolute;
+    color: var(--asterisk-color);
+    font-size: 1.5rem;
+    pointer-events: auto;
+    cursor: default;
+    user-select: none;
+    will-change: transform;
+    animation: float 20s ease-in-out infinite;
+    transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.asterisk:hover {
+    color: var(--asterisk-hover);
+    transform: translate(2px, -2px) scale(1.2);
+    animation-play-state: paused;
+}
+
+/* Animations */
+@keyframes float {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(10px, 10px) rotate(5deg); }
+    50% { transform: translate(0, 15px) rotate(0deg); }
+    75% { transform: translate(-10px, 5px) rotate(-5deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
 }
