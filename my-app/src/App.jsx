@@ -7,6 +7,7 @@ import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import FeaturesPage from './pages/FeaturesPage';
 import FoundersNotePage from './pages/FoundersNotePage';
+import LoginScreen from './components/LoginScreen';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/foundersNote" element={<FoundersNotePage />} />
+        <Route path="/login" element={<LoginScreen />} />
       </Routes>
       <Footer />
     </Router>
