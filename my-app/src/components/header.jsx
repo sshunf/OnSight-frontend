@@ -8,7 +8,7 @@ function Header() {
       <div className="container">
         <div className="flex items-center">
           <img
-            src="/logodraft.PNG"
+            src="/logodraft.png"
             alt="OnSight Logo"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           />

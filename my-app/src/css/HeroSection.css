@@ -143,4 +143,5 @@ body {
     max-width: none;
     background-color: black; /* Ensure the background is black */
     padding: 1.5rem; /* 6px x 4 = 24px */
+    margin-top: 3rem;
 }
