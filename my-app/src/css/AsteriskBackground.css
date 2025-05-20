@@ -1,0 +1,42 @@
+.asterisk-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* Changed from -1 to ensure visibility */
+    overflow: hidden;
+    pointer-events: none; /* Allows clicking through the background */
+}
+  
+.asterisk {
+    position: absolute;
+    color: var(--asterisk-color, rgba(255, 255, 255, 0.1));
+    font-size: 24px;
+    pointer-events: auto;
+    cursor: default;
+    transition: transform 0.3s ease, color 0.3s ease;
+    user-select: none;
+    animation: float 20s ease-in-out infinite;
+    /* Add random animation delay for each asterisk */
+    animation-delay: calc(var(--random-delay, 0) * -1s);
+}
+  
+.asterisk:hover {
+    color: var(--asterisk-hover, rgba(255, 255, 255, 0.3));
+    transform: translate(2px, -2px) scale(1.2);
+    animation-play-state: paused;
+}
+  
+@keyframes float {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(10px, 10px) rotate(5deg); }
+    50% { transform: translate(0, 15px) rotate(0deg); }
+    75% { transform: translate(-10px, 5px) rotate(-5deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+:root {
+    --asterisk-color: rgba(255, 255, 255, 0.1);
+    --asterisk-hover: rgba(255, 255, 255, 0.3);
+}
