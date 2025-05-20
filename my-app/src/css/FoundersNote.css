@@ -1,0 +1,201 @@
+/* Import Inter font for clean modern look */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* Global styles for Founders Note page */
+body, html {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 
+    'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Title container styling */
+.title-container {
+  width: 100%;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.page-title {
+  text-align: center;
+  width: 100%;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 auto;
+  max-width: 800px;
+}
+
+/* Center text alignment for Founders' Note section */
+section.text-center h1,
+section.text-center p {
+  text-align: center !important;
+}
+
+.centered-text {
+  text-align: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  max-width: 750px;
+  display: block;
+}
+
+/* Team section custom styling */
+.team-container {
+  display: flex;
+  justify-content: center;
+  gap: 100px;
+  flex-wrap: wrap;
+  margin-top: 60px;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Ensure section headings are centered */
+h1, h2 {
+  text-align: center;
+  width: 100%;
+}
+
+.team-member {
+  text-align: center;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.team-image-container {
+  width: 300px;
+  height: 380px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 24px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+}
+
+/* Hide the actual image and use CSS background for better control */
+.team-image {
+  visibility: hidden; /* Use visibility instead of opacity for better accessibility */
+  width: 100%;
+  height: 100%;
+}
+
+/* Specific background images */
+#angel-image {
+  background-image: url('/angel.jpg');
+}
+
+#matt-image {
+  background-image: url('/matt.jpg');
+}
+
+/* Team member name styling */
+.team-member h3 {
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+/* Signature styling */
+.signature-container {
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.signature-image {
+  height: 36px;
+  width: auto;
+  filter: brightness(1.1); /* Make signature slightly brighter for visibility */
+}
+
+/* Founders' Note text styling */
+.text-lg {
+  font-size: 18px;
+  line-height: 1.6;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  color: #fafafa;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+  text-align: center;
+}
+
+/* Bio text styling */
+.bio-text {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 260px;
+  text-align: center;
+}
+
+/* Contact link styling */
+.contact-link {
+  color: #a5b4fc; /* Lighter purple for better visibility */
+  text-decoration: none;
+  transition: color 0.2s ease;
+  font-weight: 500;
+}
+
+.contact-link:hover {
+  color: #c7d2fe;
+  text-decoration: underline;
+}
+
+/* Asterisk styling */
+.asterisk {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.1);
+  font-size: 24px;
+  pointer-events: auto;
+  cursor: default;
+  transition: transform 0.3s ease, color 0.3s ease;
+  user-select: none;
+  z-index: 0;
+}
+
+.asterisk:hover {
+  color: rgba(255, 255, 255, 0.3);
+  transform: translate(2px, -2px) scale(1.2);
+}
+
+/* Additional responsive styles */
+@media (max-width: 768px) {
+  .team-container {
+    gap: 60px;
+  }
+  
+  .team-member {
+    width: 260px;
+  }
+  
+  .team-image-container {
+    width: 260px;
+    height: 320px;
+  }
+  
+  .signature-container {
+    height: 30px;
+  }
+  
+  .signature-image {
+    height: 28px;
+  }
+  
+  .bio-text {
+    font-size: 14px;
+    max-width: 230px;
+  }
+} 

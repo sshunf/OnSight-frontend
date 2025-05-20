@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom styles */
+.screen {
+  display: none; /* We'll toggle these via JS */
+}
+.screen.active {
+  display: block;
+}
+
+/* Make typed text in login inputs black for visibility */
+input[type="text"],
+input[type="password"] {
+  color: black;
+}
+
+/* Signature style */
+.signature {
+  font-family: 'Dancing Script', cursive;
+  font-size: 1.5rem;
+}
+
+/* Asterisk Background Animation */
+.asterisk {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.1);
+  font-size: 24px;
+  pointer-events: auto;
+  cursor: default;
+  transition: transform 0.3s ease, color 0.3s ease;
+  user-select: none;
+  z-index: 0;
+}
+
+.asterisk:hover {
+  color: rgba(255, 255, 255, 0.3);
+  transform: translate(2px, -2px) scale(1.2);
+}
