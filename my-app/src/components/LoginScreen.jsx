@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../config/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
   const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+  
   
   // Valid accounts for demo
   const validAccounts = {
@@ -14,19 +17,18 @@ function LoginScreen() {
   };
 
   useEffect(() => {
-    // Check if user is already signed in
+    // Check authentication state on component mount
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        // Retrieve last active screen from localStorage
-        const lastScreen = localStorage.getItem('lastActiveScreen') || 'occupancy';
-        setActiveScreen(lastScreen);
+        // Redirect to main dashboard if user is authenticated
+        navigate('/dashboard');
       }
     });
 
     // Cleanup subscription
     return () => unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const checkCredentials = (e) => {
     e.preventDefault();
@@ -48,7 +50,6 @@ function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     const provider = new GoogleAuthProvider();
-    // Add persistence
     provider.setCustomParameters({
       prompt: 'select_account'
     });
@@ -79,10 +80,8 @@ function LoginScreen() {
       }
 
       setUser(user);
-      const targetScreen = 'occupancy';
-      setActiveScreen(targetScreen);
-      // Save active screen to localStorage
-      localStorage.setItem('lastActiveScreen', targetScreen);
+      // Redirect to dashboard after successful login
+      navigate('/dashboard');
       
     } catch (error) {
       console.error('Error during Google sign-in:', error);
@@ -141,6 +140,10 @@ function LoginScreen() {
       console.error("Error fetching motion/force data:", err);
     }
   };
+
+  if (user) {
+    return null;
+  }
 
   return (
     <section className="login-section">
