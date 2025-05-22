@@ -1,14 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { auth } from '../config/firebase';
+import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
+  const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+  
   
   // Valid accounts for demo
   const validAccounts = {
     "TheGarage": "resident",
     "SPAC": "recreation"
   };
+
+  useEffect(() => {
+    // Check authentication state on component mount
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        // Redirect to main dashboard if user is authenticated
+        navigate('/dashboard');
+      }
+    });
+
+    // Cleanup subscription
+    return () => unsubscribe();
+  }, [navigate]);
 
   const checkCredentials = (e) => {
     e.preventDefault();
@@ -27,15 +47,70 @@ function LoginScreen() {
       alert("Incorrect username or password!");
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      try {
+        const response = await fetch('http://localhost:3000/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await user.getIdToken()}`
+          },
+          body: JSON.stringify({
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Backend server error');
+        }
+      } catch (backendError) {
+        console.warn('Backend connection failed:', backendError);
+      }
+
+      setUser(user);
+      // Redirect to dashboard after successful login
+      navigate('/dashboard');
+      
+    } catch (error) {
+      console.error('Error during Google sign-in:', error);
+      alert('Failed to sign in with Google. Please try again.');
+    }
+  };
   
-  const logout = () => {
-    setActiveScreen('login');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setActiveScreen('login');
+      // Clear localStorage
+      localStorage.removeItem('lastActiveScreen');
+    } catch (error) {
+      console.error('Error during sign-out:', error);
+    }
   };
 
   // Fetch functions (to be implemented with your backend)
-  const fetchOccupancy = async () => {
+    const fetchOccupancy = async () => {
     try {
-      const res = await fetch('/dataOccupancy', { cache: 'no-store' });
+      const token = user ? await user.getIdToken() : null;
+      const res = await fetch('/dataOccupancy', { 
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await res.json();
       // Update occupancy data in state
     } catch (err) {
@@ -45,23 +120,35 @@ function LoginScreen() {
 
   const fetchMotionAndForce = async () => {
     try {
-      const motionRes = await fetch('/dataMotion', { cache: 'no-store' });
+      const token = user ? await user.getIdToken() : null;
+      const headers = {
+        'Authorization': `Bearer ${token}`
+      };
+
+      const motionRes = await fetch('/dataMotion', { 
+        cache: 'no-store',
+        headers 
+      });
       const motionData = await motionRes.json();
-      // Update motion data in state
       
-      const forceRes = await fetch('/dataForce', { cache: 'no-store' });
+      const forceRes = await fetch('/dataForce', { 
+        cache: 'no-store',
+        headers 
+      });
       const forceData = await forceRes.json();
-      // Update force data in state
     } catch (err) {
       console.error("Error fetching motion/force data:", err);
     }
   };
 
+  if (user) {
+    return null;
+  }
+
   return (
     <section className="login-section">
       <div className="asterisk-bg" id="asteriskContainer"></div>
 
-      {/* Login Screen */}
       {activeScreen === 'login' && (
         <div className="content-box">
           <h2>Login</h2>
@@ -82,6 +169,19 @@ function LoginScreen() {
             <button type="submit" className="login-button">
               Login
             </button>
+            
+            <div className="divider">
+              <span>or</span>
+            </div>
+
+            <button 
+              type="button" 
+              className="google-login-button"
+              onClick={handleGoogleSignIn}
+            >
+              <img src="/google-icon.svg" alt="Google" className="google-icon" />
+              Sign in with Google
+            </button>
           </form>
         </div>
       )}
@@ -91,7 +191,7 @@ function LoginScreen() {
         <div className="content-box">
           <h2>The Residency of The Garage Live Count</h2>
           <p className="count">0</p>
-          <button className="logout-button" onClick={logout}>
+          <button className="logout-button" onClick={handleLogout}>
             Logout
           </button>
         </div>

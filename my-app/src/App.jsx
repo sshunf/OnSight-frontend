@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './css/App.css';
 import './css/FoundersNote.css';
 import './css/Waitlist.css';
@@ -11,20 +11,27 @@ import FoundersNotePage from './pages/FoundersNotePage';
 import WaitlistPage from './pages/WaitlistPage';
 import LoginScreen from './components/LoginScreen';
 import AsteriskBackground from './components/AsteriskBackground';
+import Layout from './components/Layout';
+import DashboardDemoPage from './pages/DashboardDemo';
+import DashboardPage from './pages/Dashboard';
+
 
 function App() {
   return (
     <Router>
       <AsteriskBackground />
-      <Header />
       <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/features" element={<FeaturesPage />} />
-        <Route path="/foundersNote" element={<FoundersNotePage />} />
+        {/* Routes that need header and footer */}
+        <Route path="/" element={<Layout><HomePage /></Layout>} />
+        <Route path="/features" element={<Layout><FeaturesPage /></Layout>} />
+        <Route path="/foundersNote" element={<Layout><FoundersNotePage /></Layout>} />
+        <Route path="/dashboard-demo" element={<Layout><DashboardDemoPage /></Layout>} />
         <Route path="/waitlist" element={<WaitlistPage />} />
-        <Route path="/login" element={<LoginScreen />} />
+        <Route path="/login" element={<Layout><LoginScreen /></Layout>} />
+        
+        {/* Routes without header and footer */}
+        <Route path="/dashboard" element={<DashboardPage />} />
       </Routes>
-      <Footer />
     </Router>
   );
 }
