@@ -26,7 +26,7 @@ function App() {
         <Route path="/features" element={<Layout><FeaturesPage /></Layout>} />
         <Route path="/foundersNote" element={<Layout><FoundersNotePage /></Layout>} />
         <Route path="/dashboard-demo" element={<Layout><DashboardDemoPage /></Layout>} />
-        <Route path="/waitlist" element={<WaitlistPage />} />
+        <Route path="/waitlist" element={<Layout><WaitlistPage /></Layout>} />
         <Route path="/login" element={<Layout><LoginScreen /></Layout>} />
         
         {/* Routes without header and footer */}
