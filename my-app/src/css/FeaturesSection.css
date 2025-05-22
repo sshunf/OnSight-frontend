@@ -5,6 +5,8 @@
     padding-left: 1.5rem; /* 6px x 4 = 24px */
     padding-right: 1.5rem; /* 6px x 4 = 24px */
     background-color: rgba(0, 0, 0, 0.95); /* Slightly transparent black */
+    max-width: 1200px; /* Add max-width to contain overall width */
+    margin: 0 auto; 
   }
   
   /* Centered text block */

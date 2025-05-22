@@ -16,7 +16,7 @@ function Header() {
         <div className="flex items-center">
           <Link to="/">
             <img
-              src="/logodraft.PNG" 
+              src="/logodraft.png" 
               alt="OnSight Logo"
               className="w-12 h-auto mr-3"
             />
