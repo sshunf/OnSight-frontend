@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import '../css/Dashboard.css';
 
 function Dashboard() {
@@ -10,15 +18,20 @@ function Dashboard() {
     currentOccupancy: 0,
     peakHours: '--',
     activeDevices: 0,
-    totalVisitors: 0
+    totalVisitors: 0,
   });
+  const [liveData, setLiveData] = useState({
+    force: [],
+    motion: [],
+    occupancy: [],
+  });
+
   const navigate = useNavigate();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        fetchDashboardData(currentUser);
       } else {
         navigate('/login');
       }
@@ -27,17 +40,35 @@ function Dashboard() {
     return () => unsubscribe();
   }, [navigate]);
 
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData(user);
+    }
+  }, [user]);
+
   const fetchDashboardData = async (currentUser) => {
     try {
       const token = await currentUser.getIdToken();
-      const response = await fetch('http://localhost:3000/api/dashboard', {
+
+      // Fetch stats if needed
+      // const statsResponse = await fetch('http://localhost:3000/api/dashboard', {
+      //   headers: { 'Authorization': `Bearer ${token}` },
+      // });
+      // if (statsResponse.ok) {
+      //   const statsData = await statsResponse.json();
+      //   setStats(statsData);
+      // }
+
+      // Fetch sensor data
+      const response = await fetch('http://localhost:3000/api/sensor-data/recent', {
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
+
       if (response.ok) {
         const data = await response.json();
-        setStats(data);
+        setLiveData(data);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -53,9 +84,17 @@ function Dashboard() {
     }
   };
 
-  if (!user) {
-    return null;
-  }
+  const formatTimeLabel = (label) =>
+  new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const tooltipStyle = {
+    backgroundColor: '#1f2937',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+  };
+
+  if (!user) return null;
 
   return (
     <div className="dashboard-container">
@@ -74,30 +113,58 @@ function Dashboard() {
           <p className="stat-value">{stats.currentOccupancy}</p>
           <p className="stat-label">people</p>
         </div>
-
         <div className="stat-card">
           <h3>Peak Hours</h3>
           <p className="stat-value">{stats.peakHours}</p>
           <p className="stat-label">today</p>
         </div>
-
         <div className="stat-card">
           <h3>Active Devices</h3>
           <p className="stat-value">{stats.activeDevices}</p>
           <p className="stat-label">connected</p>
         </div>
-
-        <div className="stat-card">
-          <h3>Total Visitors</h3>
-          <p className="stat-value">{stats.totalVisitors}</p>
-          <p className="stat-label">today</p>
-        </div>
       </div>
 
       <div className="data-section">
-        <h2>Live Data</h2>
+        <h2>Live Sensor Data</h2>
         <div className="data-container">
-          {/* Add your real-time data visualization components here */}
+
+          <div className="chart-card">
+            <h3>Occupancy</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={liveData.occupancy}>
+                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
+                <YAxis />
+                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle}/>
+                <Line type="monotone" dataKey="value" stroke="#5902db"/>
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="chart-card">
+            <h3>Force</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={liveData.force}>
+                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
+                <YAxis />
+                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="value" stroke="#5902db" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="chart-card">
+            <h3 class="text-center w-full">Motion</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={liveData.motion}>
+                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
+                <YAxis />
+                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="value" stroke="#5902db" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
         </div>
       </div>
     </div>
