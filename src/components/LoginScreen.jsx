@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../config/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
 function LoginScreen() {
