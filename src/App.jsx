@@ -14,6 +14,10 @@ import AsteriskBackground from './components/AsteriskBackground';
 import Layout from './components/Layout';
 import DashboardDemoPage from './pages/DashboardDemo';
 import DashboardPage from './pages/Dashboard';
+import DocumentationPage from './pages/DocumentationPage';
+import FAQPage from './pages/FAQPage';
+import CaseStudiesPage from './pages/CaseStudiesPage';
+import BlogPage from './pages/BlogPage';
 
 
 function App() {
@@ -28,6 +32,10 @@ function App() {
         <Route path="/dashboard-demo" element={<Layout><DashboardDemoPage /></Layout>} />
         <Route path="/waitlist" element={<Layout><WaitlistPage /></Layout>} />
         <Route path="/login" element={<Layout><LoginScreen /></Layout>} />
+        <Route path="/documentation" element={<Layout><DocumentationPage /></Layout>} />
+        <Route path="/faq" element={<Layout><FAQPage /></Layout>} />
+        <Route path="/case-studies" element={<Layout><CaseStudiesPage /></Layout>} />
+        <Route path="/blog" element={<Layout><BlogPage /></Layout>} />
         
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />
