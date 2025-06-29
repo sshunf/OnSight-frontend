@@ -1,23 +1,23 @@
 /* Hero Section styles */
 #heroSection {
-    padding-top: 4rem; /* 16px x 4 = 64px */
-    padding-bottom: 6rem; /* 16px x 8 = 128px */
+    padding-top: 4rem;
+    padding-bottom: 6rem;
     position: relative;
-    padding-left: 5rem; /* 6px x 4 = 24px */
-    padding-right: 6rem; /* 6px x 4 = 24px */
-    background-color: black; /* Ensure the background is black */
+    padding-left: 5rem;
+    padding-right: 6rem;
+    background-color: black;
     color: white;
     overflow: hidden;
-    width: 100%; /* Ensure the section spans the full width of the screen */
+    width: 100%;
     box-sizing: content-box;
 }
 
 #heroSection .container {
     display: flex;
-    flex-direction: column; /* Default for smaller screens */
-    justify-content: center; /* Center content vertically */
-    align-items: center; /* Center content horizontally */
-    gap: 0rem; /* Add spacing between text and image */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0rem;
     padding-left: 1rem;
     padding-right: 1rem;
     margin: 0 auto;
@@ -25,9 +25,9 @@
 
 @media (min-width: 1024px) {
     #heroSection .container {
-        flex-direction: row; /* Align text and image side by side */
-        justify-content: center; /* Center content horizontally */
-        align-items: center; /* Center content vertically */
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
     }
 }
 
@@ -42,55 +42,52 @@ body {
     text-align: center;
 }
 
-@media (min-width: 1024px) { /* For larger screens */
+@media (min-width: 1024px) {
     #heroSection h1 {
-        text-align: left; /* Align text to the left */
+        text-align: left;
     }
 }
 
-#heroSection h1 span {
+/* This is the key fix: Only apply display:block to direct children spans of h1 */
+#heroSection h1 > span {
     display: block;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
 }
 
-#heroSection h1 span:first-child {
-    background-image: linear-gradient(to right, white, white);
-}
-
+/* This colors the second line of text and prevents it from wrapping */
 #heroSection h1 span:last-child {
-    background-image: linear-gradient(to right, #a855f7, #a855f7); /* Purple gradient */
+    color: #a78bfa; /* Light purple */
+    white-space: nowrap;
 }
 
 #heroSection p {
-    font-size: clamp(1rem, 2.5vw, 1.125rem); 
+    font-size: clamp(1rem, 2.5vw, 1.125rem);
     line-height: 1.5;
-    color: #b3b3b3; 
+    color: #b3b3b3;
     text-align: center;
     max-width: 40rem;
     margin-left: auto;
     margin-right: auto;
+    margin-top: 3rem;
 }
 
-@media (min-width: 1024px) { /* For larger screens */
+@media (min-width: 1024px) {
     #heroSection p {
-        text-align: left; /* Align text to the left */
+        text-align: left;
         margin-left: 0;
         margin-right: 0;
     }
 }
 
 #heroSection .buttons {
-    margin-top: 2.5rem; /* 10px x 4 = 40px */
+    margin-top: 2.5rem;
     display: flex;
-    gap: 1.5rem; /* 6px x 4 = 24px */
+    gap: 1.5rem;
     justify-content: center;
 }
 
-@media (min-width: 1024px) { /* For larger screens */
+@media (min-width: 1024px) {
     #heroSection .buttons {
-        justify-content: flex-start; /* Align buttons to the left */
+        justify-content: flex-start;
     }
 }
 
@@ -98,10 +95,10 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.75rem 2rem; /* 12px x 4 = 48px */
-    font-size: 1.125rem; /* 18px */
-    font-weight: medium;
-    border-radius: 0.375rem; /* 6px */
+    padding: 0.75rem 2rem;
+    font-size: 1.125rem;
+    font-weight: 500;
+    border-radius: 0.375rem;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -111,7 +108,7 @@ body {
 }
 
 #heroSection .buttons a:first-child:hover {
-    background-color: #e5e5e5; /* Lighter gray */
+    background-color: #e5e5e5;
 }
 
 #heroSection .buttons a:last-child {
@@ -125,23 +122,37 @@ body {
 
 #heroSection .relative {
     position: relative;
-    flex: 1; /* Allow the image to take up equal space */
+    flex: 1;
 }
 
 #heroSection .relative .absolute {
-    display: none; /* Remove the purple gradient background */
+    display: none;
 }
 
 #heroSection img {
-    border-radius: 1rem; /* 16px */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06); /* shadow-2xl */
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
     position: relative;
     z-index: 10;
     aspect-ratio: 4 / 3;
     object-fit: contain;
     width: 70%;
     max-width: none;
-    background-color: black; /* Ensure the background is black */
-    padding: 1.5rem; /* 6px x 4 = 24px */
-    margin-top: 3rem;
+    background-color: black;
+    padding: 1.5rem;
+}
+
+.animated-text::after {
+    content: '|';
+    color: inherit;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0;
+    }
 }
