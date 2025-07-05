@@ -4,11 +4,12 @@ import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from
 import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
+const backendURL = import.meta.env.VITE_BACKEND_URL;
+
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
   const [user, setUser] = useState(null);
-  const navigate = useNavigate();
-  
+  const navigate = useNavigate(); 
   
   // Valid accounts for demo
   const validAccounts = {
@@ -59,7 +60,7 @@ function LoginScreen() {
       const user = result.user;
       
       try {
-        const response = await fetch('http://localhost:3000/auth/signup', {
+        const response = await fetch(`${backendURL}/auth/signup`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
