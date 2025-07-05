@@ -12,6 +12,8 @@ import {
 } from 'recharts';
 import '../css/Dashboard.css';
 
+const backendURL = import.meta.env.VITE_BACKEND_URL;
+
 function Dashboard() {
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState({
@@ -49,18 +51,10 @@ function Dashboard() {
   const fetchDashboardData = async (currentUser) => {
     try {
       const token = await currentUser.getIdToken();
-
       // Fetch stats if needed
-      // const statsResponse = await fetch('http://localhost:3000/api/dashboard', {
-      //   headers: { 'Authorization': `Bearer ${token}` },
-      // });
-      // if (statsResponse.ok) {
-      //   const statsData = await statsResponse.json();
-      //   setStats(statsData);
-      // }
 
       // Fetch sensor data
-      const response = await fetch('http://localhost:3000/api/sensor-data/recent', {
+      const response = await fetch(`${backendURL}/api/sensor-data/recent`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
