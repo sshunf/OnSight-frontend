@@ -1,6 +1,9 @@
 # Stage 1: Build the React application
 FROM node:20-alpine AS build
 
+ARG VITE_BACKEND_URL
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -11,7 +14,7 @@ COPY . .
 
 RUN npm run build
 
-# Stage 2: Serve the production build with Nginx
+# Stage 2: Serve with nginx
 FROM nginx:alpine AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
