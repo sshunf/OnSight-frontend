@@ -11,6 +11,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # fetch full git history and latest commit SHA
 
       - name: Azure Login
         uses: azure/login@v1
@@ -26,11 +28,15 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
+          COMMIT_SHA=${{ github.sha }}
+          echo "Building Docker image with commit SHA $COMMIT_SHA"
           docker build \
             --no-cache \
             --build-arg VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }} \
-            -t onsight.azurecr.io/onsight-frontend:latest .
+            -t onsight.azurecr.io/onsight-frontend:latest \
+            -t onsight.azurecr.io/onsight-frontend:$COMMIT_SHA .
           docker push onsight.azurecr.io/onsight-frontend:latest
+          docker push onsight.azurecr.io/onsight-frontend:$COMMIT_SHA
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
