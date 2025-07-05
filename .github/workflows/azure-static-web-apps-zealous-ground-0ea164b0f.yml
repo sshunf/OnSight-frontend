@@ -35,6 +35,14 @@ jobs:
       - name: Build and push Docker image
         run: |
           docker build \
+            --no cache
             --build-arg VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }} \
             -t onsight.azurecr.io/onsight-frontend:latest .
           docker push onsight.azurecr.io/onsight-frontend:latest
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: onsight-frontend
+          images: onsight.azurecr.io/onsight-frontend:latest
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
