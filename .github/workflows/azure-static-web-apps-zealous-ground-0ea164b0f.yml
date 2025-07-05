@@ -1,4 +1,4 @@
-name: Azure Static Web Apps CI/CD with Docker Build and Push
+name: Azure Web App CI/CD with Docker Build and Push
 
 on:
   push:
@@ -13,10 +13,11 @@ jobs:
   build_and_deploy_job:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
-    name: Build, Push Docker Image and Deploy Static Web App
+    name: Build, Push Docker Image, and Deploy to Azure Web App
     permissions:
       id-token: write
       contents: read
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -40,10 +41,11 @@ jobs:
             -t onsight.azurecr.io/onsight-frontend:latest .
           docker push onsight.azurecr.io/onsight-frontend:latest
 
-      # Deploy to Azure Web App
+      # Deploy Docker image to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
           app-name: onsight-frontend
           images: onsight.azurecr.io/onsight-frontend:latest
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          acr-username: ${{ secrets.ACR_USERNAME }}
+          acr-password: ${{ secrets.ACR_PASSWORD }}
