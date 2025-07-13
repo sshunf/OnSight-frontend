@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../css/HeroSection.css'; // Import the CSS file
+import { Link } from 'react-router-dom';
 
 function HeroSection() {
   const [animatedWord, setAnimatedWord] = useState('Knowing');
@@ -64,7 +65,7 @@ function HeroSection() {
             resources, cut costs, and enhance member experiences.
           </p>
           <div className="buttons">
-            <a href="#waitlistSection">Join Waitlist</a>
+            <Link to="/waitlist">Join Waitlist</Link>
             <a href="#featuresSection">Learn More</a>
           </div>
         </div>
