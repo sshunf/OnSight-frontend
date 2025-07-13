@@ -10,12 +10,15 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import DashboardSidebar from './DashboardSidebar';
 import '../css/Dashboard.css';
+import '../css/DashboardSidebar.css';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL;
 
 function Dashboard() {
   const [user, setUser] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
   const [stats, setStats] = useState({
     currentOccupancy: 0,
     peakHours: '--',
@@ -51,9 +54,6 @@ function Dashboard() {
   const fetchDashboardData = async (currentUser) => {
     try {
       const token = await currentUser.getIdToken();
-      // Fetch stats if needed
-
-      // Fetch sensor data
       const response = await fetch(`${backendURL}/api/sensor-data/recent`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -79,10 +79,15 @@ function Dashboard() {
   };
 
   const formatTimeLabel = (label) =>
-  new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    new Date(label).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
   const tooltipStyle = {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#2d3748',
     border: 'none',
     borderRadius: '8px',
     color: '#fff',
@@ -91,76 +96,111 @@ function Dashboard() {
   if (!user) return null;
 
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-header">
-        <div className="header-content">
-          <h1>Welcome, {user.displayName || 'User'}</h1>
-          <button onClick={handleLogout} className="logout-button">
-            Sign Out
-          </button>
-        </div>
-      </div>
+    <div className="dashboard-layout">
+      <button className="sidebar-toggle" onClick={() => setCollapsed(!collapsed)}>
+        ☰
+      </button>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <h3>Current Occupancy</h3>
-          <p className="stat-value">{stats.currentOccupancy}</p>
-          <p className="stat-label">people</p>
-        </div>
-        <div className="stat-card">
-          <h3>Peak Hours</h3>
-          <p className="stat-value">{stats.peakHours}</p>
-          <p className="stat-label">today</p>
-        </div>
-        <div className="stat-card">
-          <h3>Active Devices</h3>
-          <p className="stat-value">{stats.activeDevices}</p>
-          <p className="stat-label">connected</p>
-        </div>
-      </div>
+      <DashboardSidebar user={user} collapsed={collapsed} onLogout={handleLogout} />
 
-      <div className="data-section">
-        <h2>Live Sensor Data</h2>
-        <div className="data-container">
-
-          <div className="chart-card">
-            <h3>Occupancy</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={liveData.occupancy}>
-                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
-                <YAxis />
-                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle}/>
-                <Line type="monotone" dataKey="value" stroke="#5902db"/>
-              </LineChart>
-            </ResponsiveContainer>
+      <main className={`dashboard-main ${collapsed ? 'collapsed' : ''}`}>
+        <div className="dashboard-container">
+          <div className="dashboard-header">
+            <div className="header-content">
+              <h1>Welcome, {user.displayName || 'User'}</h1>
+            </div>
           </div>
 
-          <div className="chart-card">
-            <h3>Force</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={liveData.force}>
-                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
-                <YAxis />
-                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="value" stroke="#5902db" />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <h3>Current Occupancy</h3>
+              <p className="stat-value">{stats.currentOccupancy}</p>
+              <p className="stat-label">people</p>
+            </div>
+            <div className="stat-card">
+              <h3>Peak Hours</h3>
+              <p className="stat-value">{stats.peakHours}</p>
+              <p className="stat-label">today</p>
+            </div>
+            <div className="stat-card">
+              <h3>Active Devices</h3>
+              <p className="stat-value">{stats.activeDevices}</p>
+              <p className="stat-label">connected</p>
+            </div>
           </div>
 
-          <div className="chart-card">
-            <h3 class="text-center w-full">Motion</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={liveData.motion}>
-                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
-                <YAxis />
-                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="value" stroke="#5902db" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <div className="data-section">
+            <h2>Live Sensor Data</h2>
+            <div className="data-container">
+              <div className="chart-card">
+                <h3>Occupancy</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={liveData.occupancy}>
+                    <XAxis
+                      dataKey="timestamp"
+                      tickFormatter={(str) =>
+                        new Date(str).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      }
+                    />
+                    <YAxis />
+                    <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
+                    <Line type="monotone" dataKey="value" stroke="#5902db" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
 
+              <div className="chart-card">
+                <h3>Force</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={liveData.force}>
+                    <XAxis
+                      dataKey="timestamp"
+                      tickFormatter={(str) =>
+                        new Date(str).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      }
+                    />
+                    <YAxis />
+                    <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
+                    <Line type="monotone" dataKey="value" stroke="#5902db" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="chart-card">
+                <h3 className="text-center w-full">Motion</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={liveData.motion}>
+                    <XAxis
+                      dataKey="timestamp"
+                      tickFormatter={(str) =>
+                        new Date(str).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      }
+                    />
+                    <YAxis />
+                    <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
+                    <Line type="monotone" dataKey="value" stroke="#5902db" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
