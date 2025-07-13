@@ -26,6 +26,8 @@ body, html {
 
 /* Heading styles */
 .waitlist-section h1 {
+  padding-top: 30px;
+  font-weight: 800;
   font-size: 48px;
   line-height: 1.2;
   letter-spacing: -0.02em;
@@ -123,4 +125,12 @@ body, html {
   .waitlist-section button {
     width: 100%;
   }
+} 
+
+@keyframes popupIn {
+  0% { opacity: 0; transform: scale(0.95) translateY(-20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-popup {
+  animation: popupIn 0.35s cubic-bezier(0.4,0,0.2,1);
 } 
