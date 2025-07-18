@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './css/App.css';
 import './css/FoundersNote.css';
 import './css/Waitlist.css';
@@ -18,6 +18,7 @@ import DocumentationPage from './pages/DocumentationPage';
 import FAQPage from './pages/FAQPage';
 import CaseStudiesPage from './pages/CaseStudiesPage';
 import BlogPage from './pages/BlogPage';
+import GaragePage from './pages/GaragePage';
 
 
 function App() {
@@ -36,6 +37,7 @@ function App() {
         <Route path="/faq" element={<Layout><FAQPage /></Layout>} />
         <Route path="/case-studies" element={<Layout><CaseStudiesPage /></Layout>} />
         <Route path="/blog" element={<Layout><BlogPage /></Layout>} />
+        <Route path="/garage" element={<Layout><GaragePage /></Layout>} />
         
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />

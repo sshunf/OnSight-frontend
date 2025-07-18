@@ -5,21 +5,16 @@ import '../css/Header.css';
 function Header() {
   const location = useLocation();
   
-  // Function to determine if a link is active
   const isActive = (path) => {
     return location.pathname === path;
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-black border-b border-gray-800">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800">
       <div className="container mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">
         <div className="flex items-center">
-          <Link to="/">
-            <img
-              src="/logodraft.png" 
-              alt="OnSight Logo"
-              className="w-12 h-auto mr-3"
-            />
+          <Link to="/" className="flex items-center">
+            <img src="/logodraft.png" alt="OnSight Logo" className="w-12 h-auto mr-3" />
           </Link>
         </div>
         <nav className="flex items-center gap-6">
