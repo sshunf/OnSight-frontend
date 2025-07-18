@@ -1,5 +1,4 @@
 import React from 'react';
-import '../css/FeaturesSection.css';
 
 function FeaturesSection() {
   const features = [
@@ -26,8 +25,8 @@ function FeaturesSection() {
   ];
 
   return (
-    <section id="featuresSection" className="relative py-24 px-6 lg:px-8 bg-black/95">
-      <div className="mx-auto max-w-7xl">
+    <section id="featuresSection" className="relative py-24 px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl">
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-white">
             Empowering Gyms with Smart Insights
@@ -38,7 +37,7 @@ function FeaturesSection() {
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((feature, index) => (
-            <div key={index} className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <div key={index} className="bg-gray-900/80 border border-gray-700 rounded-lg p-6 backdrop-blur-lg">
               <svg className="h-12 w-12 mb-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={feature.iconPath} />
               </svg>
