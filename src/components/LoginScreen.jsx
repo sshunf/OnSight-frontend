@@ -229,13 +229,7 @@ function LoginScreen() {
             <span>or</span>
           </div>
 
-          <input
-            type="password"
-            placeholder="Enter your google password (optional)"
-            value={googlePassword}
-            onChange={(e) => setGooglePassword(e.target.value)}
-            className="input-field"
-          />
+
           <button 
             type="button" 
             className="google-login-button"
