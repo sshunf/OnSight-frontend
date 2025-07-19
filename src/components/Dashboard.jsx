@@ -148,7 +148,7 @@ function Dashboard() {
           </div>
 
           <div className="chart-card">
-            <h3 class="text-center w-full">Motion</h3>
+            <h3 className="text-center w-full">Motion</h3>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={liveData.motion}>
                 <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
