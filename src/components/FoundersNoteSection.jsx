@@ -23,8 +23,9 @@ function FoundersNoteSection() {
 
       {/* OUR TEAM SECTION */}
       <section className="px-6 relative z-10">
-        <h2 className="text-5xl font-bold text-white mb-16 text-center w-full">Our Team</h2>
-        
+        <div className="our-team-text">
+          <h2 className="text-6xl font-bold text-white mb-16 text-center w-full">Our Team</h2>
+        </div>
         <div className="team-container">
           {/* Angel */}
           <div className="team-member">
@@ -38,8 +39,9 @@ function FoundersNoteSection() {
             <p className="text-xl font-medium mb-2">Co-Founder and CEO</p>
             <p className="text-gray-400 mb-4">Incoming at Chamberlain Group</p>
             <p className="bio-text">
-              Angel is a third year at Northwestern University pursuing his B.S and M.S in mechanical engineering. 
-              <a href="mailto:angelm.mendoza07@gmail.com" className="contact-link"> Contact</a>.
+              Angel is a third year at Northwestern University pursuing his B.S and M.S in mechanical engineering.  
+              <span>&nbsp;</span>
+              <a href="mailto:angelm.mendoza07@gmail.com" className="contact-link">Contact</a>.
             </p>
           </div>
           
@@ -56,7 +58,8 @@ function FoundersNoteSection() {
             <p className="text-gray-400 mb-4">Incoming at Nissan</p>
             <p className="bio-text">
               Matt is a third year at Northwestern University pursuing his B.S and M.S in mechanical engineering. 
-              <a href="mailto:mattvmz03@gmail.com" className="contact-link"> Contact</a>.
+              <span>&nbsp;</span> 
+              <a href="mailto:mattvmz03@gmail.com" className="contact-link">Contact</a>.
             </p>
           </div>
         </div>

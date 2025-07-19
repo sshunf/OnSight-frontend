@@ -16,6 +16,7 @@ body, html {
   align-items: center;
   margin-bottom: 2rem;
   padding-top: 8rem; /* Add padding to move content below header */
+  font-size: 25px;
 }
 
 .page-title {
@@ -41,13 +42,20 @@ section.text-center p {
   display: block;
 }
 
+.our-team-text {
+  text-align: center !important;
+  padding-top: 2rem;
+  font-size: 25px;
+  font-weight: 800;
+}
+
 /* Team section custom styling */
 .team-container {
   display: flex;
   justify-content: center;
   gap: 100px;
   flex-wrap: wrap;
-  margin-top: 60px;
+  margin-top: 30px;
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
