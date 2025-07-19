@@ -5,25 +5,29 @@ import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL;
-
+console.log(`touch proof`);
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
   const [user, setUser] = useState(null);
   const navigate = useNavigate(); 
+  const [password, setPassword] = useState('');
+  const [googlePassword, setGooglePassword] = useState(''); 
   
   // Valid accounts for demo
-  const validAccounts = {
-    "TheGarage": "resident",
-    "SPAC": "recreation"
-  };
+  // const validAccounts = {
+  //   "TheGarage": "resident",
+  //   "SPAC": "recreation"
+  // };
 
   useEffect(() => {
     // Check authentication state on component mount
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
+        // const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
         setUser(currentUser);
+        // if (gymAffiliated) navigate('/dashboard');
         // Redirect to main dashboard if user is authenticated
-        navigate('/dashboard');
+        // else navigate('/gym-select');
       }
     });
 
@@ -31,25 +35,47 @@ function LoginScreen() {
     return () => unsubscribe();
   }, [navigate]);
 
-  const checkCredentials = (e) => {
+  const checkCredentials = async (e) => {
     e.preventDefault();
-    const user = e.target.username.value;
-    const pass = e.target.password.value;
-    
-    if (validAccounts[user] && validAccounts[user] === pass) {
-      if (user === "TheGarage") {
-        setActiveScreen('occupancy');
-        fetchOccupancy();
-      } else if (user === "SPAC") {
-        setActiveScreen('motion');
-        fetchMotionAndForce();
+    const email = e.target.username.value;
+    const password = e.target.password.value;
+    const displayName = '';
+
+    try {
+      const res = await fetch(`${backendURL}/auth/login-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, displayName }),
+      });
+      const result = await res.json();
+      if (!res.ok){
+        alert(error.error || 'Login failed');
+        return;
       }
-    } else {
-      alert("Incorrect username or password!");
+      console.log(`email: ${result.user.email}`);
+      setUser(result.user); // this can be a local user object
+      localStorage.setItem('userEmail', result.user.email);
+      navigate('/gym-select'); // redirect to verification step
+    } catch (err) {
+      console.error('Login error:', err);
+      alert('Something went wrong, try again');
     }
+    
+    // if (validAccounts[user] && validAccounts[user] === pass) {
+    //   if (user === "TheGarage") {
+    //     setActiveScreen('occupancy');
+    //     fetchOccupancy();
+    //   } else if (user === "SPAC") {
+    //     setActiveScreen('motion');
+    //     fetchMotionAndForce();
+    //   }
+    // } else {
+    //   alert("Incorrect username or password!");
+    // }
   };
 
   const handleGoogleSignIn = async () => {
+    console.log(`google test`);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
       prompt: 'select_account'
@@ -58,35 +84,42 @@ function LoginScreen() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      
-      try {
-        const response = await fetch(`${backendURL}/auth/signup`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await user.getIdToken()}`
-          },
-          body: JSON.stringify({
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error('Backend server error');
-        }
-      } catch (backendError) {
-        console.warn('Backend connection failed:', backendError);
-      }
 
-      setUser(user);
-      // Redirect to dashboard after successful login
-      navigate('/dashboard');
+      console.log(`Google user: ${user}`);
+      const idToken = await user.getIdToken();
       
-    } catch (error) {
-      console.error('Error during Google sign-in:', error);
-      alert('Failed to sign in with Google. Please try again.');
+      const res = await fetch(`${backendURL}/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          password: googlePassword || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('Signup failed:', data.error || data);
+        alert('Signup failed: ' + (data.error || 'Unknown error'));
+        return;
+      }
+      setUser(user);
+      localStorage.setItem('userEmail', user.email);
+      console.log('Stored userEmail:', user.email);
+      const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
+      if (gymAffiliated) {
+        navigate('/dashboard');
+      } else {
+        navigate('/gym-select');
+      }
+    }
+    catch (backendError) {
+      console.error('Google sign-in failed:', backendError);
+    alert('Google sign-in failed. See console for details.');
     }
   };
   
@@ -97,6 +130,7 @@ function LoginScreen() {
       setActiveScreen('login');
       // Clear localStorage
       localStorage.removeItem('lastActiveScreen');
+      localStorage.removeItem('gymAffiliated');
     } catch (error) {
       console.error('Error during sign-out:', error);
     }
@@ -142,8 +176,8 @@ function LoginScreen() {
     }
   };
 
-  if (user) {
-    return null;
+  if (user && activeScreen === 'login') {
+    return <p>Redirecting...</p>;
   }
 
   return (
@@ -164,26 +198,34 @@ function LoginScreen() {
             <input 
               type="password" 
               name="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Password" 
               className="input-field"
             />
             <button type="submit" className="login-button">
               Login
             </button>
-            
-            <div className="divider">
-              <span>or</span>
-            </div>
-
-            <button 
-              type="button" 
-              className="google-login-button"
-              onClick={handleGoogleSignIn}
-            >
-              <img src="/google-icon.svg" alt="Google" className="google-icon" />
-              Sign in with Google
-            </button>
           </form>
+          <div className="divider">
+            <span>or</span>
+          </div>
+
+          <input
+            type="password"
+            placeholder="Enter your google password (optional)"
+            value={googlePassword}
+            onChange={(e) => setGooglePassword(e.target.value)}
+            className="input-field"
+          />
+          <button 
+            type="button" 
+            className="google-login-button"
+            onClick={() => { console.log('google button clicked'); handleGoogleSignIn();}}
+          >
+            <img src="/google-icon.svg" alt="Google" className="google-icon" />
+            Sign in with Google
+          </button>
         </div>
       )}
 
@@ -204,7 +246,7 @@ function LoginScreen() {
           <h2>SPAC Machine Usage</h2>
           <p>Total Motion Time: <span>0</span></p>
           <p>Force Time: <span>0</span></p>
-          <button className="logout-button" onClick={logout}>
+          <button className="logout-button" onClick={handleLogout}>
             Logout
           </button>
         </div>
