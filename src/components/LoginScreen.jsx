@@ -22,12 +22,24 @@ function LoginScreen() {
   useEffect(() => {
     // Check authentication state on component mount
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      const timestamp = parseInt(localStorage.getItem('loginTimestamp'), 10);
+      const now = Date.now();
+      const duration = 6 * 60 * 60 * 1000; // stay signed in for 6 hour duration before being logged out
       if (currentUser) {
-        // const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
-        setUser(currentUser);
-        // if (gymAffiliated) navigate('/dashboard');
-        // Redirect to main dashboard if user is authenticated
-        // else navigate('/gym-select');
+        if (!timestamp || now - timestamp > duration){
+          console.log("Session expired, logging out.");
+          signOut(auth).then(() => {
+            localStorage.removeItem('loginTimestamp');
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem('gymAffiliated');
+            navigate('/');
+          });
+        } else {
+          setUser(currentUser);
+          const gymAffiliated = localStorage.getItem('gymAffiliated') === true;
+          if (gymAffiliated) navigate('/dashboard');
+          else navigate('/gym-select');
+        }
       }
     });
 
@@ -55,6 +67,7 @@ function LoginScreen() {
       console.log(`email: ${result.user.email}`);
       setUser(result.user); // this can be a local user object
       localStorage.setItem('userEmail', result.user.email);
+      localStorage.setItem('loginTimestamp', Date.now().toString());
       navigate('/gym-select'); // redirect to verification step
     } catch (err) {
       console.error('Login error:', err);
@@ -82,7 +95,7 @@ function LoginScreen() {
     });
 
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider); 
       const user = result.user;
 
       console.log(`Google user: ${user}`);
@@ -110,6 +123,10 @@ function LoginScreen() {
       setUser(user);
       localStorage.setItem('userEmail', user.email);
       console.log('Stored userEmail:', user.email);
+      localStorage.setItem('loginTimestamp', Date.now().toString());
+      localStorage.setItem('gymAffiliated', user.gymAffiliated ? 'true' : 'false');
+      localStorage.setItem('gymId', user.gym?.gymId || '');
+      localStorage.setItem('gymName', user.gym?.name || '');  
       const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
       if (gymAffiliated) {
         navigate('/dashboard');
@@ -131,6 +148,7 @@ function LoginScreen() {
       // Clear localStorage
       localStorage.removeItem('lastActiveScreen');
       localStorage.removeItem('gymAffiliated');
+      localStorage.removeItem('loginTimestamp');
     } catch (error) {
       console.error('Error during sign-out:', error);
     }

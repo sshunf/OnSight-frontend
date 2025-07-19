@@ -40,6 +40,8 @@ function GymSelectScreen() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
       localStorage.setItem('gymAffiliated', 'true');
+      localStorage.setItem('gymId', result.user.gym.gymId || '');
+      localStorage.setItem('gymName', result.user.gym.name || '');
       navigate('/dashboard');
     } catch (err) {
       console.error('Gym verification error:', err);
