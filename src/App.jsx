@@ -10,6 +10,7 @@ import FeaturesPage from './pages/FeaturesPage';
 import FoundersNotePage from './pages/FoundersNotePage';
 import WaitlistPage from './pages/WaitlistPage';
 import LoginScreen from './components/LoginScreen';
+import GymSelectScreen from './components/GymSelectScreen';
 import AsteriskBackground from './components/AsteriskBackground';
 import Layout from './components/Layout';
 import DashboardDemoPage from './pages/DashboardDemo';
@@ -38,6 +39,7 @@ function App() {
         <Route path="/case-studies" element={<Layout><CaseStudiesPage /></Layout>} />
         <Route path="/blog" element={<Layout><BlogPage /></Layout>} />
         <Route path="/garage" element={<Layout><GaragePage /></Layout>} />
+        <Route path="/gym-select" element={<Layout><GymSelectScreen /></Layout>} />
         
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />

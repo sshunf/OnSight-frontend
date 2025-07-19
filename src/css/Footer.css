@@ -1,0 +1,121 @@
+/* Footer container */
+.footer {
+    background-color: black;
+    color: white;
+    padding-top: 4rem; /* 16px x 4 = 64px */
+    padding-bottom: 2rem; /* 16px x 2 = 32px */
+  }
+  
+  .footer-container {
+    max-width: 112rem; /* 7xl */
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.5rem; /* 6px x 4 = 24px */
+    padding-right: 1.5rem; /* 6px x 4 = 24px */
+  }
+  
+  /* Footer border */
+  .footer-border {
+    border-top: 1px solid #333; /* Gray border */
+    padding-top: 1rem !important; /* 16px x 2 = 32px */
+    margin-bottom: 1rem !important; /* 16px x 2 = 32px */
+  }
+  
+  /* Footer grid layout */
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem; /* 16px x 3 = 48px */
+    justify-items: start; /* Aligns grid items to the start of the cell */
+    padding-bottom: 2rem !important;
+  }
+
+  .footer-link {
+    color: white;
+    transition: text-decoration 0.1s ease;
+  }
+
+  .footer-link:hover {
+    text-decoration: underline !important;
+    cursor: pointer !important;
+  }
+  
+  @media (min-width: 768px) { /* For medium screens and above */
+    .footer-grid {
+      grid-template-columns: repeat(4, 1fr); /* 4 columns */
+    }
+  }
+  
+  /* Footer headings */
+  .footer-heading {
+    font-size: 1.125rem; /* 18px */
+    font-weight: 600; /* Semi-bold */
+    margin-bottom: 1rem; /* 16px */
+  }
+  
+  /* Footer links */
+  .footer-nav {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .footer-nav li {
+    margin-bottom: 0.5rem; /* 8px */
+  }
+  
+  .footer-nav a {
+    color: #b3b3b3; /* Light gray */
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+  
+  .footer-nav a:hover {
+    color: white;
+  }
+  
+  /* Social media icons */
+  .footer-icons {
+    display: flex;
+    gap: 1rem; /* 16px */
+  }
+  
+  .footer-icon {
+    color: #b3b3b3; /* Light gray */
+    transition: color 0.2s ease;
+  }
+  
+  .footer-icon:hover {
+    color: white;
+  }
+  
+  /* Force horizontal layout for social media icons */
+  .footer-grid > div:first-child > .flex {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 1.25rem !important; /* Adds space between icons */
+  }
+  
+  /* Footer bottom section */
+  .footer-bottom {
+    text-align: center;
+    font-size: 0.875rem; /* 14px */
+    color: #b3b3b3; /* Light gray */
+    margin-top: 2rem; /* 16px x 2 = 32px */
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 767px) {
+    .footer-grid {
+      grid-template-columns: 1fr !important;
+      gap: 2rem !important;
+    }
+  }
+  
+  /* Tablet view - 2 columns */
+  @media (min-width: 640px) and (max-width: 767px) {
+    .footer-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 2rem !important;
+    }
+  }
