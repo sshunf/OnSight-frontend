@@ -21,7 +21,7 @@ function PlaceholderContent({ title, message }) {
             
             <div className="space-y-6">
               <p className="text-lg text-gray-400">
-                Feel free to contact us at 
+                Feel free to contact us at{' '}
                 <a href="mailto:info@onsight-tech.com" className="text-purple-400 hover:text-purple-300 underline">
                   info@onsight-tech.com
                 </a>
