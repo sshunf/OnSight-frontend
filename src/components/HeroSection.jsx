@@ -51,13 +51,13 @@ function HeroSection() {
     <section id="heroSection">
       <div className="container">
         {/* LEFT SIDE: Text */}
-        <div className="flex-1 text-center lg:text-left">
+        <div className="flex-1 text-center lg:text-left text-container">
           <h1>
             <span>Stop Guessing.</span>
             <span style={{ display: 'inline-flex' }}>
               <span className="purple-text">Start&nbsp;</span>
               <span className="purple-text animated-text">{animatedWord}</span>
-              <span className="purple-text">.</span>
+              <span className="purple-text period">.</span>
             </span>
           </h1>
           <p>
@@ -70,7 +70,7 @@ function HeroSection() {
           </div>
         </div>
         {/* RIGHT SIDE: OnSight Logo */}
-        <div className="relative">
+        <div className="relative logo-container">
           <div></div>
           <img
             src="/logodraft.png"
