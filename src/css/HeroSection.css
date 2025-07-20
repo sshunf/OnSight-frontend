@@ -53,6 +53,11 @@ body {
     display: block;
 }
 
+#heroSection .animated-text {
+    min-width: 250px; /* Adjust this value as needed */
+    display: inline-block;
+}
+
 /* This colors the second line of text and prevents it from wrapping */
 #heroSection h1 span:last-child {
     color: #a78bfa; /* Light purple */
@@ -118,6 +123,16 @@ body {
 
 #heroSection .buttons a:last-child:hover {
     background-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (min-width: 1024px) {
+    #heroSection .text-container {
+        width: 50%;
+    }
+
+    #heroSection .logo-container {
+        width: 50%;
+    }
 }
 
 #heroSection .relative {
