@@ -19,11 +19,11 @@ function Footer() {
               <a href="https://www.facebook.com/onsighttechnu" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white"><FaFacebookF size={24} /></a>
               <a href="https://www.instagram.com/onsighttechnu" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white"><FaInstagram size={24} /></a>
             </div>
-            <div className="pt-2">
-              <img src="/image.png" alt="Inception" className="w-36" />
+            <div>
+              <img src="/MicrosoftStartups_border_widthBased.png" alt="Microsoft for Startups" className="w-36" />
             </div>
-            <div className="pt-2">
-              <img src="/MicrosoftStartups.png" alt="Microsoft for Startups" className="w-36" />
+            <div>
+              <img src="/inception.png" alt="Inception at the Garage" className="w-36" />
             </div>
           </div>
 

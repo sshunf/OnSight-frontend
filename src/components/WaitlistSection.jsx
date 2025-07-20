@@ -65,14 +65,14 @@ function WaitlistSection() {
     };
 
     return (
-      <div className="bg-black text-white min-h-screen waitlist-container">
+      <div className="bg-black text-white">
         {/* Asterisk Background - will be provided by the App.jsx AsteriskBackground component */}
-        <section className="waitlist-section flex flex-col items-center justify-center min-h-screen px-6">
+        <section className="waitlist-section flex flex-col items-center justify-center px-6">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-8xl md:text-9xl font-extrabold mb-2 text-white mt-10">
+            <h1 className="text-5xl md:text-6xl font-extrabold mb-4 text-white">
               Want this at your gym?
             </h1>
-            <p className="text-lg md:text-xl text-gray-300 mb-6 max-w-2xl mx-auto">
+            <p className="text-md md:text-lg text-gray-300 mb-8 max-w-xl mx-auto">
               Join our waitlist to be among the first to experience how OnSight can transform your facility.
             </p>
             
