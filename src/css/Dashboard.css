@@ -85,7 +85,8 @@
     background-color: #161616;
     padding: 1.5rem;
     border-radius: 0.5rem;
-    z-index: 10;
+    z-index: 20;
+    opacity: 100%;
   }
   
   .data-section h2 {
@@ -126,10 +127,12 @@
 .dashboard-main-content {
   margin-left: 240px; /* width of sidebar */
   padding: 2rem;
+  z-index: 10;
 }
 .dashboard-layout {
   display: flex;
   min-height: 100vh;
+  z-index: 10;
 }
 
 .sidebar-toggle {
@@ -151,8 +154,10 @@
   flex: 1;
   padding: 2rem;
   transition: margin-left 0.3s ease;
+  z-index: 10;
 }
 
 .dashboard-main.collapsed {
   margin-left: 80px;
 }
+
