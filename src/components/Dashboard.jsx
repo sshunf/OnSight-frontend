@@ -32,6 +32,7 @@ function Dashboard() {
   });
 
   const navigate = useNavigate();
+  const [selectedTimeframe, setSelectedTimeframe] = useState('24hours');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -47,14 +48,14 @@ function Dashboard() {
 
   useEffect(() => {
     if (user) {
-      fetchDashboardData(user);
+      fetchSensorData(user, selectedTimeframe);
     }
-  }, [user]);
-
-  const fetchDashboardData = async (currentUser) => {
+  }, [user, selectedTimeframe]);
+  
+  const fetchSensorData = async (currentUser, timeframe) => {
     try {
       const token = await currentUser.getIdToken();
-      const response = await fetch(`${backendURL}/api/sensor-data/recent`, {
+      const response = await fetch(`${backendURL}/api/sensor-data/${timeframe}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -63,9 +64,11 @@ function Dashboard() {
       if (response.ok) {
         const data = await response.json();
         setLiveData(data);
+      } else {
+        console.error(`Failed to fetch data for ${timeframe}`);
       }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('Error fetching sensor data:', error);
     }
   };
 
@@ -130,6 +133,21 @@ function Dashboard() {
           </div>
 
           <div className="data-section">
+            <div className="timeframe-selector" style={{ marginBottom: '1rem' }}>
+              <label htmlFor="timeframe" style={{ marginRight: '0.5rem' }}>Timeframe:</label>
+              <select
+                id="timeframe"
+                value={selectedTimeframe}
+                onChange={(e) => setSelectedTimeframe(e.target.value)}
+                style={{ padding: '0.5rem', borderRadius: '0.25rem' }}
+              >
+                <option value="24hours">Last 24 Hours</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+                <option value="year">Last Year</option>
+                <option value="all">All Time</option>
+              </select>
+            </div>
             <h2>Live Sensor Data</h2>
             <div className="data-container">
               <div className="chart-card">
