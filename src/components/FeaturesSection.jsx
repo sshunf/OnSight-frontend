@@ -54,17 +54,17 @@ function FeaturesSection() {
     <section id="featuresSection" className="relative py-24 px-6 lg:px-8">
       <div className="relative mx-auto max-w-7xl">
         <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-white">
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl text-white">
             Empowering Gyms with Smart Insights
           </h2>
-          <p className="mt-4 text-lg text-gray-400">
+          <p className="mt-4 text-base text-gray-400">
             Our sensor solutions provide the data you need to optimize your facility.
           </p>
         </div>
-        <div className="mb-12">
+        <div className="mb-8">
           <video
             ref={videoRef}
-            className="w-full max-w-6xl mx-auto rounded-lg" 
+            className="w-full max-w-4xl mx-auto rounded-lg" 
             src="/DemoVideoNew1.mp4" 
             autoPlay 
             muted 

@@ -53,8 +53,7 @@ function Footer() {
           <div className="space-y-4">
             <div className="font-semibold text-white">Contact</div>
             <div className="text-gray-400 space-y-2">
-              <p><a href="mailto:info@onsight-tech.com" className="hover:text-white">info@onsight-tech.com</a></p>
-              <p><a href="mailto:support@onsight-tech.com" className="hover:text-white">support@onsight-tech.com</a></p>
+              <p><a href="mailto:accounts@onsight-tech.com" className="hover:text-white">accounts@onsight-tech.com</a></p>
               <p>
                 <Link to="/garage" className="hover:text-white">
                   Northwestern University<br />
@@ -63,11 +62,6 @@ function Footer() {
               </p>
             </div>
           </div>
-        </div>
-
-        {/* Bottom copyright section */}
-        <div className="text-center text-gray-400 text-sm pt-8">
-            &copy; 2025 OnSight. All rights reserved.
         </div>
       </div>
     </footer>
