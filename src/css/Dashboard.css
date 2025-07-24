@@ -1,112 +1,155 @@
 .dashboard-container {
-    padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding-top: 6rem;
-  }
-  
-  .dashboard-header {
-    background-color: #161616;
-    padding: 1.5rem;
-    border-radius: 0.5rem;
-    margin-bottom: 2rem;
-  }
-  
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  
-  .header-content h1 {
-    color: white;
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-  
-  .logout-button {
-    padding: 0.5rem 1rem;
-    background-color: #dc2626;
-    color: white;
-    border: none;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-  
-  .logout-button:hover {
-    background-color: #b91c1c;
-  }
-  
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-  }
-  
-  .stat-card {
-    background-color: #161616;
-    padding: 1.5rem;
-    border-radius: 0.5rem;
-    text-align: center;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-top: 6rem;
+}
 
-  }
-  
-  .stat-card h3 {
-    color: #9ca3af;
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.5rem;
-  }
-  
-  .stat-value {
-    font-size: 2.25rem;
-    font-weight: 700;
-    color: white;
-    margin: 0.5rem 0;
-  }
-  
-  .stat-label {
-    color: #9ca3af;
-    font-size: 0.875rem;
-  }
-  
-  .data-section {
-    background-color: #161616;
-    padding: 1.5rem;
-    border-radius: 0.5rem;
-  }
-  
-  .data-section h2 {
-    color: white;
-    margin-bottom: 1rem;
-  }
-  
-  .data-container {
-    min-height: 400px;
-  }
+.dashboard-header {
+  background-color: #161616;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+}
 
-  .chart-card {
-  flex: 1;
-  min-width: 300px;
-  margin: 20px;
-  background: #2e2e2e;
-  padding: 1rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  color: #f9f9f9;
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-content h1 {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.logout-button {
+  padding: 0.5rem 1rem;
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.logout-button:hover {
+  background-color: #b91c1c;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background-color: #161616;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
   text-align: center;
-  width: 100%;
-  height: fit-content;
-  padding-right: 50px;
+}
+
+.stat-card h3 {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: white;
+  margin: 0.5rem 0;
+}
+
+.stat-label {
+  color: #9ca3af;
+  font-size: 0.875rem;
+}
+
+.data-section {
+  background-color: #161616;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  align-items: center;
+}
+
+.data-section h2 {
+  color: white;
+  margin-bottom: 1rem;
+}
+
+.data-container {
+  min-height: 400px;
 }
 
 .data-container {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-around;
+  justify-content: center;
+  align-items: stretch;
+  flex-direction: column;
   gap: 20px;
+}
+
+.row {
+  display: flex;
+  justify-content: center;
+  gap: 50px; 
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.chart-card {
+  flex: 1 1 300px;
+  max-width: 1200px;
+  background-color: rgba(31, 41, 55, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.chart {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-decoration: white;
+  width: 100%;
+  height: 400px;
+  position: relative;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.interval-dropdown-wrapper {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+  border: none; 
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.interval-dropdown {
+  background-color: transparent;
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.375rem;
+  color: white;
+  width: 100%;
+  outline: none;
+  text-align: center;
 }
 
