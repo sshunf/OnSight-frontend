@@ -54,6 +54,7 @@ function Dashboard() {
       data.result.sort((a, b) => new Date(a.hour) - new Date(b.hour));
       const grouped = {};
       data.result.forEach(entry => {
+        if (!entry || !entry.hour) return;
         const start = new Date(entry.hour);
         const end = new Date(start.getTime() + 60 * 60 * 1000);
         const format = (d) => {
