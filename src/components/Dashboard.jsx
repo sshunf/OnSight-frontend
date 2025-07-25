@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
@@ -14,7 +14,7 @@ import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
 // import { build } from 'vite';
 
-const backendURL = import.meta.env.VITE_BACKEND_URL;
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function Dashboard() {
   const [user, setUser] = useState(null);
@@ -30,9 +30,11 @@ function Dashboard() {
     occupancy: [],
   });
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
+  const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
   const chartInstancesRef = useRef({});
   const hourlyUsageChartRef = useRef(null);
   const avgUsageChartRef = useRef(null);
+  const cumUsageChartRef = useRef(null);
   const [machineOptions, setMachineOptions] = useState([]);
   const [selectedMachine, setSelectedMachine] = useState('');
 
@@ -143,7 +145,7 @@ function Dashboard() {
     if (!gymId) { console.error("No gymId in localStorage"); return; }
     console.log('GYMID:', gymId);
     try {
-      const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}`);
+      const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}&hours=${selectedAvgRange}`);
       const data = await res.json();
       if (!Array.isArray(data.result)) return;
       const sortedResult = [...data.result].sort((a, b) => a.machineId.localeCompare(b.machineId));
@@ -204,7 +206,7 @@ function Dashboard() {
       const data = await res.json();
       console.log("Machine options fetched:", data);
       if (Array.isArray(data.machineIds)) {
-        const validIds = data.machineIds.filter(id => typeof id === 'string' && id.trim() !== '');
+        const validIds = data.machineIds.filter(id => typeof id === 'string' && id.trim() !== '').sort((a, b) => a.localeCompare(b));
         setMachineOptions(validIds);
         if (!selectedMachine && validIds.length > 0) {
           setSelectedMachine(validIds[0]);
@@ -237,7 +239,7 @@ function Dashboard() {
       buildWeeklyChart();
       buildUsageChart();
     }
-  }, [user]);
+  }, [user, selectedAvgRange]);
 
   useEffect(() => {
     if (selectedMachine){
@@ -255,9 +257,11 @@ function Dashboard() {
       const peakData = await resPeak.json();
       const resActive = await fetch(`${backendURL}/api/small/active?gymId=${gymId}`);
       const activeData = await resActive.json();
-      // const resDaily = await fetch(`${backendURL}/api/small/daily?gymId=${gymId}`);
-      // const dailyData = await resDaily.json();
-      if (!resOcc.ok || !resPeak.ok || !resActive.ok) {
+      const resDaily = await fetch(`${backendURL}/api/small/daily?gymId=${gymId}`);
+      const dailyData = await resDaily.json();
+      const resWeekly = await fetch(`${backendURL}/api/small/weekly?gymId=${gymId}`);
+      const weeklyData = await resWeekly.json();
+      if (!resOcc.ok || !resPeak.ok || !resActive.ok || !resDaily.ok || !resWeekly.ok) {
         console.error("Failed to fetch occupancy:", data.error);
         return;
       }
@@ -266,7 +270,8 @@ function Dashboard() {
         currentOccupancy: occData.currentOccupancy || 0,
         peakHours: peakData.peakHour || '--',
         activeDevices: activeData.activeSensorCount || 0,
-        // dailyFav: dailyData.mostUsedMachine || '--',
+        dailyFav: dailyData.mostUsedMachine || '--',
+        weeklyFav: weeklyData.weeklyFav || '--'
       }));
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -307,37 +312,39 @@ function Dashboard() {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <h3>Current Occupancy</h3>
-          <p className="stat-value">{stats.currentOccupancy}</p>
-          <p className="stat-label">number of machines currently in use</p>
+          <h3>Daily Favorite</h3>
+          <p className="stat-value">{stats.dailyFav ? `Machine ${stats.dailyFav.machineId.slice(-4)}` : '--'}</p>
+          <p className="stat-label">Today's Most Used Machine</p>
         </div>
         <div className="stat-card">
           <h3>Peak Hours</h3>
           <p className="stat-value">{stats.peakHours}</p>
-          <p className="stat-label">most number of machines in this interval today</p>
+          <p className="stat-label">Time Interval With Most Activity Today</p>
         </div>
         <div className="stat-card">
-          <h3>Active Sensors</h3>
-          <p className="stat-value">{stats.activeDevices}</p>
-          <p className="stat-label">number of active sensors connected</p>
+          <h3>Weekly Favorite</h3>
+          <p className="stat-value">{stats.weeklyFav ? `Machine ${stats.weeklyFav.machineId.slice(-4)}` : '--'}</p>
+          <p className="stat-label">This Week's Most Used Machine</p>
         </div>
       </div>
 
       <div className="stats-grid">
         <div className="stat-card">
-          <h3>Daily Favorite</h3>
-          <p className="stat-value">{stats.dailyFav}</p>
-          <p className="stat-label">today's most used machine</p>
+          <h3>Current Occupancy</h3>
+          <p className="stat-value">{stats.currentOccupancy}</p>
+          <p className="stat-label">Number Of Machines Currently In Use</p>
+        </div>
+        <div className="flex items-center justify-center">
+          <img
+            src="/logodraft.png"
+            alt="OnSight Logo"
+            className="w-46 h-auto"
+          />
         </div>
         <div className="stat-card">
-          <h3>?</h3>
-          <p className="stat-value">{stats.currFav}</p>
-          <p className="stat-label">?</p>
-        </div>
-        <div className="stat-card">
-          <h3>Weekly Favorite</h3>
-          <p className="stat-value">{stats.weeklyFav}</p>
-          <p className="stat-label">this week's most used machine</p>
+          <h3>Active Sensors</h3>
+          <p className="stat-value">{stats.activeDevices}</p>
+          <p className="stat-label">Number Of Active Sensors Connected</p>
         </div>
       </div>
 
@@ -374,16 +381,41 @@ function Dashboard() {
                   <option value={12}>Past 12 Hours</option>
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
+                  <option value={720}>Past Month</option>
+                  <option value={-1}>All Time</option>
                 </select>
               </div>
             </div>
           </div>
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4"> Average Machine Usage This Week </h3>
+              <h3 className="text-xl font-semibold mb-4">Average Machine Usage In The Past {selectedAvgRange === -1 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
               <div className="chart">
                 <canvas ref={avgUsageChartRef}></canvas>
               </div>
+              <div className="interval-dropdown-wrapper mt-2">
+                <select
+                  value={selectedAvgRange}
+                  onChange={e => setSelectedAvgRange(parseInt(e.target.value))}
+                  className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
+                >
+                  <option value={6}>Past 6 Hours</option>
+                  <option value={8}>Past 8 Hours</option>
+                  <option value={12}>Past 12 Hours</option>
+                  <option value={24}>Past 24 Hours</option>
+                  <option value={168}>Past Week</option>
+                  <option value={720}>Past Month</option>
+                  <option value={-1}>All Time</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="row">
+            <div className="chart-card">
+                <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
+                <div className="chart">
+                  <canvas ref={cumUsageChartRef}></canvas>
+                </div>
             </div>
           </div>
         </div>
