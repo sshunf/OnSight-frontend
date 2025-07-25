@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import '../css/GymSelectScreen.css';
 
-const backendURL = import.meta.env.VITE_BACKEND_URL;
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function GymSelectScreen() {
   // const [activeScreen, setActiveScreen] = useState('gym-select');

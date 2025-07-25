@@ -4,7 +4,7 @@ import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from
 import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
-const backendURL = import.meta.env.VITE_BACKEND_URL;
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 console.log(`touch proof`);
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
