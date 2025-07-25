@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
@@ -10,9 +10,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
+// import { build } from 'vite';
 
-const backendURL = import.meta.env.VITE_BACKEND_URL;
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function Dashboard() {
   const [user, setUser] = useState(null);
@@ -28,7 +30,197 @@ function Dashboard() {
     occupancy: [],
   });
 
+  const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
+  const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
+  const chartInstancesRef = useRef({});
+  const hourlyUsageChartRef = useRef(null);
+  const avgUsageChartRef = useRef(null);
+  const cumUsageChartRef = useRef(null);
+  const [machineOptions, setMachineOptions] = useState([]);
+  const [selectedMachine, setSelectedMachine] = useState('');
+
   const navigate = useNavigate();
+
+  const buildUsageChart = async() => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) { console.error("No gymId in localStorage"); return; }
+    console.log('GYMID:', gymId);
+    try {
+      const res = await fetch(`${backendURL}/api/hourly/usage?hours=${selectedRange}&gymId=${gymId}&machineId=${selectedMachine}`);
+      const data = await res.json();
+      if (!Array.isArray(data.result)) {
+        console.error("Invalid data format from backend:", data);
+        return;
+      }
+      data.result.sort((a, b) => new Date(a.hour) - new Date(b.hour));
+      const grouped = {};
+      data.result.forEach(entry => {
+        if (!entry || !entry.hour) return;
+        const start = new Date(entry.hour);
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        const format = (d) => {
+          const month = d.getMonth() + 1;
+          const day = d.getDate();
+          const h = d.getHours();
+          const suffix = h < 12 ? 'am' : 'pm';
+          const hour12 = h % 12 || 12;
+          return `${month}/${day} ${hour12}${suffix}`; 
+        };
+        const label = `${format(start)} - ${format(end)}`;        
+        if (!grouped[label]) grouped[label] = 0;
+        grouped[label] += entry.minutes;
+      });
+
+      const labels = Object.keys(grouped);
+      const values = labels.map(label => grouped[label]);
+      const maxValue = Math.max(...values);
+      const yMax = (Math.ceil(maxValue + 5) >= 60) ? 60 : Math.ceil(maxValue + 5);
+      console.log("total min:", maxValue);
+
+      if (hourlyUsageChartRef.current) {
+        const ctx = hourlyUsageChartRef.current.getContext('2d');
+        if (chartInstancesRef.current.equipment) {
+          chartInstancesRef.current.equipment.destroy();
+        }
+        chartInstancesRef.current.equipment = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: `Usage (min) - Past ${selectedRange} hrs`,
+              data: values,
+              backgroundColor: 'rgba(124, 58, 237, 0.7)',
+              borderColor: 'rgba(93, 0, 255, 0.7)',
+              tension: 0.3,
+              fill: true,
+              pointRadius: 3,
+              pointBackgroundColor: 'white',
+              borderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: true, labels: { color: 'white' }},
+              title: { display: true, text: 'Per-Hour Machine Usage', color: 'white' }
+            },
+            scales: {
+              x: {
+                ticks: { color: 'white', font: { size: 10}},
+                title: { display: true, text: 'Hour Intervals', color: 'white' },
+                grid: { 
+                  display: true,
+                  color: 'rgba(255,255,255,0.2)',
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  tickColor: 'rgba(255,255,255,0.4)',
+                  drawOnChartArea: true,
+                  drawTicks: true,
+                }
+              },
+              y: {
+                min: 0,
+                max: yMax,
+                ticks: { color: 'white' },
+                beginAtZero: true,
+                title: { display: true, text: 'Minutes', color: 'white' },
+                grid: { 
+                  display: true,
+                  color: 'rgba(255,255,255,0.2)',
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  tickColor: 'rgba(255,255,255,0.4)',
+                  drawOnChartArea: true,
+                  drawTicks: true,
+                }
+              }
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch build chart and fetch analytics:", err);
+    }
+  };
+
+  const buildWeeklyChart = async() => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) { console.error("No gymId in localStorage"); return; }
+    console.log('GYMID:', gymId);
+    try {
+      const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}&hours=${selectedAvgRange}`);
+      const data = await res.json();
+      if (!Array.isArray(data.result)) return;
+      const sortedResult = [...data.result].sort((a, b) => a.machineId.localeCompare(b.machineId));
+      const labels = sortedResult.map(d => `Machine ${d.machineId.slice(-4)}`);
+      const values = sortedResult.map(d => d.avgMinutes);
+      const maxValue = Math.max(...values);
+      const yMax = Math.ceil(maxValue + 10);
+      if (avgUsageChartRef.current) {
+        const ctx = avgUsageChartRef.current.getContext('2d');
+        if (chartInstancesRef.current.avgUsage) {
+          chartInstancesRef.current.avgUsage.destroy();
+        }
+        chartInstancesRef.current.avgUsage = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Average Weekly Usage (min)',
+              data: values,
+              backgroundColor: 'rgba(124, 58, 237, 0.7)',
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: true, labels: { color: 'white' } },
+              title: { display: true, text: 'Per-Machine Average Usage A Day', color: 'white' }
+            },
+            scales: {
+              x: {
+                ticks: { color: 'white' },
+                title: { display: true, text: 'Machine IDs', color: 'white' },
+                grid: { color: 'rgba(255,255,255,0.2)' }
+              },
+              y: {
+                min: 0,
+                max: yMax,
+                ticks: { color: 'white' },
+                title: { display: true, text: 'Minutes', color: 'white' },
+                grid: { color: 'rgba(255,255,255,0.2)' }
+              }
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Failed to build weekly average chart:', err);
+    }
+  }
+
+  const fetchMachineOptions = async() => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) return;
+    try {
+      const res = await fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`);
+      const data = await res.json();
+      console.log("Machine options fetched:", data);
+      if (Array.isArray(data.machineIds)) {
+        const validIds = data.machineIds.filter(id => typeof id === 'string' && id.trim() !== '').sort((a, b) => a.localeCompare(b));
+        setMachineOptions(validIds);
+        if (!selectedMachine && validIds.length > 0) {
+          setSelectedMachine(validIds[0]);
+        }
+      }
+      else {
+        console.error("No MachineIds in array in response:", data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch machine options:', err);
+    }
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -45,25 +237,44 @@ function Dashboard() {
   useEffect(() => {
     if (user) {
       fetchDashboardData(user);
+      fetchMachineOptions();
+      buildWeeklyChart();
+      buildUsageChart();
     }
-  }, [user]);
+  }, [user, selectedAvgRange]);
+
+  useEffect(() => {
+    if (selectedMachine){
+      buildUsageChart();
+    }
+  }, [selectedRange, selectedMachine]);
 
   const fetchDashboardData = async (currentUser) => {
     try {
-      const token = await currentUser.getIdToken();
-      // Fetch stats if needed
-
-      // Fetch sensor data
-      const response = await fetch(`${backendURL}/api/sensor-data/recent`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setLiveData(data);
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) return;
+      const resOcc = await fetch(`${backendURL}/api/small/occupancy?gymId=${gymId}`);
+      const occData = await resOcc.json();
+      const resPeak = await fetch(`${backendURL}/api/small/peak?gymId=${gymId}`);
+      const peakData = await resPeak.json();
+      const resActive = await fetch(`${backendURL}/api/small/active?gymId=${gymId}`);
+      const activeData = await resActive.json();
+      const resDaily = await fetch(`${backendURL}/api/small/daily?gymId=${gymId}`);
+      const dailyData = await resDaily.json();
+      const resWeekly = await fetch(`${backendURL}/api/small/weekly?gymId=${gymId}`);
+      const weeklyData = await resWeekly.json();
+      if (!resOcc.ok || !resPeak.ok || !resActive.ok || !resDaily.ok || !resWeekly.ok) {
+        console.error("Failed to fetch occupancy:", data.error);
+        return;
       }
+      setStats((prevStats) => ({
+        ...prevStats,
+        currentOccupancy: occData.currentOccupancy || 0,
+        peakHours: peakData.peakHour || '--',
+        activeDevices: activeData.activeSensorCount || 0,
+        dailyFav: dailyData.mostUsedMachine || '--',
+        weeklyFav: weeklyData.weeklyFav || '--'
+      }));
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -103,62 +314,120 @@ function Dashboard() {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <h3>Current Occupancy</h3>
-          <p className="stat-value">{stats.currentOccupancy}</p>
-          <p className="stat-label">people</p>
+          <h3>Daily Favorite</h3>
+          <p className="stat-value">
+            {stats.dailyFav?.machineId
+              ? `Machine ${stats.dailyFav.machineId.slice(-4)}`
+              : '--'}
+          </p>
+          <p className="stat-label">Today's Most Used Machine</p>
         </div>
         <div className="stat-card">
           <h3>Peak Hours</h3>
           <p className="stat-value">{stats.peakHours}</p>
-          <p className="stat-label">today</p>
+          <p className="stat-label">Time Interval With Most Activity Today</p>
         </div>
         <div className="stat-card">
-          <h3>Active Devices</h3>
+          <h3>Weekly Favorite</h3>
+          <p className="stat-value">
+            {stats.weeklyFav?.machineId
+              ? `Machine ${stats.weeklyFav.machineId.slice(-4)}`
+              : '--'}
+          </p>
+          <p className="stat-label">This Week's Most Used Machine</p>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <h3>Current Occupancy</h3>
+          <p className="stat-value">{stats.currentOccupancy}</p>
+          <p className="stat-label">Number Of Machines Currently In Use</p>
+        </div>
+        <div className="flex items-center justify-center">
+          <img
+            src="/logodraft.png"
+            alt="OnSight Logo"
+            className="w-46 h-auto"
+          />
+        </div>
+        <div className="stat-card">
+          <h3>Active Sensors</h3>
           <p className="stat-value">{stats.activeDevices}</p>
-          <p className="stat-label">connected</p>
+          <p className="stat-label">Number Of Active Sensors Connected</p>
         </div>
       </div>
 
       <div className="data-section">
         <h2>Live Sensor Data</h2>
         <div className="data-container">
-
-          <div className="chart-card">
-            <h3>Occupancy</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={liveData.occupancy}>
-                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
-                <YAxis />
-                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle}/>
-                <Line type="monotone" dataKey="value" stroke="#5902db"/>
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="row">
+            <div className="chart-card">
+              <h3 className="text-xl font-semibold mb-4">Hourly Machine Usage For Machine {selectedMachine ? selectedMachine.slice(-4) : 'N/A'}</h3>
+              <div className="chart" style={{height: '300px'}}>
+                <canvas ref={hourlyUsageChartRef}></canvas>
+              </div>
+              <div className="interval-dropdown-wrapper">
+                <select
+                  value={selectedMachine}
+                  onChange={(e) => setSelectedMachine(e.target.value)}
+                  className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
+                >
+                  {machineOptions.map((id) => (
+                    id ? (
+                      <option key={id} value={id}>
+                        Machine {id.slice(-4)}
+                      </option>
+                    ) : null
+                  ))}
+                </select>
+                <select
+                  value={selectedRange}
+                  onChange={e => setSelectedRange(parseInt(e.target.value))}
+                  className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
+                >
+                  <option value={6}>Past 6 Hours</option>
+                  <option value={8}>Past 8 Hours</option>
+                  <option value={12}>Past 12 Hours</option>
+                  <option value={24}>Past 24 Hours</option>
+                  <option value={168}>Past Week</option>
+                  <option value={720}>Past Month</option>
+                  <option value={-1}>All Time</option>
+                </select>
+              </div>
+            </div>
           </div>
-
-          <div className="chart-card">
-            <h3>Force</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={liveData.force}>
-                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
-                <YAxis />
-                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="value" stroke="#5902db" />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="row">
+            <div className="chart-card">
+              <h3 className="text-xl font-semibold mb-4">Average Machine Usage In The Past {selectedAvgRange === -1 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
+              <div className="chart">
+                <canvas ref={avgUsageChartRef}></canvas>
+              </div>
+              <div className="interval-dropdown-wrapper mt-2">
+                <select
+                  value={selectedAvgRange}
+                  onChange={e => setSelectedAvgRange(parseInt(e.target.value))}
+                  className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
+                >
+                  <option value={6}>Past 6 Hours</option>
+                  <option value={8}>Past 8 Hours</option>
+                  <option value={12}>Past 12 Hours</option>
+                  <option value={24}>Past 24 Hours</option>
+                  <option value={168}>Past Week</option>
+                  <option value={720}>Past Month</option>
+                  <option value={-1}>All Time</option>
+                </select>
+              </div>
+            </div>
           </div>
-
-          <div className="chart-card">
-            <h3 className="text-center w-full">Motion</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={liveData.motion}>
-                <XAxis dataKey="timestamp" tickFormatter={(str) => new Date(str).toLocaleTimeString()} />
-                <YAxis />
-                <Tooltip labelFormatter={formatTimeLabel} contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="value" stroke="#5902db" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
+          {/* <div className="row">
+            <div className="chart-card">
+                <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
+                <div className="chart">
+                  <canvas ref={cumUsageChartRef}></canvas>
+                </div>
+            </div>
+          </div> */}
         </div>
       </div>
     </div>
