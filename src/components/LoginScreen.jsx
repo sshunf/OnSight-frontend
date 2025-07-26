@@ -97,6 +97,8 @@ function LoginScreen() {
 
       console.log(`Google user: ${user}`);
       const idToken = await user.getIdToken();
+      console.log(idToken);
+      console.log(user.uid);
       
       const res = await fetch(`${backendURL}/auth/signup`, {
         method: 'POST',
