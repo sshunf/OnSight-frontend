@@ -94,9 +94,9 @@ function LoginScreen() {
       const result = await signInWithPopup(auth, provider); 
       const user = result.user;
 
-      console.log(`Google user: ${user}`);
+      console.log(`Google user:`, user);
       const idToken = await user.getIdToken();
-      
+
       const res = await fetch(`${backendURL}/auth/signup`, {
         method: 'POST',
         headers: {
@@ -110,33 +110,42 @@ function LoginScreen() {
           password: googlePassword || null,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        console.error('Signup failed:', data.error || data);
-        alert('Signup failed: ' + (data.error || 'Unknown error'));
+
+      let data;
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : null;
+      } catch (jsonErr) {
+        console.error('Failed to parse JSON:', jsonErr);
+        alert('Signup failed: invalid server response');
         return;
       }
+
+      if (!res.ok) {
+        console.error('Signup failed:', data?.error || res.statusText);
+        alert('Signup failed: ' + (data?.error || res.statusText));
+        return;
+      }
+
       const backendUser = data.user;
       setUser(backendUser);
       localStorage.setItem('userEmail', backendUser.email);
-      console.log('stored userEmail:', backendUser.email);
       localStorage.setItem('loginTimestamp', Date.now().toString());
       localStorage.setItem('gymAffiliated', backendUser.gymAffiliated ? 'true' : 'false');
-      localStorage.setItem('gymId', backendUser.gym.gymId);
-      localStorage.setItem('gymName', backendUser.gym.name);  
-      // const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
-      if (localStorage.getItem('gymAffiliated')) {
+      localStorage.setItem('gymId', backendUser.gym?.gymId || '');
+      localStorage.setItem('gymName', backendUser.gym?.name || '');
+
+      if (backendUser.gymAffiliated) {
         navigate('/dashboard');
       } else {
         navigate('/gym-select');
       }
-    }
-    catch (backendError) {
+    } catch (backendError) {
       console.error('Google sign-in failed:', backendError);
-    alert('Google sign-in failed. See console for details.');
+      alert('Google sign-in failed. See console for details.');
     }
   };
-  
+
   const handleLogout = async () => {
     try {
       await signOut(auth);

@@ -3,7 +3,7 @@ name: Build and Deploy Frontend to Azure Web App (Stage Slot)
 on:
   push:
     branches:
-      - stage  # or 'test' if you use a different staging branch
+      - stage 
 
 jobs:
   build_and_deploy:
