@@ -29,6 +29,7 @@ function Dashboard() {
     motion: [],
     occupancy: [],
   });
+
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
   const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
   const chartInstancesRef = useRef({});
@@ -220,7 +221,7 @@ function Dashboard() {
       console.error('Failed to fetch machine options:', err);
     }
   }
-  
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
@@ -314,7 +315,11 @@ function Dashboard() {
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Daily Favorite</h3>
-          <p className="stat-value">{stats.dailyFav ? `Machine ${stats.dailyFav.machineId.slice(-4)}` : '--'}</p>
+          <p className="stat-value">
+            {stats.dailyFav?.machineId
+              ? `Machine ${stats.dailyFav.machineId.slice(-4)}`
+              : '--'}
+          </p>
           <p className="stat-label">Today's Most Used Machine</p>
         </div>
         <div className="stat-card">
@@ -324,7 +329,11 @@ function Dashboard() {
         </div>
         <div className="stat-card">
           <h3>Weekly Favorite</h3>
-          <p className="stat-value">{stats.weeklyFav ? `Machine ${stats.weeklyFav.machineId.slice(-4)}` : '--'}</p>
+          <p className="stat-value">
+            {stats.weeklyFav?.machineId
+              ? `Machine ${stats.weeklyFav.machineId.slice(-4)}`
+              : '--'}
+          </p>
           <p className="stat-label">This Week's Most Used Machine</p>
         </div>
       </div>
@@ -411,14 +420,14 @@ function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="row">
+          {/* <div className="row">
             <div className="chart-card">
                 <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
                 <div className="chart">
                   <canvas ref={cumUsageChartRef}></canvas>
                 </div>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
