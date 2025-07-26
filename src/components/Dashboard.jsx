@@ -2,17 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
 import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
-// import { build } from 'vite';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
