@@ -6,6 +6,7 @@ import '../css/LoginScreen.css';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 console.log(`touch proof`);
+console.log("Backend url:", import.meta.env.VITE_BACKEND_URL);
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
   const [user, setUser] = useState(null);
@@ -125,6 +126,10 @@ function LoginScreen() {
       localStorage.setItem('gymId', backendUser.gym.gymId);
       localStorage.setItem('gymName', backendUser.gym.name);  
       // const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
+
+      console.log("Backend URL:", backendURL);
+
+
       if (localStorage.getItem('gymAffiliated')) {
         navigate('/dashboard');
       } else {
