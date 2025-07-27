@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { auth } from '../config/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
-// import { build } from 'vite';
 
 console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
@@ -37,8 +34,18 @@ function Dashboard() {
   const cumUsageChartRef = useRef(null);
   const [machineOptions, setMachineOptions] = useState([]);
   const [selectedMachine, setSelectedMachine] = useState('');
-
   const navigate = useNavigate();
+
+  // Check for user in localStorage
+  useEffect(() => {
+    const userEmail = localStorage.getItem('userEmail');
+    const gymId = localStorage.getItem('gymId');
+    if (!userEmail || !gymId) {
+      navigate('/login');
+    } else {
+      setUser({ email: userEmail });
+    }
+  }, [navigate]);
 
   const buildUsageChart = async() => {
     const gymId = localStorage.getItem('gymId');
@@ -149,8 +156,9 @@ function Dashboard() {
       const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}&hours=${selectedAvgRange}`);
       const data = await res.json();
       if (!Array.isArray(data.result)) return;
+      // Use machine IDs as before
       const sortedResult = [...data.result].sort((a, b) => a.machineId.localeCompare(b.machineId));
-      const labels = sortedResult.map(d => `Machine ${d.machineId.slice(-4)}`);
+      const labels = sortedResult.map(d => d.machineId ? d.machineId.slice(-4) : 'Unknown');
       const values = sortedResult.map(d => d.avgMinutes);
       const maxValue = Math.max(...values);
       const yMax = Math.ceil(maxValue + 10);
@@ -201,29 +209,20 @@ function Dashboard() {
 
   const buildAllMotionCharts = async () => {
     try {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const idToken = await user.getIdToken();
-      const res = await fetch(`${backendURL}/api/motion/aggregated`, {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-        }
-      });
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) return;
+      const res = await fetch(`${backendURL}/api/motion/aggregated?gymId=${gymId}`);
       const allData = await res.json();
 
       for (let sensorId of [1, 2, 3]) {
         const data = allData[`sensor${sensorId}`] || [];
-
         const sorted = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         const labels = sorted.map(entry => new Date(entry.timestamp).toLocaleTimeString());
         const values = sorted.map(entry => entry.value);
-
         const ctx = motionChartRefs[`sensor${sensorId}`].current.getContext('2d');
         if (chartInstancesRef.current[`motion${sensorId}`]) {
           chartInstancesRef.current[`motion${sensorId}`].destroy();
         }
-
         chartInstancesRef.current[`motion${sensorId}`] = new Chart(ctx, {
           type: 'line',
           data: {
@@ -273,15 +272,16 @@ function Dashboard() {
       const res = await fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`);
       const data = await res.json();
       console.log("Machine options fetched:", data);
+      // Use machine IDs as before
       if (Array.isArray(data.machineIds)) {
-        const validIds = data.machineIds.filter(id => typeof id === 'string' && id.trim() !== '').sort((a, b) => a.localeCompare(b));
-        setMachineOptions(validIds);
-        if (!selectedMachine && validIds.length > 0) {
-          setSelectedMachine(validIds[0]);
+        // Convert array of IDs to array of objects for dropdown compatibility
+        const machineObjs = data.machineIds.map(machineId => ({ machineId }));
+        setMachineOptions(machineObjs);
+        if (!selectedMachine && machineObjs.length > 0) {
+          setSelectedMachine(machineObjs[0].machineId);
         }
-      }
-      else {
-        console.error("No MachineIds in array in response:", data);
+      } else {
+        console.error("No machineIds array in response:", data);
       }
     } catch (err) {
       console.error('Failed to fetch machine options:', err);
@@ -289,15 +289,13 @@ function Dashboard() {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        navigate('/login');
-      }
-    });
-
-    return () => unsubscribe();
+    const userEmail = localStorage.getItem('userEmail');
+    const gymId = localStorage.getItem('gymId');
+    if (!userEmail || !gymId) {
+      navigate('/login');
+    } else {
+      setUser({ email: userEmail });
+    }
   }, [navigate]);
 
   useEffect(() => {
@@ -461,13 +459,14 @@ function Dashboard() {
                   onChange={(e) => setSelectedMachine(e.target.value)}
                   className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
                 >
-                  {machineOptions.map((id) => (
-                    id ? (
-                      <option key={id} value={id}>
-                        Machine {id.slice(-4)}
+                  {[...machineOptions]
+                    .filter(machine => machine && machine.machineId)
+                    .sort((a, b) => a.machineId.localeCompare(b.machineId))
+                    .map((machine) => (
+                      <option key={machine.machineId} value={machine.machineId}>
+                        {machine.machineId.slice(-4)}
                       </option>
-                    ) : null
-                  ))}
+                    ))}
                 </select>
                 <select
                   value={selectedRange}
@@ -508,7 +507,7 @@ function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="row">
+          {/* <div className="row">
             {[1, 2, 3].map((id) => (
               <div className="chart-card" key={id}>
                 <h3 className="text-xl font-semibold mb-4">Motion Sensor {id}</h3>
@@ -517,7 +516,7 @@ function Dashboard() {
                 </div>
               </div>
             ))}
-          </div>
+          </div> */}
           {/* <div className="row">
             <div className="chart-card">
                 <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
