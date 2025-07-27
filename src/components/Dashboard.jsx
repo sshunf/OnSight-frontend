@@ -6,6 +6,7 @@ import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
 // import { build } from 'vite';
 
+console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function Dashboard() {
