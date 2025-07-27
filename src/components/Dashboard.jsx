@@ -2,14 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
 import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
 // import { build } from 'vite';
@@ -30,6 +22,13 @@ function Dashboard() {
     motion: [],
     occupancy: [],
   });
+
+  const motionChartRefs = {
+    sensor1: useRef(null),
+    sensor2: useRef(null),
+    sensor3: useRef(null),
+  };
+
 
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
   const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
@@ -201,6 +200,74 @@ function Dashboard() {
     }
   }
 
+  const buildAllMotionCharts = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const idToken = await user.getIdToken();
+      const res = await fetch(`${backendURL}/api/motion/aggregated`, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+        }
+      });
+      const allData = await res.json();
+
+      for (let sensorId of [1, 2, 3]) {
+        const data = allData[`sensor${sensorId}`] || [];
+
+        const sorted = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const labels = sorted.map(entry => new Date(entry.timestamp).toLocaleTimeString());
+        const values = sorted.map(entry => entry.value);
+
+        const ctx = motionChartRefs[`sensor${sensorId}`].current.getContext('2d');
+        if (chartInstancesRef.current[`motion${sensorId}`]) {
+          chartInstancesRef.current[`motion${sensorId}`].destroy();
+        }
+
+        chartInstancesRef.current[`motion${sensorId}`] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: `Sensor ${sensorId} Motion`,
+              data: values,
+              borderColor: 'rgba(0, 255, 100, 0.7)',
+              backgroundColor: 'rgba(0, 255, 100, 0.3)',
+              fill: true,
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                ticks: { color: 'white' },
+                title: { display: true, text: 'Time', color: 'white' },
+                grid: { color: 'rgba(255,255,255,0.1)' },
+              },
+              y: {
+                ticks: { color: 'white' },
+                beginAtZero: true,
+                title: { display: true, text: 'Motion Value', color: 'white' },
+                grid: { color: 'rgba(255,255,255,0.1)' },
+              },
+            },
+            plugins: {
+              legend: { labels: { color: 'white' } }
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch aggregated motion data:', error);
+    }
+  };
+
+
   const fetchMachineOptions = async() => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
@@ -250,6 +317,13 @@ function Dashboard() {
       buildUsageChart();
     }
   }, [selectedRange, selectedMachine]);
+
+  useEffect(() => {
+    if (user) {
+      buildAllMotionCharts();
+    }
+  }, [user]);
+
 
   const fetchDashboardData = async (currentUser) => {
     try {
@@ -422,6 +496,18 @@ function Dashboard() {
               </div>
             </div>
           </div>
+
+          <div className="row">
+            {[1, 2, 3].map((id) => (
+              <div className="chart-card" key={id}>
+                <h3 className="text-xl font-semibold mb-4">Motion Sensor {id}</h3>
+                <div className="chart">
+                  <canvas ref={motionChartRefs[`sensor${id}`]}></canvas>
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* <div className="row">
             <div className="chart-card">
                 <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
