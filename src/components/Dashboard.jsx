@@ -6,7 +6,6 @@ import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
 // import { build } from 'vite';
 
-console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function Dashboard() {
@@ -28,8 +27,7 @@ function Dashboard() {
     sensor2: useRef(null),
     sensor3: useRef(null),
   };
-
-
+  
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
   const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
   const chartInstancesRef = useRef({});
@@ -267,7 +265,6 @@ function Dashboard() {
     }
   };
 
-
   const fetchMachineOptions = async() => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
@@ -322,7 +319,13 @@ function Dashboard() {
     if (user) {
       buildAllMotionCharts();
     }
-  }, [user]);
+  }, [user, selectedAvgRange]);
+
+  useEffect(() => {
+    if (selectedMachine){
+      buildUsageChart();
+    }
+  }, [selectedRange, selectedMachine]);
 
 
   const fetchDashboardData = async (currentUser) => {
@@ -427,6 +430,21 @@ function Dashboard() {
             className="w-46 h-auto"
           />
         </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <h3>Current Occupancy</h3>
+          <p className="stat-value">{stats.currentOccupancy}</p>
+          <p className="stat-label">Number Of Machines Currently In Use</p>
+        </div>
+        <div className="flex items-center justify-center">
+          <img
+            src="/logodraft.png"
+            alt="OnSight Logo"
+            className="w-46 h-auto"
+          />
+        </div>
         <div className="stat-card">
           <h3>Active Sensors</h3>
           <p className="stat-value">{stats.activeDevices}</p>
@@ -496,7 +514,6 @@ function Dashboard() {
               </div>
             </div>
           </div>
-
           <div className="row">
             {[1, 2, 3].map((id) => (
               <div className="chart-card" key={id}>
@@ -507,7 +524,6 @@ function Dashboard() {
               </div>
             ))}
           </div>
-
           {/* <div className="row">
             <div className="chart-card">
                 <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>

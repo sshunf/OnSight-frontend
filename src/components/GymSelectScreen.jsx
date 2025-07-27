@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import '../css/GymSelectScreen.css';
 
-const backendURL = import.meta.env.VITE_BACKEND_URL;
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function GymSelectScreen() {
   // const [activeScreen, setActiveScreen] = useState('gym-select');
@@ -42,6 +42,7 @@ function GymSelectScreen() {
       localStorage.setItem('gymAffiliated', 'true');
       localStorage.setItem('gymId', result.user.gym.gymId || '');
       localStorage.setItem('gymName', result.user.gym.name || '');
+      localStorage.setItem('loginTimestamp', Date.now().toString());
       navigate('/dashboard');
     } catch (err) {
       console.error('Gym verification error:', err);
@@ -81,34 +82,6 @@ function GymSelectScreen() {
         </form>
       </div>
     
-    </section>
-  );
-
-  return (
-    <section className="content-box">
-      <h2>Verify Gym Affiliation</h2>
-      <form onSubmit={handleSubmit}>
-        <label>Select Gym:</label>
-        <select value={selectedGym} onChange={(e) => setSelectedGym(e.target.value)}>
-          <option value="">-- Choose a gym --</option>
-          {gyms.map(gym => (
-            <option key={gym._id} value={gym.name}>{gym.name}</option>
-          ))}
-        </select>
-
-        <label>Enter Verification Code:</label>
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="Enter code"
-        />
-
-        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-          <button type="submit">Verify</button>
-          <button type="button" onClick={handleBack}>Back</button>
-        </div>
-      </form>
     </section>
   );
 }

@@ -4,7 +4,7 @@ import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from
 import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
-const backendURL = import.meta.env.VITE_BACKEND_URL;
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 console.log(`touch proof`);
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
@@ -37,7 +37,8 @@ function LoginScreen() {
         } else {
           setUser(currentUser);
           const gymAffiliated = localStorage.getItem('gymAffiliated') === true;
-          if (gymAffiliated) navigate('/dashboard');
+          const gymId = localStorage.getItem('gymId');
+          if (gymAffiliated && gymId) navigate('/dashboard');
           else navigate('/gym-select');
         }
       }
@@ -61,30 +62,25 @@ function LoginScreen() {
       });
       const result = await res.json();
       if (!res.ok){
-        alert(error.error || 'Login failed');
+        alert(result.error || 'Login failed');
         return;
       }
       console.log(`email: ${result.user.email}`);
       setUser(result.user); // this can be a local user object
       localStorage.setItem('userEmail', result.user.email);
       localStorage.setItem('loginTimestamp', Date.now().toString());
-      navigate('/gym-select'); // redirect to verification step
+      localStorage.setItem('gymAffiliated', result.user.gymAffiliated ? 'true' : 'false');
+      localStorage.setItem('gymId', result.user.gym?.gymId || '');
+      localStorage.setItem('gymName', result.user.gym?.name || '');
+      if (result.user.gymAffiliated) {
+        navigate('/dashboard');
+      } else {
+        navigate('/gym-select');
+      }
     } catch (err) {
       console.error('Login error:', err);
       alert('Something went wrong, try again');
     }
-    
-    // if (validAccounts[user] && validAccounts[user] === pass) {
-    //   if (user === "TheGarage") {
-    //     setActiveScreen('occupancy');
-    //     fetchOccupancy();
-    //   } else if (user === "SPAC") {
-    //     setActiveScreen('motion');
-    //     fetchMotionAndForce();
-    //   }
-    // } else {
-    //   alert("Incorrect username or password!");
-    // }
   };
 
   const handleGoogleSignIn = async () => {
@@ -98,9 +94,9 @@ function LoginScreen() {
       const result = await signInWithPopup(auth, provider); 
       const user = result.user;
 
-      console.log(`Google user: ${user}`);
+      console.log(`Google user:`, user);
       const idToken = await user.getIdToken();
-      
+
       const res = await fetch(`${backendURL}/auth/signup`, {
         method: 'POST',
         headers: {
@@ -114,32 +110,42 @@ function LoginScreen() {
           password: googlePassword || null,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        console.error('Signup failed:', data.error || data);
-        alert('Signup failed: ' + (data.error || 'Unknown error'));
+
+      let data;
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : null;
+      } catch (jsonErr) {
+        console.error('Failed to parse JSON:', jsonErr);
+        alert('Signup failed: invalid server response');
         return;
       }
-      setUser(user);
-      localStorage.setItem('userEmail', user.email);
-      console.log('Stored userEmail:', user.email);
+
+      if (!res.ok) {
+        console.error('Signup failed:', data?.error || res.statusText);
+        alert('Signup failed: ' + (data?.error || res.statusText));
+        return;
+      }
+
+      const backendUser = data.user;
+      setUser(backendUser);
+      localStorage.setItem('userEmail', backendUser.email);
       localStorage.setItem('loginTimestamp', Date.now().toString());
-      localStorage.setItem('gymAffiliated', user.gymAffiliated ? 'true' : 'false');
-      localStorage.setItem('gymId', user.gym?.gymId || '');
-      localStorage.setItem('gymName', user.gym?.name || '');  
-      const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
-      if (gymAffiliated) {
+      localStorage.setItem('gymAffiliated', backendUser.gymAffiliated ? 'true' : 'false');
+      localStorage.setItem('gymId', backendUser.gym?.gymId || '');
+      localStorage.setItem('gymName', backendUser.gym?.name || '');
+
+      if (backendUser.gymAffiliated) {
         navigate('/dashboard');
       } else {
         navigate('/gym-select');
       }
-    }
-    catch (backendError) {
+    } catch (backendError) {
       console.error('Google sign-in failed:', backendError);
-    alert('Google sign-in failed. See console for details.');
+      alert('Google sign-in failed. See console for details.');
     }
   };
-  
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
