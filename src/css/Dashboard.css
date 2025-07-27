@@ -1,9 +1,12 @@
 .dashboard-container {
-  padding: 2rem;
-  max-width: 1200px;
+  padding: 2rem 1rem; 
+  max-width: 100%;
   margin: 0 auto;
   padding-top: 6rem;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
+
 
 .dashboard-header {
   background-color: #161616;
@@ -85,7 +88,12 @@
 }
 
 .data-container {
-  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .data-container {
@@ -99,18 +107,19 @@
 
 .row {
   display: flex;
-  flex-wrap: wrap; /* this is key */
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 20px;
-  padding-top: 20px;
-  padding-bottom: 20px;
+  gap: 1.5rem;
+  padding: 20px 0;
   width: 100%;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .chart-card {
-  flex: 1 1 350px;
-  max-width: 100%; 
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-width: 280px;
   background-color: rgba(31, 41, 55, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
@@ -120,17 +129,15 @@
   box-sizing: border-box;
 }
 
-
 .chart {
+  width: 100%;
+  height: 300px;
   display: flex;
   justify-content: center;
   align-items: center;
-  text-decoration: white;
-  width: 100%;
-  height: 400px;
-  position: relative;
-  padding-right: 10px;
-  padding-left: 10px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  padding: 0 10px;
 }
 
 .interval-dropdown-wrapper {
