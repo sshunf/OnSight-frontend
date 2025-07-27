@@ -13,6 +13,8 @@ function LoginScreen() {
   const navigate = useNavigate(); 
   const [password, setPassword] = useState('');
   const [googlePassword, setGooglePassword] = useState(''); 
+  const [shouldRedirect, setShouldRedirect] = useState(false);
+  const [email, setEmail] = useState('');
   
   // Valid accounts for demo
   // const validAccounts = {
@@ -30,14 +32,12 @@ function LoginScreen() {
         if (!timestamp || now - timestamp > duration){
           console.log("Session expired, logging out.");
           signOut(auth).then(() => {
-            localStorage.removeItem('loginTimestamp');
-            localStorage.removeItem('userEmail');
-            localStorage.removeItem('gymAffiliated');
+            localStorage.clear();
             navigate('/');
           });
         } else {
           setUser(currentUser);
-          const gymAffiliated = localStorage.getItem('gymAffiliated') === true;
+          const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
           const gymId = localStorage.getItem('gymId');
           if (gymAffiliated && gymId) navigate('/dashboard');
           else navigate('/gym-select');
@@ -49,11 +49,21 @@ function LoginScreen() {
     return () => unsubscribe();
   }, [navigate]);
 
+  useEffect(() => {
+    if (shouldRedirect && user) {
+      const gymAffiliated = localStorage.getItem('gymAffiliated') === 'true';
+      const gymId = localStorage.getItem('gymId');
+      if (gymAffiliated && gymId) {
+        navigate('/dashboard');
+      } else {
+        navigate('/gym-select');
+      }
+      // if (user && shouldRedirect) return null;
+    }
+  }, [shouldRedirect, user, navigate]);
+
   const checkCredentials = async (e) => {
-    e.preventDefault();
-    const email = e.target.username.value;
-    const password = e.target.password.value;
-    const displayName = '';
+    const displayName = email.split('@')[0];
 
     try {
       const res = await fetch(`${backendURL}/auth/login-password`, {
@@ -67,17 +77,22 @@ function LoginScreen() {
         return;
       }
       console.log(`email: ${result.user.email}`);
-      setUser(result.user); // this can be a local user object
       localStorage.setItem('userEmail', result.user.email);
       localStorage.setItem('loginTimestamp', Date.now().toString());
       localStorage.setItem('gymAffiliated', result.user.gymAffiliated ? 'true' : 'false');
       localStorage.setItem('gymId', result.user.gym?.gymId || '');
       localStorage.setItem('gymName', result.user.gym?.name || '');
-      if (result.user.gymAffiliated) {
-        navigate('/dashboard');
-      } else {
-        navigate('/gym-select');
-      }
+      setUser(result.user); // this can be a local user object
+      setShouldRedirect(true);
+      console.log("NAVIGATING TO:", result.user.gymAffiliated ? '/dashboard' : '/gym-select');
+      // if (localStorage.getItem('gymAffiliated')) {
+      //   console.log("dash");
+      //   navigate('/dashboard');
+      // } else {
+      //   console.log("gym");
+      //   navigate('/gym-select');
+      // }
+      // setUser(result.user);
     } catch (err) {
       console.error('Login error:', err);
       alert('Something went wrong, try again');
@@ -198,9 +213,9 @@ function LoginScreen() {
     }
   };
 
-  if (user && activeScreen === 'login') {
-    return <p>Redirecting...</p>;
-  }
+  // if (user && activeScreen === 'login') {
+  //   return <p>Redirecting...</p>;
+  // }
 
   return (
     <section className="login-section">
@@ -210,12 +225,13 @@ function LoginScreen() {
         <div className="content-box">
           <h2>Login</h2>
           <p>Please enter your username and password:</p>
-          <form onSubmit={checkCredentials}>
             <input 
               type="text" 
               name="username"
               placeholder="Username" 
               className="input-field"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
             <input 
               type="password" 
@@ -225,10 +241,9 @@ function LoginScreen() {
               placeholder="Password" 
               className="input-field"
             />
-            <button type="submit" className="login-button">
+            <button type="button" className="login-button" onClick={checkCredentials}>
               Login
             </button>
-          </form>
           <div className="divider">
             <span>or</span>
           </div>
