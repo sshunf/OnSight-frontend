@@ -423,13 +423,6 @@ function Dashboard() {
           <p className="stat-value">{stats.currentOccupancy}</p>
           <p className="stat-label">Number Of Machines Currently In Use</p>
         </div>
-        <div className="flex items-center justify-center">
-          <img
-            src="/logodraft.png"
-            alt="OnSight Logo"
-            className="w-46 h-auto"
-          />
-        </div>
       </div>
 
       <div className="stats-grid">
