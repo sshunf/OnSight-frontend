@@ -24,7 +24,7 @@ import GaragePage from './pages/GaragePage';
 
 function App() {
   return (
-    <Router>
+    <>
       <AsteriskBackground />
       <Routes>
         {/* Routes that need header and footer */}
@@ -44,7 +44,7 @@ function App() {
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />
       </Routes>
-    </Router>
+    </>
   );
 }
 
