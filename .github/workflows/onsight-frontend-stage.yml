@@ -1,0 +1,46 @@
+name: Build and Deploy Frontend to Azure Web App (Stage Slot)
+
+on:
+  push:
+    branches:
+      - stage 
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # fetch full git history and latest commit SHA
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: onsight.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        run: |
+          COMMIT_SHA=${{ github.sha }}
+          echo "Building Docker image with commit SHA $COMMIT_SHA"
+          docker build \
+            --no-cache \
+            --build-arg VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL_STAGE }} \
+            -t onsight.azurecr.io/onsight-frontend:stage \
+            -t onsight.azurecr.io/onsight-frontend:$COMMIT_SHA-stage .
+          docker push onsight.azurecr.io/onsight-frontend:stage
+          docker push onsight.azurecr.io/onsight-frontend:$COMMIT_SHA-stage
+
+      - name: Deploy to Azure Web App (Stage Slot)
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: onsight-frontend
+          slot-name: stage
+          images: onsight.azurecr.io/onsight-frontend:stage
