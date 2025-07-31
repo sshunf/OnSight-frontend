@@ -28,6 +28,7 @@ function Dashboard() {
   
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
   const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
+  const [selectedCumRange, setSelectedCumRange] = useState(12); // default 12 hour interval
   const chartInstancesRef = useRef({});
   const hourlyUsageChartRef = useRef(null);
   const avgUsageChartRef = useRef(null);
@@ -93,7 +94,7 @@ function Dashboard() {
           data: {
             labels,
             datasets: [{
-              label: `Usage (min) - Past ${selectedRange} hrs`,
+              label: `Usage (min)`,
               data: values,
               backgroundColor: 'rgba(124, 58, 237, 0.7)',
               borderColor: 'rgba(93, 0, 255, 0.7)',
@@ -172,7 +173,7 @@ function Dashboard() {
           data: {
             labels,
             datasets: [{
-              label: 'Average Weekly Usage (min)',
+              label: 'Average Daily Usage (min)',
               data: values,
               backgroundColor: 'rgba(124, 58, 237, 0.7)',
               borderRadius: 8
@@ -207,63 +208,172 @@ function Dashboard() {
     }
   }
 
-  const buildAllMotionCharts = async () => {
+  const buildCumulativeChart = async() => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) { console.error("No gymId in localStorage"); return; }
+    console.log('GYMID:', gymId);
     try {
-      const gymId = localStorage.getItem('gymId');
-      if (!gymId) return;
-      const res = await fetch(`${backendURL}/api/motion/aggregated?gymId=${gymId}`);
-      const allData = await res.json();
-
-      for (let sensorId of [1, 2, 3]) {
-        const data = allData[`sensor${sensorId}`] || [];
-        const sorted = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        const labels = sorted.map(entry => new Date(entry.timestamp).toLocaleTimeString());
-        const values = sorted.map(entry => entry.value);
-        const ctx = motionChartRefs[`sensor${sensorId}`].current.getContext('2d');
-        if (chartInstancesRef.current[`motion${sensorId}`]) {
-          chartInstancesRef.current[`motion${sensorId}`].destroy();
+      const res = await fetch(`${backendURL}/api/cum/usage?hours=${selectedCumRange}&gymId=${gymId}`);
+      const data = await res.json();
+      // console.log('Cumulative API response:', data);
+      if (!Array.isArray(data.result)) {
+        console.error("Invalid data format from backend:", data);
+        return;
+      }
+      const grouped = {};
+      data.result.forEach(entry => {
+        if (!entry || !entry.hour || typeof entry.minutes !== 'number') return;
+        const hourKey = entry.hour; 
+        if (!grouped[hourKey]) grouped[hourKey] = 0;
+        grouped[hourKey] += entry.minutes;
+      });
+      const sortedHours = Object.keys(grouped).sort((a, b) => new Date(a) - new Date(b));
+      const labels = sortedHours.map(hour => {
+        const start = new Date(hour);
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        const format = (d) => {
+          const month = d.getMonth() + 1;
+          const day = d.getDate();
+          const h = d.getHours();
+          const suffix = h < 12 ? 'am' : 'pm';
+          const hour12 = h % 12 || 12;
+          return `${month}/${day} ${hour12}${suffix}`;
+        };
+        return `${format(start)} - ${format(end)}`;
+      });
+      const values = sortedHours.map(hour => grouped[hour]);
+      //console.log('Cumulative chart labels:', labels);
+      // console.log('Cumulative chart values:', values);
+      if (!labels.length || !values.length) {
+        console.warn('No data for cumulative chart');
+        return;
+      }
+      const maxValue = Math.max(...values);
+      const yMax = (Math.ceil(maxValue + 5) >= 60) ? 60 : Math.ceil(maxValue + 5);
+      if (cumUsageChartRef.current) {
+        const ctx = cumUsageChartRef.current.getContext('2d');
+        // console.log('Cumulative chart canvas context:', ctx);
+        if (chartInstancesRef.current.cumulative) {
+          chartInstancesRef.current.cumulative.destroy();
         }
-        chartInstancesRef.current[`motion${sensorId}`] = new Chart(ctx, {
+        chartInstancesRef.current.cumulative = new Chart(ctx, {
           type: 'line',
           data: {
             labels,
             datasets: [{
-              label: `Sensor ${sensorId} Motion`,
+              label: `Cumulative Usage`,
               data: values,
-              borderColor: 'rgba(0, 255, 100, 0.7)',
-              backgroundColor: 'rgba(0, 255, 100, 0.3)',
-              fill: true,
+              backgroundColor: 'rgba(124, 58, 237, 0.7)',
+              borderColor: 'rgba(93, 0, 255, 0.7)',
               tension: 0.3,
+              fill: true,
+              pointRadius: 3,
+              pointBackgroundColor: 'white',
               borderWidth: 2,
-              pointRadius: 2,
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            plugins: {
+              legend: { display: true, labels: { color: 'white' }},
+              title: { display: true, text: 'Cumulative Machine Usage Across All Machines', color: 'white' }
+            },
             scales: {
               x: {
-                ticks: { color: 'white' },
-                title: { display: true, text: 'Time', color: 'white' },
-                grid: { color: 'rgba(255,255,255,0.1)' },
+                ticks: { color: 'white', font: { size: 10}},
+                title: { display: true, text: 'Hour Intervals', color: 'white' },
+                grid: {
+                  display: true,
+                  color: 'rgba(255,255,255,0.2)',
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  tickColor: 'rgba(255,255,255,0.4)',
+                  drawOnChartArea: true,
+                  drawTicks: true,
+                }
               },
               y: {
+                min: 0,
+                max: yMax,
                 ticks: { color: 'white' },
                 beginAtZero: true,
-                title: { display: true, text: 'Motion Value', color: 'white' },
-                grid: { color: 'rgba(255,255,255,0.1)' },
-              },
-            },
-            plugins: {
-              legend: { labels: { color: 'white' } }
+                title: { display: true, text: 'Minutes', color: 'white' },
+                grid: {
+                  display: true,
+                  color: 'rgba(255,255,255,0.2)',
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  tickColor: 'rgba(255,255,255,0.4)',
+                  drawOnChartArea: true,
+                  drawTicks: true,
+                }
+              }
             }
           }
         });
+        // console.log('Cumulative chart instance:', chartInstancesRef.current.cumulative);
       }
-    } catch (error) {
-      console.error('Failed to fetch aggregated motion data:', error);
+    } catch (err) {
+      console.error("Failed to fetch build chart and fetch analytics:", err);
     }
-  };
+  }
+
+  // const buildAllMotionCharts = async () => {
+  //   try {
+  //     const gymId = localStorage.getItem('gymId');
+  //     if (!gymId) return;
+  //     const res = await fetch(`${backendURL}/api/motion/aggregated?gymId=${gymId}`);
+  //     const allData = await res.json();
+
+  //     for (let sensorId of [1, 2, 3]) {
+  //       const data = allData[`sensor${sensorId}`] || [];
+  //       const sorted = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  //       const labels = sorted.map(entry => new Date(entry.timestamp).toLocaleTimeString());
+  //       const values = sorted.map(entry => entry.value);
+  //       const ctx = motionChartRefs[`sensor${sensorId}`].current.getContext('2d');
+  //       if (chartInstancesRef.current[`motion${sensorId}`]) {
+  //         chartInstancesRef.current[`motion${sensorId}`].destroy();
+  //       }
+  //       chartInstancesRef.current[`motion${sensorId}`] = new Chart(ctx, {
+  //         type: 'line',
+  //         data: {
+  //           labels,
+  //           datasets: [{
+  //             label: `Sensor ${sensorId} Motion`,
+  //             data: values,
+  //             borderColor: 'rgba(0, 255, 100, 0.7)',
+  //             backgroundColor: 'rgba(0, 255, 100, 0.3)',
+  //             fill: true,
+  //             tension: 0.3,
+  //             borderWidth: 2,
+  //             pointRadius: 2,
+  //           }]
+  //         },
+  //         options: {
+  //           responsive: true,
+  //           maintainAspectRatio: false,
+  //           scales: {
+  //             x: {
+  //               ticks: { color: 'white' },
+  //               title: { display: true, text: 'Time', color: 'white' },
+  //               grid: { color: 'rgba(255,255,255,0.1)' },
+  //             },
+  //             y: {
+  //               ticks: { color: 'white' },
+  //               beginAtZero: true,
+  //               title: { display: true, text: 'Motion Value', color: 'white' },
+  //               grid: { color: 'rgba(255,255,255,0.1)' },
+  //             },
+  //           },
+  //           plugins: {
+  //             legend: { labels: { color: 'white' } }
+  //           }
+  //         }
+  //       });
+  //     }
+  //   } catch (error) {
+  //     console.error('Failed to fetch aggregated motion data:', error);
+  //   }
+  // };
 
   const fetchMachineOptions = async() => {
     const gymId = localStorage.getItem('gymId');
@@ -305,26 +415,27 @@ function Dashboard() {
       fetchMachineOptions();
       buildWeeklyChart();
       buildUsageChart();
+      buildCumulativeChart();
     }
-  }, [user, selectedAvgRange]);
+  }, [user, selectedAvgRange, selectedCumRange]);
 
   useEffect(() => {
     if (selectedMachine){
       buildUsageChart();
     }
-  }, [selectedRange, selectedMachine]);
+  }, [selectedRange, selectedCumRange, selectedMachine]);
 
-  useEffect(() => {
-    if (user) {
-      buildAllMotionCharts();
-    }
-  }, [user, selectedAvgRange]);
+  // useEffect(() => {
+  //   if (user) {
+  //     buildAllMotionCharts();
+  //   }
+  // }, [user, selectedAvgRange]);
 
-  useEffect(() => {
-    if (selectedMachine){
-      buildUsageChart();
-    }
-  }, [selectedRange, selectedMachine]);
+  // useEffect(() => {
+  //   if (selectedMachine){
+  //     buildUsageChart();
+  //   }
+  // }, [selectedRange, selectedMachine]);
 
 
   const fetchDashboardData = async (currentUser) => {
@@ -360,7 +471,8 @@ function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      //await signOut(auth);
+      localStorage.clear();
       navigate('/login');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -422,14 +534,6 @@ function Dashboard() {
           <p className="stat-value">{stats.currentOccupancy}</p>
           <p className="stat-label">Number Of Machines Currently In Use</p>
         </div>
-      </div>
-
-      <div className="stats-grid">
-        <div className="stat-card">
-          <h3>Current Occupancy</h3>
-          <p className="stat-value">{stats.currentOccupancy}</p>
-          <p className="stat-label">Number Of Machines Currently In Use</p>
-        </div>
         <div className="flex items-center justify-center">
           <img
             src="/logodraft.png"
@@ -457,7 +561,7 @@ function Dashboard() {
                 <select
                   value={selectedMachine}
                   onChange={(e) => setSelectedMachine(e.target.value)}
-                  className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
+                  className="interval-dropdown uppercase tracking-wider"
                 >
                   {[...machineOptions]
                     .filter(machine => machine && machine.machineId)
@@ -471,6 +575,29 @@ function Dashboard() {
                 <select
                   value={selectedRange}
                   onChange={e => setSelectedRange(parseInt(e.target.value))}
+                  className="interval-dropdown uppercase tracking-wider"
+                >
+                  <option value={6}>Past 6 Hours</option>
+                  <option value={8}>Past 8 Hours</option>
+                  <option value={12}>Past 12 Hours</option>
+                  <option value={24}>Past 24 Hours</option>
+                  <option value={168}>Past Week</option>
+                  <option value={720}>Past Month</option>
+                  <option value={-1}>All Time</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="row">
+            <div className="chart-card">
+              <h3 className="text-xl font-semibold mb-4">Average Machine Usage Of {selectedAvgRange === -1 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
+              <div className="chart">
+                <canvas ref={avgUsageChartRef}></canvas>
+              </div>
+              <div className="interval-dropdown-wrapper mt-2">
+                <select
+                  value={selectedAvgRange}
+                  onChange={e => setSelectedAvgRange(parseInt(e.target.value))}
                   className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
                 >
                   <option value={6}>Past 6 Hours</option>
@@ -486,14 +613,14 @@ function Dashboard() {
           </div>
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4">Average Machine Usage In The Past {selectedAvgRange === -1 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
-              <div className="chart">
-                <canvas ref={avgUsageChartRef}></canvas>
+              <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of {selectedCumRange === -1 ? 'All Time' : `${selectedCumRange} Hours`}</h3>
+              <div className="chart" style={{height: '300px'}}>
+                <canvas ref={cumUsageChartRef}></canvas>
               </div>
               <div className="interval-dropdown-wrapper mt-2">
                 <select
-                  value={selectedAvgRange}
-                  onChange={e => setSelectedAvgRange(parseInt(e.target.value))}
+                  value={selectedCumRange}
+                  onChange={e => setSelectedCumRange(parseInt(e.target.value))}
                   className="interval-dropdown font-medium text-gray-300 uppercase tracking-wider"
                 >
                   <option value={6}>Past 6 Hours</option>
