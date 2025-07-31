@@ -157,9 +157,9 @@ function Dashboard() {
       const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}&hours=${selectedAvgRange}`);
       const data = await res.json();
       if (!Array.isArray(data.result)) return;
-      // Use machine IDs as before
-      const sortedResult = [...data.result].sort((a, b) => a.machineId.localeCompare(b.machineId));
-      const labels = sortedResult.map(d => d.machineId ? d.machineId.slice(-4) : 'Unknown');
+      // Use machineName if available, fallback to machineId
+      const sortedResult = [...data.result].sort((a, b) => (a.machineName || a.machineId).localeCompare(b.machineName || b.machineId));
+      const labels = sortedResult.map(d => d.machineName || (d.machineId ? d.machineId : 'Unknown'));
       const values = sortedResult.map(d => d.avgMinutes);
       const maxValue = Math.max(...values);
       const yMax = Math.ceil(maxValue + 10);
@@ -189,7 +189,7 @@ function Dashboard() {
             scales: {
               x: {
                 ticks: { color: 'white' },
-                title: { display: true, text: 'Machine IDs', color: 'white' },
+                title: { display: true, text: 'Machines', color: 'white' },
                 grid: { color: 'rgba(255,255,255,0.2)' }
               },
               y: {
@@ -378,13 +378,11 @@ function Dashboard() {
       const res = await fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`);
       const data = await res.json();
       console.log("Machine options fetched:", data);
-      // Use machine IDs as before
+      // Now expect array of objects: { machineId, machineName }
       if (Array.isArray(data.machineIds)) {
-        // Convert array of IDs to array of objects for dropdown compatibility
-        const machineObjs = data.machineIds.map(machineId => ({ machineId }));
-        setMachineOptions(machineObjs);
-        if (!selectedMachine && machineObjs.length > 0) {
-          setSelectedMachine(machineObjs[0].machineId);
+        setMachineOptions(data.machineIds);
+        if (!selectedMachine && data.machineIds.length > 0) {
+          setSelectedMachine(data.machineIds[0].machineId);
         }
       } else {
         console.error("No machineIds array in response:", data);
@@ -460,6 +458,8 @@ function Dashboard() {
         dailyFav: dailyData.mostUsedMachine || '--',
         weeklyFav: weeklyData.weeklyFav || '--'
       }));
+      console.log("daily: ", dailyData.mostUsedMachine.machineName);
+      console.log("weekly: ", weeklyData.weeklyFav.machineName);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -503,7 +503,7 @@ function Dashboard() {
           <h3>Daily Favorite</h3>
           <p className="stat-value">
             {stats.dailyFav?.machineId
-              ? `Machine ${stats.dailyFav.machineId.slice(-4)}`
+              ? `${stats.dailyFav.machineName}`
               : '--'}
           </p>
           <p className="stat-label">Today's Most Used Machine</p>
@@ -517,7 +517,7 @@ function Dashboard() {
           <h3>Weekly Favorite</h3>
           <p className="stat-value">
             {stats.weeklyFav?.machineId
-              ? `Machine ${stats.weeklyFav.machineId.slice(-4)}`
+              ? `${stats.weeklyFav.machineName}`
               : '--'}
           </p>
           <p className="stat-label">This Week's Most Used Machine</p>
@@ -549,7 +549,12 @@ function Dashboard() {
         <div className="data-container">
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4">Hourly Machine Usage For Machine {selectedMachine ? selectedMachine.slice(-4) : 'N/A'}</h3>
+              <h3 className="text-xl font-semibold mb-4">
+                Hourly Machine Usage For Machine {(() => {
+                  const found = machineOptions.find(m => String(m.machineId) === String(selectedMachine));
+                  return selectedMachine ? (found ? found.machineName : 'Unknown') : 'N/A';
+                })()}
+              </h3>
               <div className="chart" style={{height: '300px'}}>
                 <canvas ref={hourlyUsageChartRef}></canvas>
               </div>
@@ -561,10 +566,10 @@ function Dashboard() {
                 >
                   {[...machineOptions]
                     .filter(machine => machine && machine.machineId)
-                    .sort((a, b) => a.machineId.localeCompare(b.machineId))
+                    .sort((a, b) => (a.machineName || a.machineId).localeCompare(b.machineName || b.machineId))
                     .map((machine) => (
                       <option key={machine.machineId} value={machine.machineId}>
-                        {machine.machineId.slice(-4)}
+                        {machine.machineName || machine.machineId}
                       </option>
                     ))}
                 </select>
