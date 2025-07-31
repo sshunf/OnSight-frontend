@@ -211,25 +211,22 @@ function Dashboard() {
   const buildCumulativeChart = async() => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) { console.error("No gymId in localStorage"); return; }
-    console.log('GYMID:', gymId);
+    const url = `${backendURL}/api/cum/usage?hours=${selectedCumRange}&gymId=${gymId}`;
+    console.log('Cumulative chart API request:', url);
     try {
-      const res = await fetch(`${backendURL}/api/cum/usage?hours=${selectedCumRange}&gymId=${gymId}`);
+      const res = await fetch(url);
       const data = await res.json();
-      // console.log('Cumulative API response:', data);
+      console.log('Cumulative API response:', data);
       if (!Array.isArray(data.result)) {
         console.error("Invalid data format from backend:", data);
         return;
       }
+      // Use same grouping/labeling logic as buildUsageChart
+      data.result.sort((a, b) => new Date(a.hour) - new Date(b.hour));
       const grouped = {};
       data.result.forEach(entry => {
-        if (!entry || !entry.hour || typeof entry.minutes !== 'number') return;
-        const hourKey = entry.hour; 
-        if (!grouped[hourKey]) grouped[hourKey] = 0;
-        grouped[hourKey] += entry.minutes;
-      });
-      const sortedHours = Object.keys(grouped).sort((a, b) => new Date(a) - new Date(b));
-      const labels = sortedHours.map(hour => {
-        const start = new Date(hour);
+        if (!entry || !entry.hour) return;
+        const start = new Date(entry.hour);
         const end = new Date(start.getTime() + 60 * 60 * 1000);
         const format = (d) => {
           const month = d.getMonth() + 1;
@@ -239,11 +236,12 @@ function Dashboard() {
           const hour12 = h % 12 || 12;
           return `${month}/${day} ${hour12}${suffix}`;
         };
-        return `${format(start)} - ${format(end)}`;
+        const label = `${format(start)} - ${format(end)}`;
+        if (!grouped[label]) grouped[label] = 0;
+        grouped[label] += entry.minutes;
       });
-      const values = sortedHours.map(hour => grouped[hour]);
-      //console.log('Cumulative chart labels:', labels);
-      // console.log('Cumulative chart values:', values);
+      const labels = Object.keys(grouped);
+      const values = labels.map(label => grouped[label]);
       if (!labels.length || !values.length) {
         console.warn('No data for cumulative chart');
         return;
@@ -252,7 +250,6 @@ function Dashboard() {
       const yMax = (Math.ceil(maxValue + 5) >= 60) ? 60 : Math.ceil(maxValue + 5);
       if (cumUsageChartRef.current) {
         const ctx = cumUsageChartRef.current.getContext('2d');
-        // console.log('Cumulative chart canvas context:', ctx);
         if (chartInstancesRef.current.cumulative) {
           chartInstancesRef.current.cumulative.destroy();
         }
@@ -310,7 +307,6 @@ function Dashboard() {
             }
           }
         });
-        // console.log('Cumulative chart instance:', chartInstancesRef.current.cumulative);
       }
     } catch (err) {
       console.error("Failed to fetch build chart and fetch analytics:", err);
