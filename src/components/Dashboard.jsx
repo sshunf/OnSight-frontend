@@ -66,14 +66,22 @@ function Dashboard() {
         const start = new Date(entry.hour);
         const end = new Date(start.getTime() + 60 * 60 * 1000);
         const format = (d) => {
-          const month = d.getMonth() + 1;
-          const day = d.getDate();
           const h = d.getHours();
-          const suffix = h < 12 ? 'am' : 'pm';
+          const suffix = h < 12 ? 'AM' : 'PM';
           const hour12 = h % 12 || 12;
-          return `${month}/${day} ${hour12}${suffix}`; 
+
+          if (selectedRange <= 24) {
+            // Show just the time for past 6 or 24 hours
+            return `${hour12}${suffix}`;
+          } else {
+            // Show date + time for longer ranges
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+            return `${month}/${day} ${hour12}${suffix}`;
+          }
         };
-        const label = `${format(start)} - ${format(end)}`;        
+
+        const label = `${format(start)}`;        
         if (!grouped[label]) grouped[label] = 0;
         grouped[label] += entry.minutes;
       });
@@ -229,14 +237,21 @@ function Dashboard() {
         const start = new Date(entry.hour);
         const end = new Date(start.getTime() + 60 * 60 * 1000);
         const format = (d) => {
-          const month = d.getMonth() + 1;
-          const day = d.getDate();
           const h = d.getHours();
-          const suffix = h < 12 ? 'am' : 'pm';
+          const suffix = h < 12 ? 'AM' : 'PM';
           const hour12 = h % 12 || 12;
-          return `${month}/${day} ${hour12}${suffix}`;
+
+          if (selectedCumRange <= 24) {
+            // Show just the time for past 6 or 24 hours
+            return `${hour12}${suffix}`;
+          } else {
+            // Show date + time for longer ranges
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+            return `${month}/${day} ${hour12}${suffix}`;
+          }
         };
-        const label = `${format(start)} - ${format(end)}`;
+        const label = `${format(start)}`;
         if (!grouped[label]) grouped[label] = 0;
         grouped[label] += entry.minutes;
       });
@@ -584,14 +599,14 @@ function Dashboard() {
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
                   <option value={720}>Past Month</option>
-                  <option value={-1}>All Time</option>
+                  <option value={1000}>All Time</option>
                 </select>
               </div>
             </div>
           </div>
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4">Average Machine Usage Of {selectedAvgRange === -1 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
+              <h3 className="text-xl font-semibold mb-4">Average Machine Usage Of {selectedAvgRange === 1000 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
               <div className="chart">
                 <canvas ref={avgUsageChartRef}></canvas>
               </div>
@@ -607,14 +622,14 @@ function Dashboard() {
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
                   <option value={720}>Past Month</option>
-                  <option value={-1}>All Time</option>
+                  <option value={1000}>All Time</option>
                 </select>
               </div>
             </div>
           </div>
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of {selectedCumRange === -1 ? 'All Time' : `${selectedCumRange} Hours`}</h3>
+              <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of {selectedCumRange === 1000 ? 'All Time' : `${selectedCumRange} Hours`}</h3>
               <div className="chart" style={{height: '300px'}}>
                 <canvas ref={cumUsageChartRef}></canvas>
               </div>
@@ -630,7 +645,7 @@ function Dashboard() {
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
                   <option value={720}>Past Month</option>
-                  <option value={-1}>All Time</option>
+                  <option value={1000}>All Time</option>
                 </select>
               </div>
             </div>
