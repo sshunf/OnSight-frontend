@@ -27,11 +27,13 @@ header img {
     cursor: pointer;
 }
 
-header nav {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem; /* 6px x 4 = 24px */
-    padding-right: 100px;
+/* Let Tailwind control display (hidden/md:flex). Only keep spacing on desktop. */
+@media (min-width: 768px) {
+  header nav {
+      align-items: center;
+      gap: 1.5rem; /* 6px x 4 = 24px */
+      padding-right: 100px;
+  }
 }
   
 header nav a {
