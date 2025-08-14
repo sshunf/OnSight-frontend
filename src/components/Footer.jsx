@@ -19,13 +19,13 @@ function Footer() {
 
   return (
     <footer className="text-white pt-16 pb-8 relative z-10">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
         {/* Border line moved above columns */}
         <div className="border-t border-gray-800 pt-8 mb-8"></div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-12 mb-16">
           {/* Column 1: Connect */}
-          <div className="space-y-4">
+          <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Connect</div>
             <div className="flex space-x-4">
               <button
@@ -74,7 +74,7 @@ function Footer() {
           </div>
 
           {/* Column 2: Explore */}
-          <div className="space-y-4">
+          <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Explore</div>
             <ul className="space-y-2">
               <li><Link to="/features" className="text-gray-400 hover:text-white">Features</Link></li>
@@ -85,7 +85,7 @@ function Footer() {
           </div>
 
           {/* Column 3: Resources */}
-          <div className="space-y-4">
+          <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Resources</div>
             <ul className="space-y-2">
               <li><Link to="/documentation" className="text-gray-400 hover:text-white">Documentation</Link></li>
@@ -96,7 +96,7 @@ function Footer() {
           </div>
 
           {/* Column 4: Contact */}
-          <div className="space-y-4">
+          <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Contact</div>
             <div className="text-gray-400 space-y-2">
               <p><a href="mailto:accounts@onsight-tech.com" className="hover:text-white">accounts@onsight-tech.com</a></p>
