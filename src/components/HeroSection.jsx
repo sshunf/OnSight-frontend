@@ -85,7 +85,7 @@ function HeroSection() {
           {/* Move logo above CTAs on mobile */}
           <div className="hero-logo-inline">
             <img
-              src="/logodraft.png"
+              src="/Copy of Logo Draft 7.5-3.png"
               alt="OnSight Logo"
               ref={logoParallaxRef}
             />
@@ -98,7 +98,7 @@ function HeroSection() {
         {/* RIGHT SIDE: OnSight Logo (desktop only) */}
         <div className="relative logo-container" aria-hidden="true">
           <div></div>
-          <img src="/logodraft.png" alt="" />
+          <img src="/Copy of Logo Draft 7.5-3.png" alt="" />
         </div>
       </div>
     </section>
