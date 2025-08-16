@@ -546,17 +546,19 @@ function Dashboard() {
           <p className="stat-value">{stats.currentOccupancy}</p>
           <p className="stat-label">Number Of Machines Currently In Use</p>
         </div>
-        <div className="flex items-center justify-center">
-          <img
-            src="/logodraft.png"
+        <div className="flex items-center">
+            <img 
+            className="h-8 w-auto" 
+            src="/Copy of Logo Draft 7.5-3.png"
             alt="OnSight Logo"
-            className="w-46 h-auto"
-          />
-        </div>
+            />
+          </div>
+          <div className="flex items-center space-x-4">
         <div className="stat-card">
           <h3>Active Sensors</h3>
           <p className="stat-value">{stats.activeDevices}</p>
           <p className="stat-label">Number Of Active Sensors Connected</p>
+        </div>
         </div>
       </div>
 

@@ -29,11 +29,11 @@ function Header() {
   }, [mobileOpen]);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800">
+    <header className={`fixed top-0 left-0 right-0 z-50 border-b border-gray-800 ${mobileOpen ? 'menu-open' : ''}`}>
       <div className="container mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">
         <div className="flex items-center">
           <Link to="/" className="flex items-center">
-            <img src="/logodraft.png" alt="OnSight Logo" className="w-12 h-auto mr-3" />
+            <img src="/Copy of Logo Draft 7.5-3.png" alt="OnSight Logo" className="w-12 h-auto mr-3" />
           </Link>
         </div>
         {/* Desktop nav */}
@@ -48,9 +48,9 @@ function Header() {
         {/* Mobile hamburger */}
         <button
           type="button"
-          aria-label="Open menu"
+          aria-label="Toggle menu"
           className="md:hidden inline-flex items-center justify-center p-2 rounded hover:bg-white/10 text-gray-200"
-          onClick={() => setMobileOpen(true)}
+          onClick={() => setMobileOpen(prev => !prev)}
         >
           {/* Inline hamburger icon (three horizontal lines) */}
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-6 h-6">
@@ -59,48 +59,29 @@ function Header() {
         </button>
       </div>
 
-      {/* Mobile full-screen overlay menu */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-sm md:hidden">
-          <div className="h-16 px-6 flex items-center justify-between">
-            <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center">
-              <img src="/logodraft.png" alt="OnSight Logo" className="w-10 h-auto" />
-            </Link>
-            <button
-              type="button"
-              aria-label="Close menu"
-              className="inline-flex items-center justify-center p-2 rounded hover:bg-white/10 text-gray-200"
-              onClick={() => setMobileOpen(false)}
-            >
-              {/* Close (X) icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="px-6 pt-6 pb-10 flex flex-col gap-6">
-            <button className="text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/features'); }}>Features</button>
-            <button className="text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/dashboard-demo'); }}>Dashboard</button>
-            <button className="text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/foundersNote'); }}>Founders' Note</button>
-            <div className="h-2" />
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { setMobileOpen(false); navigate('/waitlist'); }}
-                className="px-5 py-2 rounded-full border border-white/20 bg-white/10 text-white text-sm"
-              >
-                WAITLIST
-              </button>
-              <button
-                onClick={() => { setMobileOpen(false); navigate('/login'); }}
-                className="px-5 py-2 rounded-full bg-white text-black text-sm"
-              >
-                LOGIN
-              </button>
+      {/* Mobile expanding header content */}
+          <div className="mobile-menu-content">
+            <div className="px-6 pt-6 pb-10 flex flex-col gap-6">
+              <button className="menu-item mi-1 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/features'); }}>Features</button>
+              <button className="menu-item mi-2 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/dashboard-demo'); }}>Dashboard</button>
+              <button className="menu-item mi-3 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/foundersNote'); }}>Founders' Note</button>
+              <div className="h-2" />
+              <div className="menu-item mi-4 flex items-center gap-3">
+                <button
+                  onClick={() => { setMobileOpen(false); navigate('/waitlist'); }}
+                  className="px-5 py-2 rounded-full border border-white/20 bg-white/10 text-white text-sm"
+                >
+                  WAITLIST
+                </button>
+                <button
+                  onClick={() => { setMobileOpen(false); navigate('/login'); }}
+                  className="px-5 py-2 rounded-full bg-white text-black text-sm"
+                >
+                  LOGIN
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
     </header>
   );
 }
