@@ -17,7 +17,8 @@ function LoginScreen() {
     // Call backend to check credentials and get user
     console.log('email:', email);
     console.log('password:', password);
-    const displayName = email.split('@')[0];
+    // const displayName = email.split('@')[0];
+    const displayName = email;
     try {
       const res = await fetch(`${backendURL}/auth/login-password`, {
         method: 'POST',
@@ -36,6 +37,7 @@ function LoginScreen() {
       localStorage.setItem('gymAffiliated', user.gymAffiliated ? 'true' : 'false');
       localStorage.setItem('gymId', user.gym?.gymId || '');
       localStorage.setItem('gymName', user.gym?.name || '');
+      localStorage.setItem('displayName', displayName);
       setUser(user);
       if (user.gymAffiliated) {
         navigate('/dashboard');

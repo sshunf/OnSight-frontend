@@ -1,0 +1,131 @@
+.chat-container {
+  padding: 2rem 1rem; 
+  max-width: 80%;
+  margin: 0 auto;
+  padding-top: 6rem;
+  box-sizing: border-box;
+}
+
+.chat-header {
+  background-color: #161616;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-content h1 {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.back-button {
+  padding: 0.5rem 1rem;
+  background-color: #662Ec2;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 0.5rem;
+}
+
+.back-button:hover {
+  background-color: #7334e0b3;
+}
+
+.download-csv-button {
+  padding: 0.5rem 1rem;
+  background-color: #838383;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 0.5rem;
+}
+
+.download-csv-button:hover {
+  background-color: #656565;
+}
+
+.clear-chat-button {
+  padding: 0.5rem 1rem;
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 0.5rem;
+}
+
+.clear-chat-button:hover {
+  background-color: #b91c1c;
+}
+
+.chat-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin-top: 20px;
+  max-width: 80%
+}
+
+.messages {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.userMessage {
+  margin: 10px 0;
+  color: rgb(178, 178, 178);
+}
+
+.botMessage {
+  margin: 10px 0;
+  color: white;
+}
+
+.chat-form {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-input {
+  background-color: #161616;
+  width: 80%;
+  padding: 10px;
+  font-size: 16px;
+  color: white !important;
+  border: none;
+  border-radius: 0.375rem;
+}
+
+.chat-input::placeholder {
+  color: white;
+}
+
+.send-button {
+  width: 18%;
+  color: white;
+  padding: 0.5rem 1rem;
+  background-color: #662Ec2;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.send-button:hover {
+  background-color: #7334e0b3;
+}
