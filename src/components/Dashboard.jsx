@@ -35,6 +35,7 @@ function Dashboard() {
   const avgUsageChartRef = useRef(null);
   const cumUsageChartRef = useRef(null);
   const [machineOptions, setMachineOptions] = useState([]);
+  const TempLogoPath = '/logodraft.png';
   const [selectedMachine, setSelectedMachine] = useState('');
   const navigate = useNavigate();
 
@@ -549,8 +550,8 @@ function Dashboard() {
         <div className="flex items-center">
             <img 
             className="h-8 w-auto" 
-            src="/Copy of Logo Draft 7.5-3.png"
-            alt="OnSight Logo"
+            src={TempLogoPath}
+            alt="TempLogo"
             />
           </div>
           <div className="flex items-center space-x-4">
