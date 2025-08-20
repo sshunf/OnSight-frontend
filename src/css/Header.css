@@ -95,6 +95,7 @@ header nav button:hover {
   opacity: 0;
   transform: translateY(-8px);
   transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  pointer-events: none; /* prevent invisible overlay from blocking inputs */
 }
 
 /* Staggered items for bottom-to-top disappearance on close */
@@ -120,6 +121,7 @@ header.menu-open .mobile-menu-content {
   opacity: 1;
   transform: translateY(0);
   transition-delay: 0.55s; /* sync with 0.7s header duration */
+  pointer-events: auto; /* enable interactions only when menu is open */
 }
 
 /* Closed state for content */
