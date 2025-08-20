@@ -3,7 +3,7 @@ header {
     top: 0;
     left: 0;
     right: 0;
-    z-index: 50;
+    z-index: 1000; /* ensure header sits above page content */
     background-color: black;
     /* border-bottom: 1px solid #333;  Outlined header variant (commented out) */
     height: 4rem; /* base header height */
@@ -91,7 +91,7 @@ header nav button:hover {
   top: 4rem; /* content begins below original header area */
   left: 0;
   right: 0;
-  z-index: 1;
+  z-index: 1100; /* higher than header to ensure visibility */
   opacity: 0;
   transform: translateY(-8px);
   transition: opacity 0.4s ease-out, transform 0.4s ease-out;
