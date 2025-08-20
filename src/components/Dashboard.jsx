@@ -14,17 +14,6 @@ function Dashboard() {
     activeDevices: 0,
     totalVisitors: 0,
   });
-  const [liveData, setLiveData] = useState({
-    force: [],
-    motion: [],
-    occupancy: [],
-  });
-
-  const motionChartRefs = {
-    sensor1: useRef(null),
-    sensor2: useRef(null),
-    sensor3: useRef(null),
-  };
   
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
   const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
@@ -328,64 +317,6 @@ function Dashboard() {
     }
   }
 
-  // const buildAllMotionCharts = async () => {
-  //   try {
-  //     const gymId = localStorage.getItem('gymId');
-  //     if (!gymId) return;
-  //     const res = await fetch(`${backendURL}/api/motion/aggregated?gymId=${gymId}`);
-  //     const allData = await res.json();
-
-  //     for (let sensorId of [1, 2, 3]) {
-  //       const data = allData[`sensor${sensorId}`] || [];
-  //       const sorted = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  //       const labels = sorted.map(entry => new Date(entry.timestamp).toLocaleTimeString());
-  //       const values = sorted.map(entry => entry.value);
-  //       const ctx = motionChartRefs[`sensor${sensorId}`].current.getContext('2d');
-  //       if (chartInstancesRef.current[`motion${sensorId}`]) {
-  //         chartInstancesRef.current[`motion${sensorId}`].destroy();
-  //       }
-  //       chartInstancesRef.current[`motion${sensorId}`] = new Chart(ctx, {
-  //         type: 'line',
-  //         data: {
-  //           labels,
-  //           datasets: [{
-  //             label: `Sensor ${sensorId} Motion`,
-  //             data: values,
-  //             borderColor: 'rgba(0, 255, 100, 0.7)',
-  //             backgroundColor: 'rgba(0, 255, 100, 0.3)',
-  //             fill: true,
-  //             tension: 0.3,
-  //             borderWidth: 2,
-  //             pointRadius: 2,
-  //           }]
-  //         },
-  //         options: {
-  //           responsive: true,
-  //           maintainAspectRatio: false,
-  //           scales: {
-  //             x: {
-  //               ticks: { color: 'white' },
-  //               title: { display: true, text: 'Time', color: 'white' },
-  //               grid: { color: 'rgba(255,255,255,0.1)' },
-  //             },
-  //             y: {
-  //               ticks: { color: 'white' },
-  //               beginAtZero: true,
-  //               title: { display: true, text: 'Motion Value', color: 'white' },
-  //               grid: { color: 'rgba(255,255,255,0.1)' },
-  //             },
-  //           },
-  //           plugins: {
-  //             legend: { labels: { color: 'white' } }
-  //           }
-  //         }
-  //       });
-  //     }
-  //   } catch (error) {
-  //     console.error('Failed to fetch aggregated motion data:', error);
-  //   }
-  // };
-
   const fetchMachineOptions = async() => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
@@ -434,27 +365,14 @@ function Dashboard() {
     }
   }, [selectedRange, selectedCumRange, selectedMachine]);
 
-  // useEffect(() => {
-  //   if (user) {
-  //     buildAllMotionCharts();
-  //   }
-  // }, [user, selectedAvgRange]);
-
-  // useEffect(() => {
-  //   if (selectedMachine){
-  //     buildUsageChart();
-  //   }
-  // }, [selectedRange, selectedMachine]);
-
-
-  const fetchDashboardData = async (currentUser) => {
+  const fetchDashboardData = async () => {
     try {
       const gymId = localStorage.getItem('gymId');
       if (!gymId) return;
       const resOcc = await fetch(`${backendURL}/api/small/occupancy?gymId=${gymId}`);
       const occData = await resOcc.json();
       const resPeak = await fetch(`${backendURL}/api/small/peak?gymId=${gymId}`);
-      const peakData = await resPeak.json();
+      const peakData = await resPeak.json();  
       const resActive = await fetch(`${backendURL}/api/small/active?gymId=${gymId}`);
       const activeData = await resActive.json();
       const resDaily = await fetch(`${backendURL}/api/small/daily?gymId=${gymId}`);
@@ -490,15 +408,7 @@ function Dashboard() {
     }
   };
 
-  const formatTimeLabel = (label) =>
-  new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const tooltipStyle = {
-    backgroundColor: '#1f2937',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-  };
+  const formatTimeLabel = (label) => new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   if (!user) return null;
 
@@ -650,24 +560,6 @@ function Dashboard() {
               </div>
             </div>
           </div>
-          {/* <div className="row">
-            {[1, 2, 3].map((id) => (
-              <div className="chart-card" key={id}>
-                <h3 className="text-xl font-semibold mb-4">Motion Sensor {id}</h3>
-                <div className="chart">
-                  <canvas ref={motionChartRefs[`sensor${id}`]}></canvas>
-                </div>
-              </div>
-            ))}
-          </div> */}
-          {/* <div className="row">
-            <div className="chart-card">
-                <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
-                <div className="chart">
-                  <canvas ref={cumUsageChartRef}></canvas>
-                </div>
-            </div>
-          </div> */}
         </div>
       </div>
     </div>
