@@ -28,6 +28,19 @@ function Header() {
     };
   }, [mobileOpen]);
 
+  // Close the mobile menu automatically when resizing to desktop width
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    // Run once on mount to normalize state when opened in a resized tab
+    onResize();
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 border-b border-gray-800 ${mobileOpen ? 'menu-open' : ''}`}>
       <div className="container mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">

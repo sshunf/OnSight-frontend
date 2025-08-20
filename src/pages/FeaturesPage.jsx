@@ -3,7 +3,7 @@ import FeaturesSection from '../components/FeaturesSection';
 
 function FeaturesPage() {
   return (
-    <div>
+    <div className="bg-black min-h-screen text-white">
       <FeaturesSection />
     </div>
   );
