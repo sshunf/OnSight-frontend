@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 /* Additional custom styles */
+.page-gradient {
+  /* Reuse hero brand vignette */
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(124, 58, 237, 0.25), rgba(0,0,0,0) 60%),
+              radial-gradient(800px 400px at 90% 10%, rgba(99, 102, 241, 0.18), rgba(0,0,0,0) 50%),
+              #000;
+}
 .screen {
   display: none; /* We'll toggle these via JS */
 }

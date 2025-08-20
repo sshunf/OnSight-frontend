@@ -11,7 +11,7 @@
   
 .asterisk {
     position: absolute;
-    color: var(--asterisk-color, rgba(255, 255, 255, 0.1));
+    color: var(--asterisk-color, rgba(255, 255, 255, 0.08));
     font-size: 24px;
     pointer-events: auto;
     cursor: default;
@@ -37,6 +37,14 @@
 }
 
 :root {
-    --asterisk-color: rgba(255, 255, 255, 0.1);
+    --asterisk-color: rgba(255, 255, 255, 0.08);
     --asterisk-hover: rgba(255, 255, 255, 0.3);
+}
+
+/* Dim or pause on small screens to improve legibility and performance */
+@media (max-width: 767px) {
+  .asterisk { 
+    opacity: 0.5; 
+    animation-duration: 28s; /* slower */
+  }
 }

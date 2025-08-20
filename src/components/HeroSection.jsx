@@ -7,6 +7,7 @@ function HeroSection() {
   const words = ['Knowing', 'Streamlining', 'Saving', 'Improving'];
   const wordIndex = useRef(0);
   const isDeleting = useRef(false);
+  const logoParallaxRef = useRef(null);
 
   useEffect(() => {
     // This function handles the logic for typing and deleting
@@ -47,35 +48,57 @@ function HeroSection() {
     return () => clearTimeout(timeout);
   }, [animatedWord]); // Re-run the effect whenever animatedWord changes
 
+  // Lightweight parallax for the logo (mobile-friendly)
+  useEffect(() => {
+    const element = logoParallaxRef.current;
+    if (!element) return;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const offset = Math.min(window.scrollY, 200);
+        const translate = offset * 0.05; // gentle parallax
+        element.style.transform = `translateY(${translate}px)`;
+        ticking = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
     <section id="heroSection">
       <div className="container">
         {/* LEFT SIDE: Text */}
         <div className="flex-1 text-center lg:text-left text-container">
           <h1>
-            <span>Stop Guessing.</span>
-            <span style={{ display: 'inline-flex' }}>
-              <span className="purple-text">Start&nbsp;</span>
+            <span>Stop Guessing</span>
+            <span className="start-line">
+              <span className="purple-text">Start</span>
               <span className="purple-text animated-text">{animatedWord}</span>
-              <span className="purple-text period">.</span>
             </span>
           </h1>
           <p>
-            Onsight provides gyms with real-time occupancy and equipment usage data to optimize
-            resources, cut costs, and enhance member experiences.
+            Real-time occupancy and equipment insights to optimize resources
           </p>
+          {/* Move logo above CTAs on mobile */}
+          <div className="hero-logo-inline">
+            <img
+              src="/Copy of Logo Draft 7.5-3.png"
+              alt="OnSight Logo"
+              ref={logoParallaxRef}
+            />
+          </div>
           <div className="buttons">
             <Link to="/waitlist">Join Waitlist</Link>
-            <a href="#featuresSection">Learn More</a>
+            <Link to="/features">Learn More</Link>
           </div>
         </div>
-        {/* RIGHT SIDE: OnSight Logo */}
-        <div className="relative logo-container">
+        {/* RIGHT SIDE: OnSight Logo (desktop only) */}
+        <div className="relative logo-container" aria-hidden="true">
           <div></div>
-          <img
-            src="/logodraft.png"
-            alt="OnSight Logo"
-          />
+          <img src="/Copy of Logo Draft 7.5-3.png" alt="" />
         </div>
       </div>
     </section>
