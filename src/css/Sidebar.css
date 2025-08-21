@@ -1,0 +1,73 @@
+.sidebar {
+  width: 240px;
+  background-color: #232325;
+  color: white;
+  height: 100vh;
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  transition: width 0.3s ease;
+  z-index: 50;
+}
+
+.sidebar.collapsed {
+  width: 80px;
+  padding: 2rem 0.5rem;
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* This will center the avatar and username */
+  margin-bottom: 1rem;
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #4f46e5;
+}
+
+.username {
+  font-weight: 600;
+  text-align: center;
+  padding-top: 0.4rem;
+}
+
+.nav-links a {
+  display: block;
+  margin: 1rem 0;
+  text-decoration: none;
+  color: #d1d5db;
+  padding: 0.3rem;
+}
+
+.nav-links a:hover {
+  color: white;
+}
+
+.sidebar-logout {
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.sidebar-logout:hover {
+  background-color: #b91c1c;
+}
+
+.sidebar.collapsed .nav-links a {
+  text-align: center; /* Center emojis */
+  font-size: 1.25rem;  /* Optional: make emoji a bit larger */
+  padding: 0.1rem;
+}

@@ -191,3 +191,12 @@
   color: white;
   opacity: 1;
 }
+
+.dashboard-wrapper {
+  display: flex;
+}
+
+.dashboard-content {
+  flex: 1;
+  padding-left: 1rem;
+}
