@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Chart } from 'chart.js/auto';
 import '../css/Dashboard.css';
+import Sidebar from './Sidebar';
 
 console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
@@ -25,6 +26,7 @@ function Dashboard() {
   const [machineOptions, setMachineOptions] = useState([]);
   const [selectedMachine, setSelectedMachine] = useState('');
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
 
   // Check for user in localStorage
   useEffect(() => {
