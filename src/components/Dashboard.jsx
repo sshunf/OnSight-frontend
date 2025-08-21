@@ -459,13 +459,13 @@ function Dashboard() {
           <p className="stat-value">{stats.currentOccupancy}</p>
           <p className="stat-label">Number Of Machines Currently In Use</p>
         </div>
-        <div className="flex items-center">
-            <img 
-            className="h-8 w-auto" 
-            src={TempLogoPath}
-            alt="TempLogo"
-            />
-          </div>
+            <div className="flex items-center justify-center w-full">
+              <img 
+                className="h-36 w-auto"
+                src={TempLogoPath}
+                alt="TempLogo"
+              />
+            </div>
           <div className="flex items-center space-x-4">
         <div className="stat-card">
           <h3>Active Sensors</h3>
