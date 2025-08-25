@@ -459,8 +459,8 @@ function Dashboard() {
         dailyFav: dailyData.mostUsedMachine || '--',
         weeklyFav: weeklyData.weeklyFav || '--'
       }));
-      console.log("daily: ", dailyData.mostUsedMachine.machineName);
-      console.log("weekly: ", weeklyData.weeklyFav.machineName);
+      console.log("daily: ", dailyData.mostUsedMachine?.machineName);
+      console.log("weekly: ", weeklyData.weeklyFav?.machineName);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }

@@ -7,83 +7,39 @@ const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function ChatBot() {
   const gymId = localStorage.getItem('gymId');
-  const gymName = localStorage.getItem('gymName');
-  const userEmail = localStorage.getItem('userEmail');
-  const loginTimestamp = localStorage.getItem('loginTimestamp');
-  const gymAffiliated = localStorage.getItem('gymAffiliated');
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
   const displayName = localStorage.getItem('displayName');
   const [userMessage, setUserMessage] = useState('');
-  const [botReply, setBotReply] = useState(''); 
   const [messages, setMessages] = useState(() => {
-    const savedChat = localStorage.getItem('chat');
-    return savedChat ? JSON.parse(savedChat) : [];
+    const savedChat = JSON.parse(localStorage.getItem('chat') || '[]');
+    return savedChat;
   });
-  const [csv, setCsv] = useState('');
-
-  useEffect(() => {
-    const userEmail = localStorage.getItem('userEmail');
-    const gymId = localStorage.getItem('gymId');
-    if (!userEmail || !gymId) {
-      navigate('/login');
-    } else {
-      const displayName = localStorage.getItem('displayName');
-      setUser({ email: userEmail, displayName });
-    }
-  }, [navigate]);
-
-  const back = async () => {
-    try {
-    navigate('/dashboard');
-    } catch (error) {
-    console.error('Error navigating back to dashboard:', error);
-    }
-  }
-
-  const handleMessageSubmit = async (e) => {
-    e.preventDefault();
-    if (!userMessage.trim()) return;  
-    setMessages(prev => [...prev, { sender: 'user', text: userMessage }]);
-    try {
-      const res = await fetch(`${backendURL}/api/nvidia/nl`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: userMessage }),
-      });
-
-      const data = await res.json();
-      let reply = data.reply || 'No response from chatbot.';
-      reply = reply.replace(/<think>.*?<\/think>/s, ''); 
-      setMessages(prev => [...prev, { sender: 'bot', text: reply }]);
-      setUserMessage('');
-    } catch (error) {
-      console.error('Error fetching bot response:', error);
-      setMessages(prev => [...prev, { sender: 'bot', text: 'Error communicating with chatbot.' }]);
-    }
-  };
-
+  const [downloadCsv, setDownloadCsv] = useState('');
   const messagesEndRef = useRef(null);
+  const fetchOnceRef = useRef(false);
+  const [memoryMatrix, setMemoryMatrix] = useState(() => {
+    const savedMemory = JSON.parse(localStorage.getItem('memoryMatrix') || '[]');
+    return savedMemory;
+  });
+  const maxMemorySize = 50;
 
   const pullCSV = async () => {
     try {
-      const res = await fetch(`${backendURL}/api/csv/generate?gymId=${gymId}`);
+      const res = await fetch(`${backendURL}/api/csv/agg?gymId=${gymId}`);
       const csvText = await res.text();
       console.log('CSV generated:', csvText);
-      setCsv(csvText);
+      setDownloadCsv(csvText);
     } catch (error) {
       console.error('Error fetching CSV:', error);
     }
   };
 
   const downloadCSV = () => {
-    if (!csv) {
+    if (!downloadCsv) {
       console.error('No CSV data available to download');
       return;
     }
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([downloadCsv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     const curr = new Date();
@@ -95,42 +51,112 @@ function ChatBot() {
     document.body.removeChild(link);
   };
 
-  const feedCSV = async () => {
+  const fetchCSV = async () => {
     try {
-      const res = await fetch(`${backendURL}/api/csv/feed?gymId=${gymId}&displayName=${displayName}`);
+      const res = await fetch(`${backendURL}/api/csv/feed-agg?gymId=${gymId}&displayName=${displayName}`);
       const data = await res.json();
-      let reply = data.reply;
+      const fullCsv = data.csv || '';
+      const reply = data.reply || '';
+      console.log('Entire CSV:', fullCsv);
+      const csvUserMsg = { sender: 'user', text: 'Sending gym sensor data...' };
+      const csvBotMsg = { sender: 'bot', text: reply, csv: fullCsv };
+      setMessages(prev => [...prev, csvUserMsg, csvBotMsg]);
+      setMemoryMatrix(prev => [
+        ...prev,
+        { role: 'user', content: `CSV data sent: ${csvUserMsg.text}` },
+        { role: 'bot', content: `CSV reply: ${reply}\nCSV:\n${fullCsv}` }
+      ].slice(-maxMemorySize * 2));
+      } catch (err) {
+      console.error('Error fetching CSV:', err);
+      setMessages(prev => [...prev, { sender: 'bot', text: 'Error fetching CSV.' }]);
+    }
+  };
+
+  const handleMessageSubmit = async (e) => {
+    e.preventDefault();
+    const trimmedMessage = userMessage.trim();
+    if (!trimmedMessage) return;
+    const userMsg = { sender: 'user', text: trimmedMessage };
+    setMessages(prev => [...prev, userMsg]);
+    setUserMessage('');
+    const updatedMemory = [...memoryMatrix, { role: 'user', content: trimmedMessage }].slice(-maxMemorySize * 2);
+    const validMemory = updatedMemory
+      .filter(msg => msg.role && typeof msg.content === 'string')
+      .map(msg => ({
+        role: msg.role === 'bot' ? 'assistant' : msg.role,
+        content: msg.content
+      }));
+    const payload = {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a helpful assistant with memory. Always consider the previous messages in memory to answer the user prompts. Use the information to provide coherent responses.'
+        },
+        ...validMemory,
+        { role: 'user', content: trimmedMessage }
+      ]
+    };
+    try {
+      const res = await fetch(`${backendURL}/api/openai/open`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      let reply = (data.reply || 'No response from chatbot.').trim();
       reply = reply.replace(/<think>.*?<\/think>/s, ''); 
-      reply = reply.replace(/^\/?think:?\s*/i, '');
-      reply = reply.trim();
-      setMessages(prev => [...prev, { sender: 'bot', text: reply}]);
-    } catch (err) {
-      console.error(err);
-      setMessages(prev => [...prev, { sender: 'bot', text: 'Error analyzing CSV.' }]);
+      const botMsg = { sender: 'bot', text: reply };
+      setMessages(prev => [...prev, botMsg]);
+      setMemoryMatrix(prev => [...prev, { role: 'user', content: trimmedMessage }].slice(-maxMemorySize * 2));
+      setMemoryMatrix(prev => [...prev, { role: 'assistant', content: reply }].slice(-maxMemorySize * 2));
+      console.log('Updated memoryMatrix:', memoryMatrix);
+    } catch (error) {
+      console.error('Error fetching bot response:', error);
+      setMessages(prev => [...prev, { sender: 'bot', text: 'Error communicating with chatbot.' }]);
     }
   };
 
   const clearChat = () => {
     setMessages([]);
+    setMemoryMatrix([]);
     localStorage.removeItem('chat');
+    localStorage.removeItem('memoryMatrix');
     console.log('Chat cleared');
   };
 
-  useEffect(() => {
-    localStorage.setItem('chat', JSON.stringify(messages));
-  }, [messages]);
-
-  useEffect(() => {
-    console.log('fetching and feeding csv');
-    if (user) {
-      pullCSV();
-      feedCSV();
+  const back = async () => {
+    try {
+    navigate('/dashboard');
+    } catch (error) {
+    console.error('Error navigating back to dashboard:', error);
     }
-  }, [user]);
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    localStorage.setItem('chat', JSON.stringify(messages));
+    localStorage.setItem('memoryMatrix', JSON.stringify(memoryMatrix));
+  }, [messages, memoryMatrix]);
+
+  useEffect(() => {
+    if (!fetchOnceRef.current) {
+      fetchOnceRef.current = true;
+      const userEmail = localStorage.getItem('userEmail');
+      const gymId = localStorage.getItem('gymId');
+      if (!userEmail || !gymId) {
+        navigate('/login');
+      } else {
+        pullCSV();
+        fetchCSV();
+      }
+    }
+  }, [navigate]);
+
+  useState(() => {
+    console.log('Updated memoryMatrix:', memoryMatrix);
+  }, [memoryMatrix]);
 
   return (
     <div className="chat-container">
