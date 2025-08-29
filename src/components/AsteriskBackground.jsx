@@ -10,7 +10,8 @@ function AsteriskBackground() {
       // Calculate number of asterisks based on window size
       const windowWidth = window.innerWidth;
       const windowHeight = window.innerHeight;
-      const numAsterisks = Math.floor((windowWidth * windowHeight) / 5000); // Increased density
+      // Slightly reduce density (about 15%) to make the scene less busy
+      const numAsterisks = Math.floor(((windowWidth * windowHeight) / 5000) * 0.85);
       
       // Create asterisks
       for (let i = 0; i < numAsterisks; i++) {
