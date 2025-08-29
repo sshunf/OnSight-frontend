@@ -29,7 +29,7 @@ function Dashboard() {
   const TempLogoPath = '/logodraft.png';
   const [selectedMachine, setSelectedMachine] = useState('');
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(false); 
 
   // Check for user in localStorage
   useEffect(() => {
@@ -413,18 +413,6 @@ function Dashboard() {
     }
   };
 
-  const chatBot = async () => {
-    try {
-      // localStorage.setItem('displayName', user.displayName || user.email.split('@')[0]);
-      navigate('/chatbot');
-    } catch (error) {
-      console.error('Error navigating to chatbot:', error);
-    }
-  };
-
-  const formatTimeLabel = (label) =>
-  new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
   const tooltipStyle = {
     backgroundColor: '#1f2937',
     border: 'none',
@@ -436,15 +424,29 @@ function Dashboard() {
 
   return (
     <div className="dashboard-container">
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onLogout={handleLogout}
+        displayName={displayName}
+        email={user?.email}
+      />
       <div className="dashboard-header">
-        <div className="header-content">
-          <h1>Welcome, {displayName || 'User'}</h1>
-          <button onClick={handleLogout} className="logout-button">
-            Sign Out
-          </button>
-          <button onClick={chatBot} className="chatbot-button">
-            Chat Bot
-          </button>
+         <div className="header-content">
+          <div className="header-left">
+            <h1>Welcome, {displayName || 'User'}</h1>
+          </div>
+
+          <div className="header-right">
+            <button
+              className="menu-button circle"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar"
+              title="Open menu"
+            >
+              ☰
+            </button>
+          </div>
         </div>
       </div>
 
