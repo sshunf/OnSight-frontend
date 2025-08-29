@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 
 .env
+# Ignore build output
+dist/

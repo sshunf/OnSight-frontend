@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Chart } from 'chart.js/auto';
+import { Chart, registerables } from 'chart.js';
+Chart.register(...registerables);
 import '../css/Dashboard.css';
+import Sidebar from './Sidebar';
 
 console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
@@ -15,17 +17,6 @@ function Dashboard() {
     activeDevices: 0,
     totalVisitors: 0,
   });
-  const [liveData, setLiveData] = useState({
-    force: [],
-    motion: [],
-    occupancy: [],
-  });
-
-  const motionChartRefs = {
-    sensor1: useRef(null),
-    sensor2: useRef(null),
-    sensor3: useRef(null),
-  };
   
   const [selectedRange, setSelectedRange] = useState(12); // default 12 hour interval
   const [selectedAvgRange, setSelectedAvgRange] = useState(12); // default 12 hour interval
@@ -35,8 +26,10 @@ function Dashboard() {
   const avgUsageChartRef = useRef(null);
   const cumUsageChartRef = useRef(null);
   const [machineOptions, setMachineOptions] = useState([]);
+  const TempLogoPath = '/logodraft.png';
   const [selectedMachine, setSelectedMachine] = useState('');
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
 
   // Check for user in localStorage
   useEffect(() => {
@@ -67,14 +60,22 @@ function Dashboard() {
         const start = new Date(entry.hour);
         const end = new Date(start.getTime() + 60 * 60 * 1000);
         const format = (d) => {
-          const month = d.getMonth() + 1;
-          const day = d.getDate();
           const h = d.getHours();
-          const suffix = h < 12 ? 'am' : 'pm';
+          const suffix = h < 12 ? 'AM' : 'PM';
           const hour12 = h % 12 || 12;
-          return `${month}/${day} ${hour12}${suffix}`; 
+
+          if (selectedRange <= 24) {
+            // Show just the time for past 6 or 24 hours
+            return `${hour12}${suffix}`;
+          } else {
+            // Show date + time for longer ranges
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+            return `${month}/${day} ${hour12}${suffix}`;
+          }
         };
-        const label = `${format(start)} - ${format(end)}`;        
+
+        const label = `${format(start)}`;        
         if (!grouped[label]) grouped[label] = 0;
         grouped[label] += entry.minutes;
       });
@@ -230,14 +231,21 @@ function Dashboard() {
         const start = new Date(entry.hour);
         const end = new Date(start.getTime() + 60 * 60 * 1000);
         const format = (d) => {
-          const month = d.getMonth() + 1;
-          const day = d.getDate();
           const h = d.getHours();
-          const suffix = h < 12 ? 'am' : 'pm';
+          const suffix = h < 12 ? 'AM' : 'PM';
           const hour12 = h % 12 || 12;
-          return `${month}/${day} ${hour12}${suffix}`;
+
+          if (selectedCumRange <= 24) {
+            // Show just the time for past 6 or 24 hours
+            return `${hour12}${suffix}`;
+          } else {
+            // Show date + time for longer ranges
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+            return `${month}/${day} ${hour12}${suffix}`;
+          }
         };
-        const label = `${format(start)} - ${format(end)}`;
+        const label = `${format(start)}`;
         if (!grouped[label]) grouped[label] = 0;
         grouped[label] += entry.minutes;
       });
@@ -314,64 +322,6 @@ function Dashboard() {
     }
   }
 
-  // const buildAllMotionCharts = async () => {
-  //   try {
-  //     const gymId = localStorage.getItem('gymId');
-  //     if (!gymId) return;
-  //     const res = await fetch(`${backendURL}/api/motion/aggregated?gymId=${gymId}`);
-  //     const allData = await res.json();
-
-  //     for (let sensorId of [1, 2, 3]) {
-  //       const data = allData[`sensor${sensorId}`] || [];
-  //       const sorted = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  //       const labels = sorted.map(entry => new Date(entry.timestamp).toLocaleTimeString());
-  //       const values = sorted.map(entry => entry.value);
-  //       const ctx = motionChartRefs[`sensor${sensorId}`].current.getContext('2d');
-  //       if (chartInstancesRef.current[`motion${sensorId}`]) {
-  //         chartInstancesRef.current[`motion${sensorId}`].destroy();
-  //       }
-  //       chartInstancesRef.current[`motion${sensorId}`] = new Chart(ctx, {
-  //         type: 'line',
-  //         data: {
-  //           labels,
-  //           datasets: [{
-  //             label: `Sensor ${sensorId} Motion`,
-  //             data: values,
-  //             borderColor: 'rgba(0, 255, 100, 0.7)',
-  //             backgroundColor: 'rgba(0, 255, 100, 0.3)',
-  //             fill: true,
-  //             tension: 0.3,
-  //             borderWidth: 2,
-  //             pointRadius: 2,
-  //           }]
-  //         },
-  //         options: {
-  //           responsive: true,
-  //           maintainAspectRatio: false,
-  //           scales: {
-  //             x: {
-  //               ticks: { color: 'white' },
-  //               title: { display: true, text: 'Time', color: 'white' },
-  //               grid: { color: 'rgba(255,255,255,0.1)' },
-  //             },
-  //             y: {
-  //               ticks: { color: 'white' },
-  //               beginAtZero: true,
-  //               title: { display: true, text: 'Motion Value', color: 'white' },
-  //               grid: { color: 'rgba(255,255,255,0.1)' },
-  //             },
-  //           },
-  //           plugins: {
-  //             legend: { labels: { color: 'white' } }
-  //           }
-  //         }
-  //       });
-  //     }
-  //   } catch (error) {
-  //     console.error('Failed to fetch aggregated motion data:', error);
-  //   }
-  // };
-
   const fetchMachineOptions = async() => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
@@ -420,27 +370,14 @@ function Dashboard() {
     }
   }, [selectedRange, selectedCumRange, selectedMachine]);
 
-  // useEffect(() => {
-  //   if (user) {
-  //     buildAllMotionCharts();
-  //   }
-  // }, [user, selectedAvgRange]);
-
-  // useEffect(() => {
-  //   if (selectedMachine){
-  //     buildUsageChart();
-  //   }
-  // }, [selectedRange, selectedMachine]);
-
-
-  const fetchDashboardData = async (currentUser) => {
+  const fetchDashboardData = async () => {
     try {
       const gymId = localStorage.getItem('gymId');
       if (!gymId) return;
       const resOcc = await fetch(`${backendURL}/api/small/occupancy?gymId=${gymId}`);
       const occData = await resOcc.json();
       const resPeak = await fetch(`${backendURL}/api/small/peak?gymId=${gymId}`);
-      const peakData = await resPeak.json();
+      const peakData = await resPeak.json();  
       const resActive = await fetch(`${backendURL}/api/small/active?gymId=${gymId}`);
       const activeData = await resActive.json();
       const resDaily = await fetch(`${backendURL}/api/small/daily?gymId=${gymId}`);
@@ -543,17 +480,19 @@ function Dashboard() {
           <p className="stat-value">{stats.currentOccupancy}</p>
           <p className="stat-label">Number Of Machines Currently In Use</p>
         </div>
-        <div className="flex items-center justify-center">
-          <img
-            src="/logodraft.png"
-            alt="OnSight Logo"
-            className="w-46 h-auto"
-          />
-        </div>
+            <div className="flex items-center justify-center w-full">
+              <img 
+                className="h-36 w-auto"
+                src={TempLogoPath}
+                alt="TempLogo"
+              />
+            </div>
+          <div className="flex items-center space-x-4">
         <div className="stat-card">
           <h3>Active Sensors</h3>
           <p className="stat-value">{stats.activeDevices}</p>
           <p className="stat-label">Number Of Active Sensors Connected</p>
+        </div>
         </div>
       </div>
 
@@ -597,14 +536,14 @@ function Dashboard() {
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
                   <option value={720}>Past Month</option>
-                  <option value={-1}>All Time</option>
+                  <option value={1000}>All Time</option>
                 </select>
               </div>
             </div>
           </div>
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4">Average Machine Usage Of {selectedAvgRange === -1 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
+              <h3 className="text-xl font-semibold mb-4">Average Machine Usage Of {selectedAvgRange === 1000 ? 'All Time' : `${selectedAvgRange} Hours`}</h3>
               <div className="chart">
                 <canvas ref={avgUsageChartRef}></canvas>
               </div>
@@ -620,14 +559,14 @@ function Dashboard() {
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
                   <option value={720}>Past Month</option>
-                  <option value={-1}>All Time</option>
+                  <option value={1000}>All Time</option>
                 </select>
               </div>
             </div>
           </div>
           <div className="row">
             <div className="chart-card">
-              <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of {selectedCumRange === -1 ? 'All Time' : `${selectedCumRange} Hours`}</h3>
+              <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of {selectedCumRange === 1000 ? 'All Time' : `${selectedCumRange} Hours`}</h3>
               <div className="chart" style={{height: '300px'}}>
                 <canvas ref={cumUsageChartRef}></canvas>
               </div>
@@ -643,29 +582,11 @@ function Dashboard() {
                   <option value={24}>Past 24 Hours</option>
                   <option value={168}>Past Week</option>
                   <option value={720}>Past Month</option>
-                  <option value={-1}>All Time</option>
+                  <option value={1000}>All Time</option>
                 </select>
               </div>
             </div>
           </div>
-          {/* <div className="row">
-            {[1, 2, 3].map((id) => (
-              <div className="chart-card" key={id}>
-                <h3 className="text-xl font-semibold mb-4">Motion Sensor {id}</h3>
-                <div className="chart">
-                  <canvas ref={motionChartRefs[`sensor${id}`]}></canvas>
-                </div>
-              </div>
-            ))}
-          </div> */}
-          {/* <div className="row">
-            <div className="chart-card">
-                <h3 className="text-xl font-semibold mb-4">Cumulative Machine Usage Of All Time</h3>
-                <div className="chart">
-                  <canvas ref={cumUsageChartRef}></canvas>
-                </div>
-            </div>
-          </div> */}
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import WaitlistSection from '../components/WaitlistSection';
 
 function WaitlistPage() {
   return (
-    <div className="bg-black text-white waitlist-container py-12">
+    <div className="page-gradient text-white waitlist-container py-12 min-h-screen">
       <WaitlistSection />
     </div>
   );
