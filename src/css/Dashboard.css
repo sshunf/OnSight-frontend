@@ -214,3 +214,34 @@
   flex: 1;
   padding-left: 1rem;
 }
+
+/* right-side container */
+.header-right {
+  padding-top: 10px;
+  display: flex;
+  align-items: center;
+}
+
+/* circular menu button */
+.menu-button.circle {
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: #0b1220;         /* matches your dark theme */
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background-color .2s ease, transform .05s ease;
+}
+
+.menu-button.circle:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.menu-button.circle:active {
+  transform: scale(1.2);
+}
