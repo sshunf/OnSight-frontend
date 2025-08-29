@@ -15,6 +15,7 @@ import AsteriskBackground from './components/AsteriskBackground';
 import Layout from './components/Layout';
 import DashboardDemoPage from './pages/DashboardDemo';
 import DashboardPage from './pages/Dashboard';
+import ChatBotPage from './pages/ChatBotPage';
 import DocumentationPage from './pages/DocumentationPage';
 import FAQPage from './pages/FAQPage';
 import CaseStudiesPage from './pages/CaseStudiesPage';
@@ -43,6 +44,7 @@ function App() {
         
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/chatbot" element={<ChatBotPage />} />\
       </Routes>
     </>
   );

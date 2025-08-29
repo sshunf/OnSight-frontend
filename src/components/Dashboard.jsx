@@ -9,6 +9,7 @@ console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function Dashboard() {
+  const displayName = localStorage.getItem('displayName');
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState({
     currentOccupancy: 0,
@@ -395,8 +396,8 @@ function Dashboard() {
         dailyFav: dailyData.mostUsedMachine || '--',
         weeklyFav: weeklyData.weeklyFav || '--'
       }));
-      console.log("daily: ", dailyData.mostUsedMachine.machineName);
-      console.log("weekly: ", weeklyData.weeklyFav.machineName);
+      console.log("daily: ", dailyData.mostUsedMachine?.machineName);
+      console.log("weekly: ", weeklyData.weeklyFav?.machineName);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -412,7 +413,24 @@ function Dashboard() {
     }
   };
 
-  const formatTimeLabel = (label) => new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const chatBot = async () => {
+    try {
+      // localStorage.setItem('displayName', user.displayName || user.email.split('@')[0]);
+      navigate('/chatbot');
+    } catch (error) {
+      console.error('Error navigating to chatbot:', error);
+    }
+  };
+
+  const formatTimeLabel = (label) =>
+  new Date(label).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const tooltipStyle = {
+    backgroundColor: '#1f2937',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+  };
 
   if (!user) return null;
 
@@ -420,9 +438,12 @@ function Dashboard() {
     <div className="dashboard-container">
       <div className="dashboard-header">
         <div className="header-content">
-          <h1>Welcome, {user.displayName || 'User'}</h1>
+          <h1>Welcome, {displayName || 'User'}</h1>
           <button onClick={handleLogout} className="logout-button">
             Sign Out
+          </button>
+          <button onClick={chatBot} className="chatbot-button">
+            Chat Bot
           </button>
         </div>
       </div>

@@ -43,13 +43,27 @@
   border-radius: 0.375rem;
   cursor: pointer;
   transition: background-color 0.2s;
-  position: relative;
-  z-index: 101;
-  opacity: 1;
+  margin-top: 0.5rem;
+
 }
 
 .logout-button:hover {
   background-color: #b91c1c;
+}
+
+.chatbot-button {
+  padding: 0.5rem 1rem;
+  background-color: #662Ec2;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 0.5rem;
+}
+
+.chatbot-button:hover {
+  background-color: #7334e0b3;
 }
 
 .stats-grid {
