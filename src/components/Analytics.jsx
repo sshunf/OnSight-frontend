@@ -96,7 +96,8 @@ export default function Analytics() {
         data,
         backgroundColor: bg,
         borderColor: border,
-        borderWidth: 1,
+        borderWidth: 0,
+        stack: "machines",
       };
     });
 
@@ -135,12 +136,12 @@ export default function Analytics() {
         },
         scales: {
           x: {
-            stacked: false,
+            stacked: true,
             ticks: { color: "white" },
             grid: { color: "rgba(255,255,255,0.2)" },
           },
           y: {
-            stacked: false,
+            stacked: true,
             beginAtZero: true,
             ticks: { color: "white" },
             grid: { color: "rgba(255,255,255,0.2)" },
@@ -213,7 +214,7 @@ export default function Analytics() {
 
         <div className="controls">
           <label className="control">
-            <span>Machines to display:</span>
+            <span>Machines to display</span>
             <span className="select-wrap">
               <select
                 value={topN}

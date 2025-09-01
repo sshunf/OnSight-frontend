@@ -228,7 +228,7 @@
   height: 55px;
   border-radius: 50%;
   border: 1px solid rgba(255,255,255,0.15);
-  background: #0b1220;         /* matches your dark theme */
+  background: #626470;         /* matches your dark theme */
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -245,3 +245,91 @@
 .menu-button.circle:active {
   transform: scale(1.2);
 }
+
+/* ===== Equipment table ===== */
+.equipment-table {
+  margin-top: 0.75rem;
+  background: #111315;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.equipment-header,
+.equipment-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr; /* Equipment | Status | Last Seen */
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.equipment-header {
+  background: #0c0f14;
+  color: #9ca3af;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.equipment-body .equipment-row + .equipment-row {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.equipment-name {
+  color: #e5e7eb;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.equipment-last {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.equipment-empty {
+  padding: 16px;
+  color: #cbd5e1;
+}
+
+/* ===== Status badges ===== */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+
+.status--active {
+  color: #16a34a;
+  background: rgba(22,163,74,0.12);
+  border: 1px solid rgba(22,163,74,0.3);
+}
+
+.status--inactive {
+  color: #3b82f6;
+  background: rgba(59,130,246,0.12);
+  border: 1px solid rgba(59,130,246,0.3);
+}
+
+.status--maintenance {
+  color: #ef4444;
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+
+.status--charging {
+  color: #f59e0b;
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+}
+
+.status--unknown {
+  color: #9ca3af;
+  background: rgba(156,163,175,0.12);
+  border: 1px solid rgba(156,163,175,0.25);
+}
+
