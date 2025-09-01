@@ -11,7 +11,7 @@
   gap: 12px 16px;
   margin: 12px 0 8px;
   padding: 10px 12px;
-  background: #0f1525;                /* subtle card */
+  background: #202022;                /* subtle card */
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 10px;
   justify-content: center;
@@ -59,7 +59,7 @@
 }
 
 .analytics .select:focus {
-  border-color: rgba(124,58,237,0.8); /* violet-ish */
+  border-color: rgba(61, 18, 137, 0.8); /* violet-ish */
   box-shadow: 0 0 0 3px rgba(124,58,237,0.25);
   background: #1a1a1a;
 }
@@ -76,13 +76,4 @@
 
 .analytics .chart {
   height: 480px;
-}
-
-/* Right-side circular menu button is already styled in your global css;
-   these are just tiny hover/active nudges if you want them scoped here */
-.analytics .menu-button.circle:hover {
-  background: rgba(255,255,255,0.09);
-}
-.analytics .menu-button.circle:active {
-  transform: scale(0.97);
 }
