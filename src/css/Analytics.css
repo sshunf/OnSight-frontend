@@ -1,0 +1,79 @@
+/* Scope all tweaks to the analytics page */
+.analytics .data-section h2 {
+  margin-bottom: .5rem;
+}
+
+/* --- Control bar --- */
+.analytics .controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin: 12px 0 8px;
+  padding: 10px 12px;
+  background: #202022;                /* subtle card */
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  justify-content: center;
+}
+
+.analytics .control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e5e7eb;
+  font-size: 0.95rem;
+}
+
+/* Select wrapper adds a custom caret */
+.analytics .select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.analytics .select-wrap::after {
+  content: "▾";
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Pretty select */
+.analytics .select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  min-width: 140px;
+  padding: 8px 34px 8px 12px;         /* room for caret */
+  border-radius: 10px;
+  border: 1px solid #4b5563;
+  background: #161616;
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.analytics .select:focus {
+  border-color: rgba(61, 18, 137, 0.8); /* violet-ish */
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.25);
+  background: #1a1a1a;
+}
+
+.analytics .select option {
+  background: #1a2029;
+  color: #fff;
+}
+
+/* Make chart container breathe a bit more on this page */
+.analytics .chart-card {
+  max-width: 1200px;
+}
+
+.analytics .chart {
+  height: 480px;
+}
