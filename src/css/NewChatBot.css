@@ -1,7 +1,7 @@
 .nc-wrapper {
   display: flex;
   justify-content: center;
-  padding: 5.5rem 1rem 2rem 1rem; /* account for fixed header */
+  padding: 0.75rem 1rem 1.25rem 1rem;
 }
 
 .nc-panel {
@@ -29,8 +29,7 @@
   height: min(65vh, 640px);
   overflow-y: auto;
   padding: 1rem;
-  background: radial-gradient(900px 400px at 50% -20%, rgba(124,58,237,0.18), transparent 60%),
-              #000;
+  background: #000;
 }
 
 .nc-row {
@@ -97,7 +96,8 @@
   flex: 1;
   background: transparent; /* transparent as requested */
   border: 1px solid rgba(255,255,255,0.18);
-  color: #ffffff; /* force white typed text */
+  color: #e5e7eb !important; /* match placeholder tone */
+  caret-color: #e5e7eb;
   border-radius: 9999px;
   padding: 0.6rem 5.25rem 0.6rem 0.9rem;
   outline: none;
@@ -122,4 +122,39 @@
   .nc-body { height: 70vh; }
 }
 
+/* Guided tour overlay */
+.tour-overlay { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+.tour-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+.tour-highlight {
+  position: absolute; border-radius: 14px; box-shadow: 0 0 0 3px rgba(124,58,237,0.9), 0 0 0 9999px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+.tour-tooltip {
+  position: absolute; max-width: min(420px, calc(100vw - 32px)); color: #e5e7eb; background: #0b0b0b; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; padding: 0.9rem; pointer-events: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+.tour-tooltip.above { transform: translateY(-100%); }
+.tour-tooltip.below { transform: translateY(0); }
+.tour-text { margin-bottom: 0.75rem; line-height: 1.3; }
+.tour-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.tour-btn { background: #111827; border: 1px solid rgba(255,255,255,0.12); color: #e5e7eb; border-radius: 8px; padding: 0.4rem 0.7rem; cursor: pointer; }
+.tour-btn.subtle { opacity: 0.8; }
+.tour-btn.primary { background: rgba(124,58,237,0.9); border-color: rgba(124,58,237,0.9); color: #fff; }
+
+/* Bottom-right tutorial prompt (clickable) */
+.tour-prompt {
+  position: fixed; right: 16px; bottom: 16px; width: min(90vw, 420px);
+  color: #e5e7eb; background: #0b0b0b; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; padding: 0.9rem; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  pointer-events: auto; z-index: 70;
+}
+.tour-prompt h3 { margin: 0 0 0.4rem 0; font-size: 1rem; }
+.tour-prompt p { margin: 0 0 0.8rem 0; font-size: 0.9rem; color: #cbd5e1; }
+.tour-prompt .tour-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .tour-tooltip { padding: 0.75rem; border-radius: 10px; }
+  .tour-text { font-size: 0.9rem; }
+  .tour-btn { padding: 0.35rem 0.6rem; font-size: 0.9rem; }
+}
 
