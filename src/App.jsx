@@ -15,11 +15,13 @@ import AsteriskBackground from './components/AsteriskBackground';
 import Layout from './components/Layout';
 import DashboardDemoPage from './pages/DashboardDemo';
 import DashboardPage from './pages/Dashboard';
+import ChatBotPage from './pages/ChatBotPage';
 import DocumentationPage from './pages/DocumentationPage';
 import FAQPage from './pages/FAQPage';
 import CaseStudiesPage from './pages/CaseStudiesPage';
 import BlogPage from './pages/BlogPage';
 import GaragePage from './pages/GaragePage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 
 function App() {
@@ -40,9 +42,11 @@ function App() {
         <Route path="/blog" element={<Layout><BlogPage /></Layout>} />
         <Route path="/garage" element={<Layout><GaragePage /></Layout>} />
         <Route path="/gym-select" element={<Layout><GymSelectScreen /></Layout>} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/chatbot" element={<ChatBotPage />} />\
       </Routes>
     </>
   );
