@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useNavigate } from 'react-router-dom';
 import '../css/ChatBot.css';
 import '../css/NewChatBot.css';
@@ -165,6 +167,23 @@ function ChatBot() {
         pullCSV();
         fetchCSV();
       }
+      /* // Inject sample markdown messages once for preview/testing formatting
+      try {
+        const injected = localStorage.getItem('chat_md_samples_injected') === '1';
+        if (!injected) {
+          const samples = [
+            { sender: 'bot', text: '# Weekly Staffing Plan\n\n- **Front Desk**: 1–2 staff\n- **Trainers**: 2–4 staff\n- **Maintenance**: 1 staff\n\n> Adjust counts based on peak windows.' },
+            { sender: 'bot', text: '## Peak Hours (Mon–Fri, 5 AM–12 PM)\n\n**Front Desk:** 1–2\n\n**Trainers:**\n\n1. Warm-up area\n2. Free weights\n3. Machines (*Lateral Row*, *Leg Press*)\n\n**Maintenance:** early machine checks' },
+            { sender: 'bot', text: '### Notes\n\n- Use asterisks for emphasis: *italic*, **bold**, ***bold-italic***.\n- Dashes vs. asterisks render as lists.\n- Inline code: `npm run dev`.\n\n---\n\nTables (GFM):\n\n| Shift | Front Desk | Trainers | Maint |\n|------:|-----------:|---------:|------:|\n| Morning | 1–2 | 2–3 | 1 |\n| Evening | 2–3 | 3–4 | 1 |' },
+            { sender: 'bot', text: 'Edge cases: **multiple***asterisks***in***a***row**, punctuation!!!??, and mixed symbols like (e.g., *lists*) should render cleanly.' }
+          ];
+          setMessages(prev => [...prev, ...samples]);
+          localStorage.setItem('chat_md_samples_injected', '1');
+        }
+      } catch (e) {
+        console.error('Failed injecting markdown samples', e);
+      }
+      */
       const optedOut = localStorage.getItem('chatbot_tour_optout') === '1';
       const completed = localStorage.getItem('chatbot_tour_completed') === '1';
       if (!optedOut && !completed) {
@@ -260,7 +279,13 @@ function ChatBot() {
             {messages.map((msg, index) => (
               <div key={index} className={`nc-row ${msg.sender === 'user' ? 'from-me' : 'from-bot'}`}>
                 <div className="nc-bubble">
-                  {typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}
+                  {msg.sender === 'bot' && typeof msg.text === 'string' ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.text}
+                    </ReactMarkdown>
+                  ) : (
+                    typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)
+                  )}
                 </div>
               </div>
             ))}
