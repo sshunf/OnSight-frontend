@@ -8,7 +8,7 @@ import '../css/NewChatBot.css';
 console.log("chatbot reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
-function ChatBot() {
+function ChatBot({ embedded = false }) {
   const gymId = localStorage.getItem('gymId');
   const navigate = useNavigate();
   const displayName = localStorage.getItem('displayName');
@@ -144,9 +144,9 @@ function ChatBot() {
 
   const back = async () => {
     try {
-    navigate('/dashboard');
+      if (!embedded) navigate('/dashboard');
     } catch (error) {
-    console.error('Error navigating back to dashboard:', error);
+      console.error('Error navigating back to dashboard:', error);
     }
   }
 
@@ -162,8 +162,12 @@ function ChatBot() {
       const userEmail = localStorage.getItem('userEmail');
       const gymId = localStorage.getItem('gymId');
       if (!userEmail || !gymId) {
-        navigate('/login');
-      } else {
+        if (!embedded) {
+          navigate('/login');
+          return;
+        }
+      }
+      if (gymId) {
         pullCSV();
         fetchCSV();
       }
@@ -263,14 +267,36 @@ function ChatBot() {
 
   return (
     <div className="chat-container">
-      <div className="chat-header">
-        <div className="header-content">
-          <h1>Welcome, {displayName || 'User'}</h1>
-          <button onClick={back} className="back-button">
-            Return To Dashboard
-          </button>
+      <style>{`
+        /* Embedded-friendly layout tweaks */
+        .chat-container { height:100%; }
+        .nc-wrapper { display:flex; align-items:stretch; justify-content:stretch; padding:0; height:100%; background: radial-gradient(1200px 600px at 10% -20%, rgba(124,58,237,0.08), transparent 60%), radial-gradient(1000px 500px at 110% 120%, rgba(124,58,237,0.06), transparent 60%); }
+        .nc-panel { width: 100%; height:100%; background:#0f0f15; border:1px solid #1f1f2b; border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,0.45); overflow:hidden; display:flex; flex-direction:column; }
+        .nc-body { flex:1 1 auto; overflow-y:auto; padding:18px; padding-right:24px; background: transparent; scrollbar-width: thin; scrollbar-color: #6b7280 transparent; }
+        .nc-body::-webkit-scrollbar { width: 8px; }
+        .nc-body::-webkit-scrollbar-track { background: transparent; margin: 8px 4px; }
+        .nc-body::-webkit-scrollbar-thumb { background-color:#6b7280; border-radius:8px; border:2px solid transparent; background-clip: padding-box; }
+        .nc-body::-webkit-scrollbar-thumb:hover { background-color:#9ca3af; }
+        .nc-row { display:flex; margin:10px 0; }
+        .nc-row.from-me { justify-content:flex-end; }
+        .nc-row.from-bot { justify-content:flex-start; }
+        .nc-bubble { max-width:70%; padding:12px 14px; border-radius:14px; box-shadow:0 4px 14px rgba(0,0,0,0.35); line-height:1.35; font-size:14px; }
+        .nc-row.from-me .nc-bubble { background:#7C3AED; color:#ffffff; border:1px solid rgba(124,58,237,0.55); border-top-right-radius:6px; }
+        .nc-row.from-bot .nc-bubble { background:#15151f; color:#e5e7eb; border:1px solid #232337; border-top-left-radius:6px; }
+        .nc-bubble.thinking { background:#15151f; border:1px dashed #2b2b3d; }
+        .nc-input { flex:0 0 56px; display:flex; align-items:center; gap:10px; padding:12px; background:#0f0f15; border-top:1px solid #1f1f2b; }
+        .nc-input input { flex:1; background:#13131a; color:#e5e7eb; border:1px solid #262633; border-radius:10px; padding:10px 12px; }
+        .plain-icon { background:transparent; border:none; color:#cbd5e1; }
+        .plain-icon.send { color:#c4b5fd; }
+      `}</style>
+      {!embedded && (
+        <div className="chat-header">
+          <div className="header-content">
+            <h1>Welcome, {displayName || 'User'}</h1>
+            <button onClick={back} className="back-button">Return To Dashboard</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* New chat appearance below */}
       <section className="nc-wrapper">

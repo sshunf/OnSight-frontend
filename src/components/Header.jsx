@@ -53,6 +53,7 @@ function Header() {
         <nav className="hidden md:flex items-center gap-6">
           <Link to="/features" className={isActive('/features') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Features</Link>
           <Link to="/dashboard-demo" className={isActive('/dashboard-demo') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Dashboard</Link>
+          <Link to="/temp-dashboard" className={isActive('/temp-dashboard') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Temp Dashboard</Link>
           <Link to="/foundersNote" className={isActive('/foundersNote') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Founders' Note</Link>
           <Link to="/waitlist" className={isActive('/waitlist') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Waitlist</Link>
           <Link to="/login" className="bg-transparent hover:bg-white/10 text-gray-300 hover:text-white px-4 py-2 rounded">Login</Link>
