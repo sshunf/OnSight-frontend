@@ -75,8 +75,10 @@ function TempDashboard() {
   const hourlyUsageChartRef = useRef(null);
   const avgUsageChartRef = useRef(null);
   const cumUsageChartRef = useRef(null);
+  const analyticsChartRef = useRef(null);
 
   const labels12 = ['6a','8a','10a','12p','2p','4p','6p','8p','10p','12a','2a','4a'];
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   useEffect(() => {
     // Hourly line
@@ -175,6 +177,68 @@ function TempDashboard() {
       });
     }
   }, [selectedRange, selectedAvgRange, selectedCumRange, selectedMachine, activeTab]);
+
+  // Analytics stacked bar - recreates the provided mock (fake data for now)
+  useEffect(() => {
+    if (activeTab !== 'analytics') return;
+    if (!analyticsChartRef.current) return;
+    const ctx = analyticsChartRef.current.getContext('2d');
+    if (chartInstancesRef.current.analytics) chartInstancesRef.current.analytics.destroy();
+
+    // TODO: Replace fake data below with real aggregated data from backend
+    // Expected shape: record per machine [{ label: string, data: number[7] }]
+    const datasets = [
+      { label: 'Cable Leg Press', color: '#7C3AED' },
+      { label: 'Lateral Row', color: '#22C55E' },
+      { label: 'Plated Leg Press', color: '#3B82F6' },
+      { label: 'Chest Press', color: '#EF4444' },
+      { label: 'Shoulder Press', color: '#F59E0B' },
+    ].map((m) => ({
+      label: m.label,
+      data: days.map(() => Math.floor(30 + Math.random() * 70)),
+      backgroundColor: m.color,
+      borderWidth: 0,
+    }));
+
+    chartInstancesRef.current.analytics = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: days, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#cbd5e1' } },
+          title: {
+            display: true,
+            text: 'Average Usage per Day of Week (per Machine, all-time)',
+            color: '#e5e7eb',
+            font: { size: 16, weight: '600' },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const label = ctx.dataset?.label || '';
+                const val = Array.isArray(ctx.raw) ? ctx.raw[0] : ctx.raw;
+                return `${label}: ${val} min`;
+              },
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+          y: {
+            stacked: true,
+            title: { display: true, text: 'Average Minutes', color: '#cbd5e1' },
+            ticks: { color: '#cbd5e1' },
+            grid: { color: 'rgba(255,255,255,0.08)' },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+
+    return () => { chartInstancesRef.current.analytics?.destroy(); };
+  }, [activeTab]);
 
   const equipmentRows = [
     { name: 'Treadmill #1', status: 'active', lastSeen: 'just now' },
@@ -317,14 +381,21 @@ function TempDashboard() {
 
           <div className="nx-main">
             {activeTab === 'chatbot' ? (
-              <div className="nx-card" style={{padding:0, height: '830px'}}>
-                <ChatBot embedded={true} />
+              <div className="nx-card" style={{padding:0, height: '830px', overflow:'hidden'}}>
+                <div style={{ transform: 'translateY(-16px)' }}>
+                  <ChatBot embedded={true} />
+                </div>
               </div>
             ) : activeTab === 'analytics' ? (
               <>
-                <div className="nx-grid" style={{marginBottom:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 12', height:'830px'}}>
-                    {/* Empty analytics canvas placeholder */}
+                <div className="nx-grid" style={{marginBottom:'8px', display:'grid', gridTemplateColumns:'8fr 2fr', gap:16}}>
+                  <div className="nx-card" style={{height:'830px'}}>
+                    <div style={{height:'100%'}}>
+                      <canvas ref={analyticsChartRef}></canvas>
+                    </div>
+                  </div>
+                  <div className="nx-card" style={{height:'830px'}}>
+                    {/* Reserved for future analytics widgets */}
                   </div>
                 </div>
               </>
