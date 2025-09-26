@@ -322,6 +322,10 @@ function TempDashboard() {
         .nx-chip.red { background:rgba(239,68,68,0.12); color:#fecaca; border-color:rgba(239,68,68,0.35); }
         .nx-chart { height:260px; }
         .nx-select { padding:6px 10px; border-radius:8px; border:1px solid #262633; background:#13131a; color:#e5e7eb; font-size:12px; }
+        .nx-mobile-tabs { display:none; }
+        .nx-analytics-card { height:830px; }
+        .nx-chat-card { height:830px; }
+        .nx-analytics-grid { display:grid; grid-template-columns:8fr 2fr; gap:16px; }
         /* Dropdown */
         .nx-dd { position:relative; }
         .nx-dd-button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; }
@@ -351,6 +355,18 @@ function TempDashboard() {
         .nx-modal-checkbox.active { outline:2px solid rgba(124,58,237,0.45); }
         .nx-modal-text { width:100%; background:#13131a; border:1px solid #262633; color:#e5e7eb; padding:8px 10px; border-radius:10px; margin-top:8px; }
         .nx-modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+        @media (max-width: 768px) {
+          .nx-dashboard { padding:16px; }
+          .nx-container { max-width:100%; }
+          .nx-content { flex-direction:column; }
+          .nx-rail { display:none; }
+          .nx-mobile-tabs { display:flex; gap:8px; margin-bottom:12px; }
+          .nx-grid { grid-template-columns:1fr; }
+          .nx-analytics-grid { grid-template-columns:1fr; }
+          .nx-analytics-card { height:560px; }
+          .nx-chat-card { height:560px; }
+          .nx-chart { height:220px; }
+        }
       `}</style>
 
       <div className="nx-container" style={{flex:1}}>
@@ -380,21 +396,26 @@ function TempDashboard() {
       </div>
 
           <div className="nx-main">
+            <div className="nx-mobile-tabs">
+              <button className={`nx-pill ${activeTab==='dashboard' ? 'primary' : ''}`} onClick={()=>setActiveTab('dashboard')}>Dashboard</button>
+              <button className={`nx-pill ${activeTab==='analytics' ? 'primary' : ''}`} onClick={()=>setActiveTab('analytics')}>Analytics</button>
+              <button className={`nx-pill ${activeTab==='chatbot' ? 'primary' : ''}`} onClick={()=>setActiveTab('chatbot')}>Chatbot</button>
+            </div>
             {activeTab === 'chatbot' ? (
-              <div className="nx-card" style={{padding:0, height: '830px', overflow:'hidden'}}>
+              <div className="nx-card nx-chat-card" style={{padding:0, overflow:'hidden'}}>
                 <div style={{ transform: 'translateY(-16px)' }}>
                   <ChatBot embedded={true} />
                 </div>
               </div>
             ) : activeTab === 'analytics' ? (
               <>
-                <div className="nx-grid" style={{marginBottom:'8px', display:'grid', gridTemplateColumns:'8fr 2fr', gap:16}}>
-                  <div className="nx-card" style={{height:'830px'}}>
+                <div className="nx-analytics-grid" style={{marginBottom:'8px'}}>
+                  <div className="nx-card nx-analytics-card">
                     <div style={{height:'100%'}}>
                       <canvas ref={analyticsChartRef}></canvas>
                     </div>
                   </div>
-                  <div className="nx-card" style={{height:'830px'}}>
+                  <div className="nx-card nx-analytics-card">
                     {/* Reserved for future analytics widgets */}
                   </div>
                 </div>
