@@ -3,6 +3,9 @@ import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 import '../css/Dashboard.css';
 import ChatBot from './ChatBot';
+import MaintenanceTab from '../tabs/MaintenanceTab.jsx';
+import TicketsTab from '../tabs/TicketsTab.jsx';
+// Lazy require for some tabs to avoid upfront bundling cost
 // import NotificationBell from './NotificationBell';
 
 function randomSeries(n, max = 60) {
@@ -262,6 +265,7 @@ function TempDashboard() {
   const [maintNotes, setMaintNotes] = useState('');
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
 
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
 
@@ -289,6 +293,67 @@ function TempDashboard() {
 
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
+
+  // Seed/read space allocation suggestions
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('dashboard:state');
+      const parsed = raw ? JSON.parse(raw) : {};
+      const seeded = (parsed.suggestions && Array.isArray(parsed.suggestions)) ? parsed.suggestions : [
+        { id: 'sg1', text: 'Move one treadmill from Cardio NE to Cardio SW (even out peak load)', status: 'new' },
+        { id: 'sg2', text: 'Shift two squat racks usage by scheduling time blocks', status: 'new' },
+        { id: 'sg3', text: 'Relocate stretch mats nearer to free weights during 6-8PM', status: 'new' },
+      ];
+      setSuggestions(seeded);
+      localStorage.setItem('dashboard:state', JSON.stringify({ ...(parsed||{}), suggestions: seeded }));
+    } catch {}
+  }, []);
+
+  function persistSuggestions(next) {
+    try {
+      const raw = localStorage.getItem('dashboard:state');
+      const parsed = raw ? JSON.parse(raw) : {};
+      localStorage.setItem('dashboard:state', JSON.stringify({ ...(parsed||{}), suggestions: next, updatedAt: new Date().toISOString() }));
+    } catch {}
+  }
+
+  function acceptSuggestion(id) {
+    const next = suggestions.map(s => s.id === id ? { ...s, status: 'accepted' } : s);
+    setSuggestions(next); persistSuggestions(next);
+  }
+  function dismissSuggestion(id) {
+    const next = suggestions.map(s => s.id === id ? { ...s, status: 'dismissed' } : s);
+    setSuggestions(next); persistSuggestions(next);
+  }
+
+  function resetDemo() {
+    if (!window.confirm('Reset demo data? This will reseed local data.')) return;
+    try {
+      const seeds = {
+        maintenance: {
+          maintenanceIntervalDays: 90,
+          lastManualDate: null,
+          nextDates: [],
+          events: []
+        },
+        tickets: [],
+        suggestions: [
+          { id: 'sg1', text: 'Move one treadmill from Cardio NE to Cardio SW (even out peak load)', status: 'new' },
+          { id: 'sg2', text: 'Shift two squat racks usage by scheduling time blocks', status: 'new' },
+          { id: 'sg3', text: 'Relocate stretch mats nearer to free weights during 6-8PM', status: 'new' },
+        ],
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem('dashboard:state', JSON.stringify(seeds));
+      setSuggestions(seeds.suggestions);
+      setAlerts([
+        { id: 'a1', title: 'Machine Issue Detected', machineId: 'Treadmill #1', description: 'Usage drop vs baseline detected', resolved: false, type: 'anomaly' },
+        { id: 'a2', title: 'Sensor Offline', machineId: 'Bike #1', description: 'Last heartbeat > 20 min', resolved: false, type: 'sensor' },
+      ]);
+      setUndoStack([]); setRedoStack([]);
+      window.dispatchEvent(new CustomEvent('demoReset'));
+    } catch {}
+  }
 
   return (
     <div className="nx-dashboard">
@@ -325,7 +390,7 @@ function TempDashboard() {
         .nx-mobile-tabs { display:none; }
         .nx-analytics-card { height:830px; }
         .nx-chat-card { height:830px; }
-        .nx-analytics-grid { display:grid; grid-template-columns:8fr 2fr; gap:16px; }
+        .nx-analytics-grid { display:grid; grid-template-columns:1fr; gap:16px; }
         /* Dropdown */
         .nx-dd { position:relative; }
         .nx-dd-button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; }
@@ -384,6 +449,7 @@ function TempDashboard() {
               minWidth={150}
             />
             <button className="nx-btn">Export</button>
+            <button className="nx-btn" onClick={resetDemo} title="Reset demo data" aria-label="Reset demo">Reset Demo</button>
             {/* <NotificationBell /> */}
           </div>
         </div>
@@ -392,6 +458,8 @@ function TempDashboard() {
           <div className="nx-rail">
             <button className={`nx-rail-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
             <button className={`nx-rail-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
+            <button className={`nx-rail-item ${activeTab === 'tickets' ? 'active' : ''}`} onClick={() => setActiveTab('tickets')}>Tickets</button>
+            <button className={`nx-rail-item ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => setActiveTab('maintenance')}>Maintenance</button>
             <button className={`nx-rail-item ${activeTab === 'chatbot' ? 'active' : ''}`} onClick={() => setActiveTab('chatbot')}>Chatbot</button>
       </div>
 
@@ -399,6 +467,8 @@ function TempDashboard() {
             <div className="nx-mobile-tabs">
               <button className={`nx-pill ${activeTab==='dashboard' ? 'primary' : ''}`} onClick={()=>setActiveTab('dashboard')}>Dashboard</button>
               <button className={`nx-pill ${activeTab==='analytics' ? 'primary' : ''}`} onClick={()=>setActiveTab('analytics')}>Analytics</button>
+              <button className={`nx-pill ${activeTab==='tickets' ? 'primary' : ''}`} onClick={()=>setActiveTab('tickets')}>Tickets</button>
+              <button className={`nx-pill ${activeTab==='maintenance' ? 'primary' : ''}`} onClick={()=>setActiveTab('maintenance')}>Maintenance</button>
               <button className={`nx-pill ${activeTab==='chatbot' ? 'primary' : ''}`} onClick={()=>setActiveTab('chatbot')}>Chatbot</button>
             </div>
             {activeTab === 'chatbot' ? (
@@ -415,11 +485,93 @@ function TempDashboard() {
                       <canvas ref={analyticsChartRef}></canvas>
                     </div>
                   </div>
-                  <div className="nx-card nx-analytics-card">
-                    {/* Reserved for future analytics widgets */}
+                  {/* <div className="nx-card nx-analytics-card">
+                    Reserved for future analytics widgets
+                  </div> */}
+                </div>
+                
+                {/* Maintenance Prioritization Card */}
+                <div className="nx-card" style={{marginTop:8}}>
+                  <div className="nx-card-header">
+                    <div>
+                      <div className="nx-card-title">Maintenance Prioritization</div>
+                      <div className="nx-subtle">Equipment ranked by maintenance urgency based on usage patterns</div>
+                    </div>
+                  </div>
+                  <div style={{overflow:'auto'}}>
+                    <div className="nx-thead" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr auto', padding:'12px 0'}}>
+                      <div>Equipment</div>
+                      <div>Usage Hours</div>
+                      <div>Last Maintenance</div>
+                      <div>Priority</div>
+                      <div></div>
+                    </div>
+                    {(() => {
+                      // Generate maintenance priority data
+                      const machines = [
+                        { id: 'm1', name: 'Treadmill #1', usageHours: 285, daysSinceMaint: 82, lastMaint: '2024-07-16' },
+                        { id: 'm2', name: 'Bench Press #1', usageHours: 198, daysSinceMaint: 45, lastMaint: '2024-08-22' },
+                        { id: 'm3', name: 'Elliptical #2', usageHours: 310, daysSinceMaint: 88, lastMaint: '2024-07-10' },
+                        { id: 'm4', name: 'Leg Press #1', usageHours: 245, daysSinceMaint: 67, lastMaint: '2024-08-01' },
+                        { id: 'm5', name: 'Squat Rack #2', usageHours: 267, daysSinceMaint: 53, lastMaint: '2024-08-14' },
+                        { id: 'm6', name: 'Cable Machine #3', usageHours: 189, daysSinceMaint: 91, lastMaint: '2024-07-07' },
+                        { id: 'm7', name: 'Rowing Machine #1', usageHours: 156, daysSinceMaint: 34, lastMaint: '2024-09-02' },
+                        { id: 'm8', name: 'Lat Pulldown #2', usageHours: 223, daysSinceMaint: 78, lastMaint: '2024-07-20' },
+                      ];
+                      // Calculate priority score: (usage_hours / days_since_maintenance) * 100
+                      const withPriority = machines.map(m => {
+                        const score = (m.usageHours / Math.max(m.daysSinceMaint, 1)) * 10;
+                        let level = 'Low';
+                        let levelClass = 'low';
+                        if (score > 40) { level = 'High'; levelClass = 'high'; }
+                        else if (score > 25) { level = 'Medium'; levelClass = 'medium'; }
+                        return { ...m, score, level, levelClass };
+                      });
+                      // Sort by score descending
+                      const sorted = withPriority.sort((a, b) => b.score - a.score);
+                      return sorted.map(m => (
+                        <div key={m.id} className="nx-trow" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr auto', padding:'14px 0', borderTop:'1px solid #1c1c27'}}>
+                          <div style={{color:'#e5e7eb'}}>{m.name}</div>
+                          <div className="nx-subtle">{m.usageHours}h</div>
+                          <div className="nx-subtle">{m.daysSinceMaint} days ago</div>
+                          <div>
+                            <span className={`nx-badge ${m.levelClass}`} style={{
+                              background: m.levelClass === 'high' ? 'rgba(239,68,68,0.15)' : m.levelClass === 'medium' ? 'rgba(251,191,36,0.15)' : 'rgba(34,197,94,0.15)',
+                              color: m.levelClass === 'high' ? '#ef4444' : m.levelClass === 'medium' ? '#fbbf24' : '#22c55e',
+                              border: m.levelClass === 'high' ? '1px solid rgba(239,68,68,0.4)' : m.levelClass === 'medium' ? '1px solid rgba(251,191,36,0.4)' : '1px solid rgba(34,197,94,0.4)'
+                            }}>{m.level}</span>
+                          </div>
+                          <div>
+                            <button 
+                              className="nx-pill primary" 
+                              onClick={() => {
+                                setActiveTab('maintenance');
+                                // Optionally dispatch event to pre-select date or machine
+                                window.dispatchEvent(new CustomEvent('scheduleMaintenanceFor', { detail: { machineId: m.id, machineName: m.name } }));
+                              }}
+                              aria-label={`Schedule maintenance for ${m.name}`}
+                            >
+                              Schedule
+                            </button>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
               </>
+            ) : activeTab === 'tickets' ? (
+              <div className="nx-grid" style={{marginBottom:'8px'}}>
+                <div className="nx-card" style={{gridColumn:'span 12'}}>
+                  <TicketsTab />
+                </div>
+              </div>
+            ) : activeTab === 'maintenance' ? (
+              <div className="nx-grid" style={{marginBottom:'8px'}}>
+                <div className="nx-card" style={{gridColumn:'span 12'}}>
+                  <MaintenanceTab />
+                </div>
+              </div>
             ) : (
               <>
                 {/* Top metrics */}
@@ -539,6 +691,27 @@ function TempDashboard() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* Space Allocation Suggestions */}
+                <div className="nx-grid" style={{marginTop:'8px'}}>
+                  <div className="nx-card" style={{gridColumn:'span 12'}}>
+                    <div className="nx-card-header">
+                      <div>
+                        <div className="nx-card-title">Space Allocation Suggestions</div>
+                        <div className="nx-subtle">Based on recent usage/occupancy patterns</div>
+                      </div>
+                    </div>
+                    {(suggestions || []).filter(s => s.status !== 'dismissed').map(s => (
+                      <div key={s.id} className="nx-alert-row" style={{gridTemplateColumns:'1fr auto'}}>
+                        <div style={{color:'#e5e7eb'}}>{s.text}</div>
+                        <div style={{display:'flex', gap:8}}>
+                          {s.status !== 'accepted' && <button className="nx-pill primary" onClick={()=>acceptSuggestion(s.id)} aria-label="Accept suggestion">Accept</button>}
+                          <button className="nx-pill" onClick={()=>dismissSuggestion(s.id)} aria-label="Dismiss suggestion">Dismiss</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </>
