@@ -62,6 +62,12 @@ function NxDropdown({ options, value, onChange, minWidth = 160 }) {
 function TempDashboard() {
   const displayName = 'Guest User';
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Scroll to top when tab changes
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const [stats] = useState({
     currentOccupancy: 23,
     peakHours: '5-7 PM',
@@ -371,7 +377,7 @@ function TempDashboard() {
         .nx-btn { appearance:none; border:1px solid #262633; background:#13131a; color:#e5e7eb; padding:8px 12px; border-radius:8px; font-size:13px; }
         .nx-btn.primary { background:#000000; color:#ffffff; border-color:#000000; }
         .nx-content { display:flex; gap:16px; align-items:stretch; }
-        .nx-rail { width:200px; background:#111119; border:1px solid #1d1d29; border-radius:14px; padding:12px; display:flex; flex-direction:column; min-height: 100%; }
+        .nx-rail { width:200px; background:#111119; border:1px solid #1d1d29; border-radius:14px; padding:12px; display:flex; flex-direction:column; min-height: 100%; height:1080px; align-self:stretch; }
         .nx-rail-item { padding:12px 10px; border-radius:8px; background:transparent; color:#e5e7eb; border:none; text-align:left; cursor:pointer; position:relative; }
         .nx-rail-item:hover { background: rgba(255,255,255,.04); }
         .nx-rail-item.active::after { content:""; position:absolute; left:10px; right:10px; bottom:6px; height:2px; background:#7C3AED; border-radius:2px; }
@@ -388,9 +394,9 @@ function TempDashboard() {
         .nx-chart { height:260px; }
         .nx-select { padding:6px 10px; border-radius:8px; border:1px solid #262633; background:#13131a; color:#e5e7eb; font-size:12px; }
         .nx-mobile-tabs { display:none; }
-        .nx-analytics-card { height:830px; }
-        .nx-chat-card { height:830px; }
-        .nx-analytics-grid { display:grid; grid-template-columns:1fr; gap:16px; }
+        .nx-analytics-card { height:calc(100vh - 200px); min-height:830px; }
+        .nx-chat-card { height:calc(100vh - 200px); min-height:830px; }
+        .nx-analytics-grid { display:grid; grid-template-columns:8fr 2fr; gap:16px; }
         /* Dropdown */
         .nx-dd { position:relative; }
         .nx-dd-button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; }
@@ -428,8 +434,8 @@ function TempDashboard() {
           .nx-mobile-tabs { display:flex; gap:8px; margin-bottom:12px; }
           .nx-grid { grid-template-columns:1fr; }
           .nx-analytics-grid { grid-template-columns:1fr; }
-          .nx-analytics-card { height:560px; }
-          .nx-chat-card { height:560px; }
+          .nx-analytics-card { height:calc(100vh - 200px); min-height:560px; }
+          .nx-chat-card { height:calc(100vh - 200px); min-height:560px; }
           .nx-chart { height:220px; }
         }
       `}</style>
@@ -454,26 +460,26 @@ function TempDashboard() {
           </div>
         </div>
 
-        <div className="nx-content" style={{minHeight: '830px'}}>
+        <div className="nx-content" style={{minHeight: 'calc(100vh - 200px)'}}>
           <div className="nx-rail">
-            <button className={`nx-rail-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-            <button className={`nx-rail-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
-            <button className={`nx-rail-item ${activeTab === 'tickets' ? 'active' : ''}`} onClick={() => setActiveTab('tickets')}>Tickets</button>
-            <button className={`nx-rail-item ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => setActiveTab('maintenance')}>Maintenance</button>
-            <button className={`nx-rail-item ${activeTab === 'chatbot' ? 'active' : ''}`} onClick={() => setActiveTab('chatbot')}>Chatbot</button>
+            <button className={`nx-rail-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => handleTabChange('dashboard')}>Dashboard</button>
+            <button className={`nx-rail-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleTabChange('analytics')}>Analytics</button>
+            <button className={`nx-rail-item ${activeTab === 'tickets' ? 'active' : ''}`} onClick={() => handleTabChange('tickets')}>Tickets</button>
+            <button className={`nx-rail-item ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => handleTabChange('maintenance')}>Maintenance</button>
+            <button className={`nx-rail-item ${activeTab === 'chatbot' ? 'active' : ''}`} onClick={() => handleTabChange('chatbot')}>Chatbot</button>
       </div>
 
           <div className="nx-main">
             <div className="nx-mobile-tabs">
-              <button className={`nx-pill ${activeTab==='dashboard' ? 'primary' : ''}`} onClick={()=>setActiveTab('dashboard')}>Dashboard</button>
-              <button className={`nx-pill ${activeTab==='analytics' ? 'primary' : ''}`} onClick={()=>setActiveTab('analytics')}>Analytics</button>
-              <button className={`nx-pill ${activeTab==='tickets' ? 'primary' : ''}`} onClick={()=>setActiveTab('tickets')}>Tickets</button>
-              <button className={`nx-pill ${activeTab==='maintenance' ? 'primary' : ''}`} onClick={()=>setActiveTab('maintenance')}>Maintenance</button>
-              <button className={`nx-pill ${activeTab==='chatbot' ? 'primary' : ''}`} onClick={()=>setActiveTab('chatbot')}>Chatbot</button>
+              <button className={`nx-pill ${activeTab==='dashboard' ? 'primary' : ''}`} onClick={()=>handleTabChange('dashboard')}>Dashboard</button>
+              <button className={`nx-pill ${activeTab==='analytics' ? 'primary' : ''}`} onClick={()=>handleTabChange('analytics')}>Analytics</button>
+              <button className={`nx-pill ${activeTab==='tickets' ? 'primary' : ''}`} onClick={()=>handleTabChange('tickets')}>Tickets</button>
+              <button className={`nx-pill ${activeTab==='maintenance' ? 'primary' : ''}`} onClick={()=>handleTabChange('maintenance')}>Maintenance</button>
+              <button className={`nx-pill ${activeTab==='chatbot' ? 'primary' : ''}`} onClick={()=>handleTabChange('chatbot')}>Chatbot</button>
             </div>
             {activeTab === 'chatbot' ? (
-              <div className="nx-card nx-chat-card" style={{padding:0, overflow:'hidden'}}>
-                <div style={{ transform: 'translateY(-16px)' }}>
+              <div className="nx-card nx-chat-card" style={{padding:0, overflow:'hidden', display:'flex', flexDirection:'column'}}>
+                <div style={{flex:1, display:'flex', flexDirection:'column', height:'100%'}}>
                   <ChatBot embedded={true} />
                 </div>
               </div>
@@ -485,9 +491,25 @@ function TempDashboard() {
                       <canvas ref={analyticsChartRef}></canvas>
                     </div>
                   </div>
-                  {/* <div className="nx-card nx-analytics-card">
-                    Reserved for future analytics widgets
-                  </div> */}
+                  <div className="nx-card nx-analytics-card">
+                    <div className="nx-card-header">
+                      <div className="nx-card-title">Analytics Summary</div>
+                    </div>
+                    <div style={{padding:'16px'}}>
+                      <div style={{marginBottom:'12px'}}>
+                        <div className="nx-subtle">Total Machines</div>
+                        <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>18</div>
+                      </div>
+                      <div style={{marginBottom:'12px'}}>
+                        <div className="nx-subtle">Active Today</div>
+                        <div style={{fontSize:'24px', fontWeight:'700', color:'#22c55e'}}>12</div>
+                      </div>
+                      <div style={{marginBottom:'12px'}}>
+                        <div className="nx-subtle">Maintenance Due</div>
+                        <div style={{fontSize:'24px', fontWeight:'700', color:'#ef4444'}}>3</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 {/* Maintenance Prioritization Card */}
@@ -542,17 +564,30 @@ function TempDashboard() {
                             }}>{m.level}</span>
                           </div>
                           <div>
-                            <button 
-                              className="nx-pill primary" 
+                            <span 
+                              style={{
+                                color: '#7C3AED',
+                                textDecoration: 'underline',
+                                cursor: 'pointer',
+                                fontSize: '13px'
+                              }}
                               onClick={() => {
-                                setActiveTab('maintenance');
-                                // Optionally dispatch event to pre-select date or machine
-                                window.dispatchEvent(new CustomEvent('scheduleMaintenanceFor', { detail: { machineId: m.id, machineName: m.name } }));
+                                handleTabChange('maintenance');
+                                // Dispatch event with target date
+                                setTimeout(() => {
+                                  window.dispatchEvent(new CustomEvent('scheduleMaintenanceFor', { 
+                                    detail: { 
+                                      machineId: m.id, 
+                                      machineName: m.name,
+                                      targetDate: '2025-10-17'
+                                    } 
+                                  }));
+                                }, 150);
                               }}
                               aria-label={`Schedule maintenance for ${m.name}`}
                             >
-                              Schedule
-                            </button>
+                              Oct 17
+                            </span>
                           </div>
                         </div>
                       ));

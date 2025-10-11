@@ -299,9 +299,9 @@ function ChatBot({ embedded = false }) {
       )}
 
       {/* New chat appearance below */}
-      <section className="nc-wrapper">
-        <div className="nc-panel">
-          <div className="nc-body">
+      <section className={`nc-wrapper ${embedded ? 'embedded' : ''}`}>
+        <div className={`nc-panel ${embedded ? 'embedded' : ''}`}>
+          <div className={`nc-body ${embedded ? 'embedded' : ''}`}>
             {messages.map((msg, index) => (
               <div key={index} className={`nc-row ${msg.sender === 'user' ? 'from-me' : 'from-bot'}`}>
                 <div className="nc-bubble">
