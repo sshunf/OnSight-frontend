@@ -1,5 +1,5 @@
 /* Night background starfield */
-.night-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+.night-bg { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .night-bg .starfield, .night-bg .starfield2, .night-bg .starfield3 { position: absolute; inset: 0; }
 .night-bg .starfield::before, .night-bg .starfield2::before, .night-bg .starfield3::before {
   content: "";
