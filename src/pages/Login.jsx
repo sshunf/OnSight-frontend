@@ -1,13 +1,11 @@
 import React from 'react';
 import LoginScreen from '../components/LoginScreen';
-// import AsteriskBackground from '../components/AsteriskBackground';
-import NightBackground from '../components/NightBackground';
+import AsteriskBackground from '../components/AsteriskBackground';
 
 function Login() {
   return (
     <div className="login-page min-h-screen bg-black">
-      {/* <AsteriskBackground /> */}
-      <NightBackground />
+      <AsteriskBackground />
       <LoginScreen />
     </div>
   );
