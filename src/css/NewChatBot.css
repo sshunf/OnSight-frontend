@@ -2,6 +2,13 @@
   display: flex;
   justify-content: center;
   padding: 0.75rem 1rem 1.25rem 1rem;
+  height: 100%;
+  flex-direction: column;
+}
+
+.nc-wrapper.embedded {
+  padding: 0;
+  height: 100%;
 }
 
 .nc-panel {
@@ -11,6 +18,16 @@
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
   overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.nc-panel.embedded {
+  max-width: none;
+  border-radius: 0;
+  border: none;
+  height: 100%;
 }
 
 .nc-header {
@@ -30,6 +47,12 @@
   overflow-y: auto;
   padding: 1rem;
   background: #000;
+  flex: 1;
+}
+
+.nc-body.embedded {
+  height: auto;
+  flex: 1;
 }
 
 .nc-row {

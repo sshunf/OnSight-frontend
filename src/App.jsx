@@ -11,10 +11,12 @@ import FoundersNotePage from './pages/FoundersNotePage';
 import WaitlistPage from './pages/WaitlistPage';
 import LoginScreen from './components/LoginScreen';
 import GymSelectScreen from './components/GymSelectScreen';
-import AsteriskBackground from './components/AsteriskBackground';
+// import AsteriskBackground from './components/AsteriskBackground';
+import NightBackground from './components/NightBackground';
 import Layout from './components/Layout';
 import DashboardDemoPage from './pages/DashboardDemo';
 import DashboardPage from './pages/Dashboard';
+import TempDashboardPage from './pages/TempDashboard';
 import ChatBotPage from './pages/ChatBotPage';
 import DocumentationPage from './pages/DocumentationPage';
 import FAQPage from './pages/FAQPage';
@@ -27,7 +29,8 @@ import AnalyticsPage from './pages/AnalyticsPage';
 function App() {
   return (
     <>
-      <AsteriskBackground />
+      {/* <AsteriskBackground /> */}
+      <NightBackground />
       <Routes>
         {/* Routes that need header and footer */}
         <Route path="/" element={<Layout><HomePage /></Layout>} />
@@ -46,6 +49,7 @@ function App() {
         
         {/* Routes without header and footer */}
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/temp-dashboard" element={<TempDashboardPage />} />
         <Route path="/chatbot" element={<ChatBotPage />} />\
       </Routes>
     </>
