@@ -13,10 +13,7 @@ function FoundersNoteSection() {
       <section className="px-6 relative z-10 text-center">
         <div className="mx-auto max-w-xl text-center">
           <p className="centered-text text-lg leading-relaxed mb-6">
-            We began with a simple frustration: constantly arriving at a gym only to find it packed and machines unavailable. Determined to solve this all-too-common problem, we researched existing solutions and discovered a noticeable lack of real-time occupancy data for fitness facilities.
-          </p>
-          <p className="centered-text text-lg leading-relaxed mb-20">
-            We built OnSight to empower recreation centers by providing accurate insights on both occupancy and machine usage, enabling optimized resources, smoother operations, and more satisfied members. By leveraging on-the-ground feedback from gym managers, staff, and countless gym-goers, we refined our sensors and analytics to optimize resources, reduce overhead, and ultimately enhance the member experience. Our goal is to ensure gyms run at peak efficiency—no wasted space, no unexpected crowds, and no guesswork required.
+            We’ve all been there: you show up ready to lift and the cable machine’s “out of order,” the treadmill’s squealing, or the rower just feels… off. Then it takes forever to get a tech out, and everyone’s guessing which machines actually need attention. OnSight is our fix. We track how each machine is really used, flag unusual patterns early, and suggest a simple, usage-based maintenance schedule—so staff can get ahead of issues instead of chasing breakdowns. We’ll also call out likely failures, help you decide what to repair vs. replace, and make your next buying cycle smarter. Fewer surprises. Longer equipment life. Lower repair bills. Happier members. Maintenance, but finally organized.
           </p>
         </div>
       </section>
@@ -37,9 +34,9 @@ function FoundersNoteSection() {
               <img src="/../angel_signature.jpg" alt="Angel Mendoza Signature" className="signature-image" />
             </div>
             <p className="text-xl font-medium mb-2">Co-Founder and CEO</p>
-            <p className="text-gray-400 mb-4">Incoming at Chamberlain Group</p>
+            {/* {<p className="text-gray-400 mb-4">Chamberlain Group</p>} */}
             <p className="bio-text">
-              Angel is a third year at Northwestern University pursuing his B.S and M.S in mechanical engineering.  
+              Angel is a fourth year at Northwestern University pursuing his B.S and M.S in mechanical engineering.  
               <span>&nbsp;</span>
               <a href="mailto:angelm.mendoza07@gmail.com" className="contact-link">Contact</a>.
             </p>
@@ -55,9 +52,9 @@ function FoundersNoteSection() {
               <img src="/../matt_signature.jpg" alt="Matt Martinez Signature" className="signature-image" />
             </div>
             <p className="text-xl font-medium mb-2">Co-Founder and COO</p>
-            <p className="text-gray-400 mb-4">Incoming at Nissan</p>
+            {/* {<p className="text-gray-400 mb-4">Nissan</p>} */}
             <p className="bio-text">
-              Matt is a third year at Northwestern University pursuing his B.S and M.S in mechanical engineering. 
+              Matt is a fourth year at Northwestern University pursuing his B.S and M.S in mechanical engineering. 
               <span>&nbsp;</span> 
               <a href="mailto:mattvmz03@gmail.com" className="contact-link">Contact</a>.
             </p>
