@@ -12,30 +12,30 @@ function WaitlistSection() {
     const [submitted, setSubmitted] = useState(false);
     const [popup, setPopup] = useState({ show: false, message: '', type: '' });
 
-    useEffect(() => {
-      // Create asterisk background effect
-      const createAsterisks = () => {
-        const container = document.getElementById('asteriskContainer');
-        if (!container) return;
-        container.innerHTML = '';
-        const numAsterisks = 100;
-        for (let i = 0; i < numAsterisks; i++) {
-          const asterisk = document.createElement('span');
-          asterisk.className = 'asterisk';
-          asterisk.textContent = '*';
-          const x = Math.random() * 100;
-          const y = Math.random() * 100;
-          asterisk.style.left = `${x}%`;
-          asterisk.style.top = `${y}%`;
-          container.appendChild(asterisk);
-        }
-      };
-      createAsterisks();
-      window.addEventListener('resize', createAsterisks);
-      return () => {
-        window.removeEventListener('resize', createAsterisks);
-      };
-    }, []);
+    // useEffect(() => {
+    //   // Create asterisk background effect
+    //   const createAsterisks = () => {
+    //     const container = document.getElementById('asteriskContainer');
+    //     if (!container) return;
+    //     container.innerHTML = '';
+    //     const numAsterisks = 100;
+    //     for (let i = 0; i < numAsterisks; i++) {
+    //       const asterisk = document.createElement('span');
+    //       asterisk.className = 'asterisk';
+    //       asterisk.textContent = '*';
+    //       const x = Math.random() * 100;
+    //       const y = Math.random() * 100;
+    //       asterisk.style.left = `${x}%`;
+    //       asterisk.style.top = `${y}%`;
+    //       container.appendChild(asterisk);
+    //     }
+    //   };
+    //   createAsterisks();
+    //   window.addEventListener('resize', createAsterisks);
+    //   return () => {
+    //     window.removeEventListener('resize', createAsterisks);
+    //   };
+    // }, []);
 
     useEffect(() => {
       if (popup.show) {
@@ -106,7 +106,7 @@ function WaitlistSection() {
                     id="name"
                     type="text"
                     name="name"
-                    placeholder="First/Last Name"
+                    placeholder="First And Last Name"
                     value={form.name}
                     onChange={handleChange}
                     className="w-full px-4 py-3 bg-[#0D0F17] border border-gray-800 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -154,7 +154,7 @@ function WaitlistSection() {
                   type="submit"
                   className="w-full px-6 py-3 bg-white text-black font-semibold rounded-lg hover:bg-gray-200 transition-colors duration-200"
                 >
-                  Join Waitlist
+                  Submit
                 </button>
                 {submitted && (
                   <p className="text-sm text-purple-400">
