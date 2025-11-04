@@ -22,6 +22,7 @@ import CaseStudiesPage from './pages/CaseStudiesPage';
 import BlogPage from './pages/BlogPage';
 import GaragePage from './pages/GaragePage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import TempDashboardPage from './pages/TempDashboardPage';
 
 
 function App() {
@@ -45,8 +46,9 @@ function App() {
         <Route path="/analytics" element={<AnalyticsPage />} />
         
         {/* Routes without header and footer */}
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/chatbot" element={<ChatBotPage />} />\
+        <Route path="/dashboard" element={<TempDashboardPage />} />
+        <Route path="/dashboard-old" element={<DashboardPage />} />
+        <Route path="/chatbot" element={<ChatBotPage />} />
       </Routes>
     </>
   );
