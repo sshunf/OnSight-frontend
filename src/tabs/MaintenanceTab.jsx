@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import MaintenanceCalendar from '../components/MaintenanceCalendar.jsx';
 import WorkerTasks from '../components/WorkerTasks.jsx';
 import EventCard from '../components/EventCard.jsx';
+import { EMPLOYEES, getPositionColor, getInitials } from '../data/employees';
 
 // Local storage key (reuse dashboard pattern). If a higher-level state exists later,
 // this component can be swapped to use that provider without changing its UI.
@@ -41,6 +42,20 @@ export default function MaintenanceTab() {
   const [events, setEvents] = useState([]);
   const [activeEvent, setActiveEvent] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayISO);
+  const [showWorkerSelector, setShowWorkerSelector] = useState(false);
+
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const hasModal = activeEvent || showWorkerSelector;
+    if (hasModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [activeEvent, showWorkerSelector]);
 
   // Remove duplicate tasks that share the same title for a given day
   function dedupeByDateAndTitle(list) {
@@ -213,12 +228,19 @@ export default function MaintenanceTab() {
             <div className="nx-subtle">Select a date to set manual maintenance. Highlights show upcoming dates.</div>
           </div>
           <div style={{display:'flex', gap:8}}>
-            <button className="nx-pill" onClick={()=>setActiveEvent({ id: '__add_event__', date: selectedDate })} aria-label="Add event" style={{width:40, height:40, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'600'}}>+</button>
+            <button className="nx-pill" onClick={()=>setActiveEvent({ id: '__add_event__', date: selectedDate })} aria-label="Add event" style={{width:40, height:40, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/>
+              </svg>
+            </button>
             <button className="nx-pill" onClick={()=>{
-              const name = window.prompt('Enter worker name for demo view', localStorage.getItem('currentWorker')||'Soorya');
-              if (name != null) localStorage.setItem('currentWorker', name);
-              setActiveEvent({ id: '__worker_view__' });
-            }} aria-label="Open worker view" style={{minWidth:'180px', padding:'0 16px'}}>Open as Worker View</button>
+              setShowWorkerSelector(true);
+            }} aria-label="Open worker view" style={{minWidth:'180px', padding:'0 16px'}}>
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20" style={{marginRight: '6px', display: 'inline-block'}}>
+                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+              </svg>
+              Open as Worker View
+            </button>
           </div>
         </div>
         <div style={{display:'grid', gridTemplateColumns:'4fr 1fr', gap:16}}>
@@ -243,7 +265,9 @@ export default function MaintenanceTab() {
             <div className="nx-card-title" style={{marginBottom:8}}>
               Tasks — {(() => {
                 try {
-                  const date = new Date(selectedDate);
+                  // Parse ISO date correctly to avoid timezone issues
+                  const [year, month, day] = selectedDate.split('-').map(Number);
+                  const date = new Date(year, month - 1, day);
                   return date.toLocaleDateString(undefined, {
                     year: 'numeric',
                     month: 'long',
@@ -305,22 +329,19 @@ export default function MaintenanceTab() {
       {activeEvent && activeEvent.id !== '__worker_view__' && activeEvent.id !== '__add_event__' && (
         <EventCard
           event={activeEvent}
-          onClose={()=>setActiveEvent(null)}
-          onComplete={(ev)=>{
-            const updated = events.map(e=> e.id===ev.id ? { ...e, status:'Completed' } : e);
+          onClose={() => setActiveEvent(null)}
+          onComplete={(ev) => {
+            const updated = events.map(e => e.id === ev.id ? { ...e, status: 'Completed' } : e);
             setEvents(updated);
             persist({ events: updated });
             setActiveEvent(null);
             window.dispatchEvent(new CustomEvent('maintenanceEventUpdated', { detail: ev }));
           }}
-          onReassign={(ev)=>{
-            const workerPool = ['Soorya','Shun','Kevin','Matias','Matt','Angel'];
-            const name = window.prompt(`Assign to (${workerPool.join(', ')}):`, ev.assignedTo || '');
-            if (name == null) return;
-            const finalName = workerPool.includes(name) ? name : (workerPool[0]);
-            const updated = events.map(e=> e.id===ev.id ? { ...e, assignedTo: finalName } : e);
+          onReassign={(ev) => {
+            const updated = events.map(e => e.id === ev.id ? { ...e, assignedTo: ev.assignedTo } : e);
             setEvents(updated);
             persist({ events: updated });
+            setActiveEvent(null);
             window.dispatchEvent(new CustomEvent('maintenanceEventUpdated', { detail: ev }));
           }}
         />
@@ -369,6 +390,116 @@ export default function MaintenanceTab() {
             <WorkerTasks />
             <div className="nx-modal-actions" style={{marginTop:12}}>
               <button className="nx-pill" onClick={()=>setActiveEvent(null)} aria-label="Close worker view">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Worker Selector Modal */}
+      {showWorkerSelector && (
+        <div className="nx-modal-overlay" role="dialog" aria-modal="true" onClick={() => setShowWorkerSelector(false)}>
+          <div className="nx-card" style={{width: 'min(680px, 94vw)', maxHeight: '85vh', display: 'flex', flexDirection: 'column'}} onClick={(e) => e.stopPropagation()}>
+            <div className="nx-card-header">
+              <div>
+                <div className="nx-card-title">Select Worker to View</div>
+                <div className="nx-subtle">Choose an employee to see their assigned tasks</div>
+              </div>
+              <button className="nx-pill" onClick={() => setShowWorkerSelector(false)}>
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20" style={{marginRight: '4px', display: 'inline-block'}}>
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                </svg>
+                Close
+              </button>
+            </div>
+            <div style={{flex: 1, overflow: 'auto', padding: '8px 0'}}>
+              {EMPLOYEES.map(emp => {
+                const currentWorker = localStorage.getItem('currentWorker') || 'Soorya';
+                const isActive = emp.name === currentWorker;
+                const positionColor = getPositionColor(emp.position);
+                
+                return (
+                  <div
+                    key={emp.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      padding: '14px 16px',
+                      cursor: 'pointer',
+                      background: isActive ? 'rgba(124, 58, 237, 0.12)' : 'transparent',
+                      borderTop: '1px solid #1c1c27',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) e.currentTarget.style.background = 'transparent';
+                    }}
+                    onClick={() => {
+                      localStorage.setItem('currentWorker', emp.name);
+                      setShowWorkerSelector(false);
+                      setActiveEvent({ id: '__worker_view__' });
+                    }}
+                  >
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '10px',
+                      background: `linear-gradient(135deg, ${positionColor} 0%, ${positionColor}dd 100%)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: '700',
+                      fontSize: '16px',
+                      color: '#ffffff',
+                      flexShrink: 0
+                    }}>
+                      {getInitials(emp.name)}
+                    </div>
+                    <div style={{flex: 1}}>
+                      <div style={{fontSize: '16px', fontWeight: 600, color: '#ffffff', marginBottom: '4px'}}>
+                        {emp.name}
+                        {isActive && <span style={{marginLeft: '8px', fontSize: '12px', color: '#c4b5fd', fontWeight: '400'}}>(Current)</span>}
+                      </div>
+                      <div style={{fontSize: '13px', color: '#94a3b8', marginBottom: '6px'}}>{emp.position}</div>
+                      {emp.certifications && emp.certifications.length > 0 && (
+                        <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+                          {emp.certifications.slice(0, 3).map((cert, idx) => (
+                            <span key={idx} style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              background: 'rgba(124, 58, 237, 0.12)',
+                              border: '1px solid rgba(124, 58, 237, 0.2)',
+                              borderRadius: '4px',
+                              color: '#c4b5fd'
+                            }}>
+                              {cert}
+                            </span>
+                          ))}
+                          {emp.certifications.length > 3 && (
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              background: 'rgba(124, 58, 237, 0.12)',
+                              border: '1px solid rgba(124, 58, 237, 0.2)',
+                              borderRadius: '4px',
+                              color: '#c4b5fd'
+                            }}>
+                              +{emp.certifications.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {isActive && (
+                      <svg width="20" height="20" fill="#7c3aed" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                      </svg>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
