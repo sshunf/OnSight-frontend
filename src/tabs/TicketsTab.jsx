@@ -24,6 +24,50 @@ function generateTimes() {
   return times;
 }
 
+// Sample machine list for autocomplete
+const MACHINES = [
+  { id: 'TM-001', name: 'Treadmill #1', type: 'Cardio' },
+  { id: 'TM-002', name: 'Treadmill #2', type: 'Cardio' },
+  { id: 'TM-003', name: 'Treadmill #3', type: 'Cardio' },
+  { id: 'BP-001', name: 'Bench Press #1', type: 'Strength' },
+  { id: 'BP-002', name: 'Bench Press #2', type: 'Strength' },
+  { id: 'EL-001', name: 'Elliptical #1', type: 'Cardio' },
+  { id: 'EL-002', name: 'Elliptical #2', type: 'Cardio' },
+  { id: 'BK-001', name: 'Bike #1', type: 'Cardio' },
+  { id: 'BK-002', name: 'Bike #2', type: 'Cardio' },
+  { id: 'SR-001', name: 'Squat Rack #1', type: 'Strength' },
+  { id: 'SR-002', name: 'Squat Rack #2', type: 'Strength' },
+  { id: 'RM-001', name: 'Rowing Machine #1', type: 'Cardio' },
+  { id: 'RM-002', name: 'Rowing Machine #2', type: 'Cardio' },
+  { id: 'SM-001', name: 'Smith Machine #1', type: 'Strength' },
+  { id: 'LP-001', name: 'Leg Press #1', type: 'Strength' },
+];
+
+// Component to highlight matching text
+function HighlightMatch({ text, query }) {
+  if (!query || !text) return <span>{text}</span>;
+  
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const index = lowerText.indexOf(lowerQuery);
+  
+  if (index === -1) {
+    return <span>{text}</span>;
+  }
+  
+  const before = text.substring(0, index);
+  const match = text.substring(index, index + query.length);
+  const after = text.substring(index + query.length);
+  
+  return (
+    <span>
+      {before}
+      <span className="tk-highlight">{match}</span>
+      {after}
+    </span>
+  );
+}
+
 export default function TicketsTab() {
   const [tickets, setTickets] = useState([]);
   const [active, setActive] = useState(null);
@@ -33,8 +77,12 @@ export default function TicketsTab() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDateISO, setPickerDateISO] = useState('');
   const [pickerTime, setPickerTime] = useState('10:00 AM');
+  const [showMachineAutocomplete, setShowMachineAutocomplete] = useState(false);
+  const [filteredMachines, setFilteredMachines] = useState([]);
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
+  const machineInputRef = useRef(null);
+  const autocompleteRef = useRef(null);
 
   useEffect(() => {
     const s = readState();
@@ -42,25 +90,62 @@ export default function TicketsTab() {
     setTickets(list);
   }, []);
 
-  // Listen for automatic ticket updates
-  useEffect(() => {
-    const handleTicketsUpdated = () => {
-      const s = readState();
-      const list = (s.tickets || []);
-      setTickets(list);
-    };
-
-    window.addEventListener('ticketsUpdated', handleTicketsUpdated);
-    return () => window.removeEventListener('ticketsUpdated', handleTicketsUpdated);
-  }, []);
-
   useEffect(() => {
     if (isCreateOpen) { setTimeout(() => createTitleRef.current?.focus(), 0); }
   }, [isCreateOpen]);
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const hasModal = active || isCreateOpen || showDatePicker;
+    if (hasModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [active, isCreateOpen, showDatePicker]);
+
+  // Handle clicks outside autocomplete to close it
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target) &&
+          machineInputRef.current && !machineInputRef.current.contains(e.target)) {
+        setShowMachineAutocomplete(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   function persist(next) {
     writeState((curr) => ({ ...curr, tickets: next, updatedAt: new Date().toISOString() }));
   }
+
+  // Handle machine ID input change with autocomplete
+  const handleMachineIdChange = (value) => {
+    setForm({...form, machineId: value});
+    
+    if (value.trim().length > 0) {
+      const filtered = MACHINES.filter(machine => 
+        machine.id.toLowerCase().includes(value.toLowerCase()) ||
+        machine.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredMachines(filtered);
+      setShowMachineAutocomplete(filtered.length > 0);
+    } else {
+      setShowMachineAutocomplete(false);
+      setFilteredMachines([]);
+    }
+  };
+
+  // Handle machine selection from autocomplete
+  const handleMachineSelect = (machine) => {
+    setForm({...form, machineId: machine.id});
+    setShowMachineAutocomplete(false);
+    setFilteredMachines([]);
+  };
 
   const openCount = useMemo(() => tickets.filter(t => t.status !== 'Closed').length, [tickets]);
   const visible = useMemo(() => showOpenOnly ? tickets.filter(t => t.status !== 'Closed') : tickets, [tickets, showOpenOnly]);
@@ -93,27 +178,28 @@ export default function TicketsTab() {
     <div>
       <style>{`
         /* Theme the date input and custom dropdown to match site colors */
-        .tk-date { background:#13131a; border:1px solid #262633; color:#e5e7eb; border-radius:8px; padding:8px 10px; height:40px; display:flex; align-items:center; justify-content:space-between; }
+        .tk-date { background:#13131a; border:1px solid #262633; color:#e5e7eb; border-radius:8px; padding:8px 10px; height:40px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
         .nx-dd { position:relative; }
-        .nx-dd-button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; background:#13131a; color:#e5e7eb; border:1px solid #262633; border-radius:8px; padding:8px 10px; height:40px; }
+        .nx-dd-button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; background:#13131a; color:#e5e7eb; border:1px solid #262633; border-radius:8px; padding:8px 10px; height:40px; cursor:pointer; outline:none; }
+        .nx-dd-button:focus { border-color:#9b8cfb; outline:4px solid rgba(124,58,237,.18); }
         .nx-dd-menu { position:absolute; top:calc(100% + 8px); left:0; right:0; background:#111119; border:1px solid #1d1d29; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,0.45); padding:6px; z-index:60; }
         .nx-dd-item { padding:8px 10px; border-radius:8px; cursor:pointer; color:#e5e7eb; font-size:13px; }
         .nx-dd-item[aria-selected="true"], .nx-dd-item:hover { background:rgba(124,58,237,0.18); color:#c4b5fd; }
         .nx-select { height:40px; }
-        .nx-pill { height:32px; }
+        .nx-pill { height:32px; cursor:pointer; }
         .tk-picker { display:grid; grid-template-columns: 1fr 220px; gap:16px; align-items:start; }
         .tk-time-list { border-left:1px solid #1d1d29; padding-left:12px; overflow:auto; max-height:600px; }
         .tk-time-item { display:flex; align-items:center; height:40px; padding:0 10px; border-radius:8px; cursor:pointer; color:#e5e7eb; }
         .tk-time-item:hover { background: rgba(255,255,255,.06); }
         .tk-time-item.active { background: rgba(124,58,237,.18); color:#fff; }
         .tk-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:12px; border-top:1px solid #1d1d29; }
-        .tk-chip { background:#13131a; border:1px solid #262633; color:#e5e7eb; border-radius:10px; padding:8px 12px; }
+        .tk-chip { background:#13131a; border:1px solid #262633; color:#e5e7eb; border-radius:10px; padding:8px 12px; cursor:pointer; }
 
         /* Create Ticket modal refreshed styles */
         .tk-modal { width:min(640px, 80vw) !important; max-width:640px !important; border:1px solid #1d1d29; background:#0f0f16; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.6); overflow:hidden; }
         .tk-header { display:flex; align-items:flex-start; justify-content:space-between; padding:20px 24px; border-bottom:1px solid #1d1d29; }
         .tk-title { font-size:18px; font-weight:600; color:#e5e7eb; }
-        .tk-close { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; color:#a1a1b3; background:transparent; border:1px solid transparent; }
+        .tk-close { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; color:#a1a1b3; background:transparent; border:1px solid transparent; cursor:pointer; }
         .tk-close:hover { background:#181824; color:#e5e7eb; }
         .tk-close:focus { outline:2px solid rgba(124,58,237,.5); outline-offset:2px; }
         .tk-body { padding:20px 24px; }
@@ -122,16 +208,52 @@ export default function TicketsTab() {
         .tk-field { display:flex; flex-direction:column; }
         .tk-label { color:#c7c7d2; font-size:13px; margin-bottom:6px; }
         .tk-helper { color:#8b8ba1; font-size:12px; margin-top:6px; }
-        .tk-input, .tk-select { height:44px; border-radius:10px; border:1px solid #262633; background:#13131a; color:#e5e7eb; padding:0 12px; }
+        .tk-input { height:44px; border-radius:10px; border:1px solid #262633; background:#13131a; color:#e5e7eb; padding:0 12px; }
         .tk-input::placeholder { color:#7b7b8f; }
-        .tk-input:focus, .tk-select:focus, .tk-date:focus { border-color:#9b8cfb; outline:4px solid rgba(124,58,237,.18); }
+        .tk-input:focus, .tk-date:focus { border-color:#9b8cfb; outline:4px solid rgba(124,58,237,.18); }
         .tk-footer-bar { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:10px; padding:14px 24px; border-top:1px solid #1d1d29; background:#0f0f16; }
-        .tk-btn { height:40px; border-radius:10px; padding:0 14px; border:1px solid #2a2a38; color:#e5e7eb; background:#161624; }
+        .tk-btn { height:40px; border-radius:10px; padding:0 14px; border:1px solid #2a2a38; color:#e5e7eb; background:#161624; cursor:pointer; }
         .tk-btn:hover { background:#1b1b2b; }
         .tk-btn:focus { outline:2px solid rgba(124,58,237,.5); outline-offset:2px; }
-        .tk-btn.primary { background:#7c3aed; border-color:#7c3aed; color:#fff; }
+        .tk-btn.primary { background:#7c3aed; border-color:#7c3aed; color:#fff; cursor:pointer; }
         .tk-btn.primary:hover { background:#6d28d9; }
         .tk-btn[disabled] { opacity:.45; cursor:not-allowed; }
+
+        /* Autocomplete dropdown styles */
+        .tk-autocomplete { 
+          position: absolute; 
+          top: calc(100% - 28px); 
+          left: 0; 
+          right: 0; 
+          background: #111119; 
+          border: 1px solid #1d1d29; 
+          border-radius: 10px; 
+          box-shadow: 0 10px 24px rgba(0,0,0,0.45); 
+          max-height: 240px; 
+          overflow-y: auto; 
+          z-index: 70;
+        }
+        .tk-autocomplete-item { 
+          padding: 10px 12px; 
+          cursor: pointer; 
+          border-bottom: 1px solid #1c1c27;
+          transition: background 0.15s ease;
+        }
+        .tk-autocomplete-item:last-child { 
+          border-bottom: none; 
+        }
+        .tk-autocomplete-item:hover { 
+          background: rgba(124,58,237,0.15); 
+        }
+
+        /* Highlight matching text - subtle glassy effect */
+        .tk-highlight {
+          background: rgba(124, 58, 237, 0.12);
+          color: #d4c5fd;
+          padding: 1px 3px;
+          border-radius: 3px;
+          border: 1px solid rgba(124, 58, 237, 0.15);
+        }
       `}</style>
 
       {/* small in-house dropdown */}
@@ -154,14 +276,7 @@ export default function TicketsTab() {
           {visible.map(t => (
             <div key={t.id} className="nx-alert-row" style={{gridTemplateColumns:'1fr auto'}}>
               <div>
-                <div style={{color:'#e5e7eb', display:'flex', alignItems:'center', gap:8}}>
-                  {t.title}
-                  {t.autoGenerated && (
-                    <span style={{fontSize:10, padding:'2px 6px', background:'rgba(124,58,237,0.2)', color:'#c4b5fd', borderRadius:4, border:'1px solid rgba(124,58,237,0.3)'}}>
-                      AUTO
-                    </span>
-                  )}
-                </div>
+                <div style={{color:'#e5e7eb'}}>{t.title}</div>
                 <div className="nx-subtle">Machine: {t.machineId || 'N/A'} • Worker: {t.worker || 'N/A'} • {new Date(t.createdAt).toLocaleString()}</div>
                 <div className="nx-subtle">Result: {t.result}</div>
               </div>
@@ -190,26 +305,10 @@ export default function TicketsTab() {
             <div className="nx-subtle">Worker: {active.worker}</div>
             <div className="nx-subtle">Result: {active.result}</div>
             <div className="nx-subtle">Created: {new Date(active.createdAt).toLocaleString()}</div>
-            {active.autoGenerated && (
-              <div style={{marginTop:8, padding:8, background:'rgba(124,58,237,0.1)', borderRadius:8, border:'1px solid rgba(124,58,237,0.3)'}}>
-                <div className="nx-subtle" style={{fontSize:11, color:'#c4b5fd'}}>
-                  <strong>Auto-generated</strong> based on usage data analysis
-                </div>
-              </div>
-            )}
             {active.notes && (
               <div style={{marginTop:8}}>
                 <div className="nx-card-title" style={{fontSize:12, color:'#a3a3b2'}}>Notes</div>
-                <div className="nx-subtle">
-                  {typeof active.notes === 'object' ? (
-                    <div style={{display:'grid', gap:4}}>
-                      {active.notes.reason && <div>Reason: {active.notes.reason}</div>}
-                      {active.notes.avgMinutes !== undefined && <div>Avg Minutes: {active.notes.avgMinutes.toFixed(1)}</div>}
-                      {active.notes.threshold && <div>Threshold: {active.notes.threshold}</div>}
-                      {active.notes.dropPercent && <div>Drop: {active.notes.dropPercent}%</div>}
-                    </div>
-                  ) : JSON.stringify(active.notes)}
-                </div>
+                <div className="nx-subtle">{JSON.stringify(active.notes)}</div>
               </div>
             )}
             <div className="nx-modal-actions">
@@ -255,28 +354,61 @@ export default function TicketsTab() {
                   <label className="tk-label" htmlFor="tkTitle">Title <span style={{color:'#8b8ba1'}}>(required)</span></label>
                   <input id="tkTitle" ref={createTitleRef} className="tk-input" placeholder="Short summary (e.g., Replace belt on Treadmill 3)" value={form.title} onChange={(e)=>setForm({...form, title:e.target.value})} />
                 </div>
-                <div className="tk-field">
+                <div className="tk-field" style={{position: 'relative'}}>
                   <label className="tk-label" htmlFor="tkMachine">Machine ID</label>
-                  <input id="tkMachine" className="tk-input" placeholder="e.g., TM-003" value={form.machineId} onChange={(e)=>setForm({...form, machineId:e.target.value})} />
+                  <input 
+                    id="tkMachine" 
+                    ref={machineInputRef}
+                    className="tk-input" 
+                    placeholder="e.g., TM-003" 
+                    value={form.machineId} 
+                    onChange={(e)=>handleMachineIdChange(e.target.value)}
+                    onFocus={(e)=>{
+                      if (e.target.value.trim().length > 0) {
+                        const filtered = MACHINES.filter(machine => 
+                          machine.id.toLowerCase().includes(e.target.value.toLowerCase()) ||
+                          machine.name.toLowerCase().includes(e.target.value.toLowerCase())
+                        );
+                        setFilteredMachines(filtered);
+                        setShowMachineAutocomplete(filtered.length > 0);
+                      }
+                    }}
+                  />
+                  {showMachineAutocomplete && filteredMachines.length > 0 && (
+                    <div ref={autocompleteRef} className="tk-autocomplete">
+                      {filteredMachines.map(machine => (
+                        <div 
+                          key={machine.id} 
+                          className="tk-autocomplete-item"
+                          onClick={() => handleMachineSelect(machine)}
+                        >
+                          <div style={{fontWeight: '500', color: '#e5e7eb'}}>
+                            <HighlightMatch text={machine.id} query={form.machineId} />
+                          </div>
+                          <div style={{fontSize: '12px', color: '#94a3b8'}}>
+                            <HighlightMatch text={`${machine.name} • ${machine.type}`} query={form.machineId} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="tk-helper">Optional. Helps route parts and history.</div>
                 </div>
                 <div className="tk-field">
                   <label className="tk-label" htmlFor="tkWorker">Assign To</label>
-                  <div className="tk-select" style={{padding:0}}>
-                    <TicketDropdown
-                      value={form.worker || ''}
-                      onChange={(v)=>setForm({...form, worker:v})}
-                      options={[
-                        {value:'',label:'Select worker…'},
-                        {value:'Angel',label:'Angel'},
-                        {value:'Soorya',label:'Soorya'},
-                        {value:'Matt',label:'Matt'},
-                        {value:'Shun',label:'Shun'},
-                        {value:'Kevin',label:'Kevin'},
-                        {value:'Matias',label:'Matias'},
-                      ]}
-                    />
-                  </div>
+                  <TicketDropdown
+                    value={form.worker || ''}
+                    onChange={(v)=>setForm({...form, worker:v})}
+                    options={[
+                      {value:'',label:'Select worker…'},
+                      {value:'Angel',label:'Angel'},
+                      {value:'Soorya',label:'Soorya'},
+                      {value:'Matt',label:'Matt'},
+                      {value:'Shun',label:'Shun'},
+                      {value:'Kevin',label:'Kevin'},
+                      {value:'Matias',label:'Matias'},
+                    ]}
+                  />
                 </div>
                 <div className="tk-field">
                   <label className="tk-label" htmlFor="tkDeadline">Deadline</label>
