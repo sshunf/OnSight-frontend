@@ -11,7 +11,7 @@ import FoundersNotePage from './pages/FoundersNotePage';
 import WaitlistPage from './pages/WaitlistPage';
 import LoginScreen from './components/LoginScreen';
 import GymSelectScreen from './components/GymSelectScreen';
-import AsteriskBackground from './components/AsteriskBackground';
+import NightBackground from './components/NightBackground';
 import Layout from './components/Layout';
 import DashboardDemoPage from './pages/DashboardDemo';
 import DashboardPage from './pages/Dashboard';
@@ -28,7 +28,7 @@ import TempDashboardPage from './pages/TempDashboardPage';
 function App() {
   return (
     <>
-      <AsteriskBackground />
+      <NightBackground />
       <Routes>
         {/* Routes that need header and footer */}
         <Route path="/" element={<Layout><HomePage /></Layout>} />
