@@ -253,7 +253,11 @@ function TempDashboard() {
       const data = await res.json();
       if (!Array.isArray(data.result)) return;
       
-      const sortedResult = [...data.result].sort((a, b) => (a.machineName || a.machineId).localeCompare(b.machineName || b.machineId));
+      const sortedResult = [...data.result].sort((a, b) => {
+        const aName = String(a.machineName || a.machineId || '');
+        const bName = String(b.machineName || b.machineId || '');
+        return aName.localeCompare(bName);
+      });
       const labels = sortedResult.map(d => d.machineName || (d.machineId ? d.machineId : 'Unknown'));
       const values = sortedResult.map(d => d.avgMinutes);
       const maxValue = Math.max(...values, 0);
@@ -587,6 +591,14 @@ function TempDashboard() {
     persistSuggestions(next);
   }
 
+  const back = async() => {
+    try {
+      navigate('/login');
+    } catch (error) {
+      console.error('Error navigating back to login:', error);
+    }
+  }
+
   if (!user) return null;
 
   return (
@@ -672,6 +684,9 @@ function TempDashboard() {
         <div className="nx-header">
           <div className="nx-title-row">
             <div className="nx-title">{displayName || 'Dashboard'}</div>
+            <button onClick={back} className="back-button">
+              Return To Home
+            </button>
           </div>
           <div className="nx-actions">
             <button className="nx-btn">Export</button>
