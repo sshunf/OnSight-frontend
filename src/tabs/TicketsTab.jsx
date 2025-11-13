@@ -1,14 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MaintenanceCalendar from '../components/MaintenanceCalendar.jsx';
 
-const DASHBOARD_STATE_KEY = 'dashboard:state';
-function readState() { try { return JSON.parse(localStorage.getItem(DASHBOARD_STATE_KEY) || '{}'); } catch { return {}; } }
-function writeState(updater) {
-  const current = readState();
-  const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
-  localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(next));
-  return next;
-}
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 function generateTimes() {
   const times = [];
@@ -70,10 +63,20 @@ function HighlightMatch({ text, query }) {
 
 export default function TicketsTab() {
   const [tickets, setTickets] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [active, setActive] = useState(null);
   const [showOpenOnly, setShowOpenOnly] = useState(true);
   const [isCreateOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', machineId: '', worker: '', deadline: '' });
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [form, setForm] = useState({ 
+    title: '', 
+    machineName: '', 
+    worker: '', 
+    deadline: '', 
+    checklistText: '',
+    sendEmail: false
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDateISO, setPickerDateISO] = useState('');
   const [pickerTime, setPickerTime] = useState('10:00 AM');
@@ -84,10 +87,135 @@ export default function TicketsTab() {
   const machineInputRef = useRef(null);
   const autocompleteRef = useRef(null);
 
-  useEffect(() => {
-    const s = readState();
-    const list = (s.tickets || []);
-    setTickets(list);
+  async function fetchStatus() {
+    if (!backendURL) return;
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const statusRes = await fetch(`${backendURL}/api/maintenance/status`);
+      let statusData = {};
+      if (statusRes.ok) {
+        statusData = await statusRes.json();
+        setStatuses(Array.isArray(statusData.statuses) ? statusData.statuses : []);
+        setTickets(Array.isArray(statusData.tickets) ? statusData.tickets : []);
+      } else {
+        setErrorMsg(`Status HTTP ${statusRes.status}`);
+      }
+      const ticketsRes = await fetch(`${backendURL}/api/maintenance/tickets`);
+      if (ticketsRes.ok) {
+        const tData = await ticketsRes.json();
+        if (Array.isArray(tData)) setTickets(tData);
+        else if (Array.isArray(tData.tickets)) setTickets(tData.tickets);
+      }
+    } catch (e) {
+      console.error('Fetch status failed', e);
+      setErrorMsg(e.message || 'Failed to load');
+      setTickets([]);
+      setStatuses([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function scanIntervals() {
+    setErrorMsg('');
+    try {
+      const res = await fetch(`${backendURL}/api/maintenance/scan`, { method: 'POST' });
+      if (!res.ok) throw new Error(`Scan HTTP ${res.status}`);
+      await fetchStatus();
+    } catch (e) {
+      console.error('Scan failed', e);
+      setErrorMsg(e.message);
+    }
+  }
+
+  async function closeTicket(ticketId) {
+    setErrorMsg('');
+    try {
+      const ticket = tickets.find(t => t._id === ticketId);
+      let checklistUpdates = [];
+      if (ticket && Array.isArray(ticket.checklist)) {
+        checklistUpdates = ticket.checklist
+          .map(c => {
+            if (typeof c === 'string') return { item: c, done: false };
+            if (c && typeof c === 'object' && c.item) return { item: c.item, done: !!c.done };
+            return null;
+          })
+          .filter(Boolean);
+      }
+      const res = await fetch(`${backendURL}/api/maintenance/tickets/${ticketId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklistUpdates })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Close HTTP ${res.status}`);
+      }
+      await fetchStatus();
+    } catch (e) {
+      console.error('Close failed', e);
+      setErrorMsg(e.message);
+    }
+  }
+
+  function toggleChecklistItem(ticketId, idx) {
+    setTickets(prev => prev.map(t => {
+      if (t._id !== ticketId) return t;
+      const cloned = { ...t };
+      cloned.checklist = (cloned.checklist || []).map((item, i) => {
+        if (i !== idx) return item;
+        if (typeof item === 'string') return { item, done: true };
+        return { ...item, done: !item.done };
+      });
+      return cloned;
+    }));
+  }
+
+  async function onCreate() {
+    if (!form.title || !form.machineName) return;
+    setErrorMsg('');
+    const checklist = form.checklistText
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+    try {
+      const res = await fetch(`${backendURL}/api/maintenance/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title,
+          machineName: form.machineName,
+          worker: form.worker || undefined,
+          deadline: form.deadline || undefined,
+          checklist,
+          sendEmail: form.sendEmail
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Create HTTP ${res.status}`);
+      }
+      await fetchStatus();
+      setCreateOpen(false);
+      setForm({
+        title: '',
+        machineName: '',
+        worker: '',
+        deadline: '',
+        checklistText: '',
+        sendEmail: false
+      });
+    } catch (e) {
+      console.error('Create failed', e);
+      setErrorMsg(e.message);
+    }
+  }
+
+  useEffect(() => { 
+    if (backendURL) {
+      fetchStatus(); 
+    }
   }, []);
 
   useEffect(() => {
@@ -119,13 +247,9 @@ export default function TicketsTab() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  function persist(next) {
-    writeState((curr) => ({ ...curr, tickets: next, updatedAt: new Date().toISOString() }));
-  }
-
-  // Handle machine ID input change with autocomplete
-  const handleMachineIdChange = (value) => {
-    setForm({...form, machineId: value});
+  // Handle machine name input change with autocomplete
+  const handleMachineNameChange = (value) => {
+    setForm({...form, machineName: value});
     
     if (value.trim().length > 0) {
       const filtered = MACHINES.filter(machine => 
@@ -142,29 +266,30 @@ export default function TicketsTab() {
 
   // Handle machine selection from autocomplete
   const handleMachineSelect = (machine) => {
-    setForm({...form, machineId: machine.id});
+    setForm({...form, machineName: machine.name});
     setShowMachineAutocomplete(false);
     setFilteredMachines([]);
   };
 
-  const openCount = useMemo(() => tickets.filter(t => t.status !== 'Closed').length, [tickets]);
-  const visible = useMemo(() => showOpenOnly ? tickets.filter(t => t.status !== 'Closed') : tickets, [tickets, showOpenOnly]);
+  const openCount = useMemo(() => tickets.filter(t => t.status === 'open').length, [tickets]);
 
-  function onCreate() {
-    if (!form.title) return;
-    const next = [{
-      id: `t_${Date.now()}`,
-      title: form.title,
-      machineId: form.machineId || 'N/A',
-      worker: form.worker || 'Unassigned',
-      result: 'created',
-      notes: {},
-      status: 'Open',
-      deadline: form.deadline || '',
-      createdAt: new Date().toISOString(),
-    }, ...tickets];
-    setTickets(next); persist(next); setCreateOpen(false); setForm({ title: '', machineId: '', worker: '', deadline: '' });
-  }
+  const sortedTickets = useMemo(() => {
+    const arr = [...tickets];
+    arr.sort((a, b) => {
+      if ((a.status === 'open') !== (b.status === 'open')) return a.status === 'open' ? -1 : 1;
+      const aAuto = !!a.ruleKey, bAuto = !!b.ruleKey;
+      if (aAuto !== bAuto) return aAuto ? -1 : 1;
+      if ((a.ruleUnit || '') !== (b.ruleUnit || '')) return (a.ruleUnit || '').localeCompare(b.ruleUnit || '');
+      if ((a.ruleInterval || 0) !== (b.ruleInterval || 0)) return (a.ruleInterval || 0) - (b.ruleInterval || 0);
+      return (a.dueAtUsage || 0) - (b.dueAtUsage || 0);
+    });
+    return arr;
+  }, [tickets]);
+
+  const visibleTickets = useMemo(
+    () => (showOpenOnly ? sortedTickets.filter(t => t.status === 'open') : sortedTickets),
+    [sortedTickets, showOpenOnly]
+  );
 
   function todayISO() {
     const d = new Date(); const pad = (n)=>String(n).padStart(2,'0');
@@ -256,37 +381,109 @@ export default function TicketsTab() {
         }
       `}</style>
 
-      {/* small in-house dropdown */}
-      {null}
-      <div className="nx-card" style={{marginBottom:16, height:'830px', display:'flex', flexDirection:'column'}}>
-        <div className="nx-card-header" style={{alignItems:'center'}}>
+      {errorMsg && (
+        <div style={{ marginBottom:12, color:'#f87171', fontSize:13 }}>Error: {errorMsg}</div>
+      )}
+
+      {backendURL && (
+        <div className="nx-card" style={{ marginBottom:16, display:'flex', flexDirection:'column', gap:12 }}>
+          <div className="nx-card-header" style={{ alignItems:'center' }}>
+            <div>
+              <div className="nx-card-title">Maintenance Intervals</div>
+              <div className="nx-subtle">
+                Status records: {statuses.length}{loading && ' • Loading...'}
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button className="nx-pill" onClick={scanIntervals}>Scan Now</button>
+              <button
+                className={`nx-pill ${showOpenOnly ? 'primary' : ''}`}
+                onClick={() => setShowOpenOnly(!showOpenOnly)}
+              >
+                {showOpenOnly ? 'Showing Open Tickets' : 'Showing All Tickets'}
+              </button>
+              <button className="nx-pill" onClick={() => setCreateOpen(true)}>New Ticket</button>
+            </div>
+          </div>
+          <div style={{ borderTop:'1px solid #1c1c27', paddingTop:8, maxHeight:220, overflow:'auto' }}>
+            {statuses.length === 0 && <div className="nx-subtle">No interval statuses found.</div>}
+            {statuses.map(s => (
+              <div key={s._id} style={{ padding:'6px 0', borderBottom:'1px solid #1c1c27' }}>
+                <div style={{ color:'#e5e7eb', fontSize:13 }}>
+                  {s.machineType || 'Machine'} • {s.interval} {s.unit} ({s.key})
+                  {s.openTicketId && ' • Ticket Open'}
+                </div>
+                <div className="nx-subtle" style={{ fontSize:11 }}>
+                  Baseline: {Number(s.baselineUsage).toFixed(1)} • Next Due: {Number(s.nextDueAt).toFixed(1)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="nx-card" style={{ marginBottom:16, height:'640px', display:'flex', flexDirection:'column' }}>
+        <div className="nx-card-header" style={{ alignItems:'center' }}>
           <div>
             <div className="nx-card-title">Tickets</div>
             <div className="nx-subtle">Open: {openCount} • Total: {tickets.length}</div>
           </div>
-          <div style={{display:'flex', gap:8}}>
-            <button className={`nx-pill ${showOpenOnly?'primary':''}`} onClick={()=>setShowOpenOnly(!showOpenOnly)} aria-label="Toggle open tickets">
+          <div style={{ display:'flex', gap:8 }}>
+            <button
+              className={`nx-pill ${showOpenOnly ? 'primary' : ''}`}
+              onClick={() => setShowOpenOnly(!showOpenOnly)}
+            >
               {showOpenOnly ? 'Showing Open' : 'Showing All'}
             </button>
-            <button className="nx-pill" onClick={()=>setCreateOpen(true)} aria-label="Create ticket">New Ticket</button>
+            {backendURL && (
+              <button className="nx-pill" onClick={fetchStatus}>Refresh</button>
+            )}
+            {!backendURL && (
+              <button className="nx-pill" onClick={() => setCreateOpen(true)}>New Ticket</button>
+            )}
           </div>
         </div>
-        <div style={{overflow:'auto', borderTop:'1px solid #1c1c27', marginTop:8}}>
-          {visible.length === 0 && <div className="nx-subtle">No tickets yet.</div>}
-          {visible.map(t => (
-            <div key={t.id} className="nx-alert-row" style={{gridTemplateColumns:'1fr auto'}}>
+        <div style={{ overflow:'auto', borderTop:'1px solid #1c1c27', marginTop:8 }}>
+          {visibleTickets.length === 0 && <div className="nx-subtle">No tickets yet.</div>}
+          {visibleTickets.map(t => (
+            <div key={t._id} className="nx-alert-row" style={{ gridTemplateColumns:'1fr auto', alignItems:'flex-start' }}>
               <div>
-                <div style={{color:'#e5e7eb'}}>{t.title}</div>
-                <div className="nx-subtle">Machine: {t.machineId || 'N/A'} • Worker: {t.worker || 'N/A'} • {new Date(t.createdAt).toLocaleString()}</div>
-                <div className="nx-subtle">Result: {t.result}</div>
+                <div style={{ color:'#e5e7eb' }}>{t.description || t.title}</div>
+                <div className="nx-subtle" style={{ fontSize:11 }}>
+                  Status: {t.status}
+                  {' • '}Interval: {t.ruleInterval ?? '—'} {t.ruleUnit || ''}
+                  {' • '}Due At: {t.dueAtUsage ?? '—'}
+                  {' • '}Created: {t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}
+                  {t.closedAt && ` • Closed: ${new Date(t.closedAt).toLocaleString()}`}
+                </div>
+                {Array.isArray(t.checklist) && t.checklist.length > 0 && (
+                  <div style={{ marginTop:6 }}>
+                    <div className="nx-card-title" style={{ fontSize:11, color:'#a3a3b2' }}>Checklist</div>
+                    <ul style={{ paddingLeft:16 }}>
+                      {t.checklist.map((item, idx) => {
+                        const obj = typeof item === 'string' ? { item, done: false } : item;
+                        return (
+                          <li
+                            key={idx}
+                            style={{
+                              cursor: t.status === 'open' ? 'pointer' : 'default',
+                              textDecoration: obj.done ? 'line-through' : 'none',
+                              fontSize:12
+                            }}
+                            onClick={() => t.status === 'open' && toggleChecklistItem(t._id, idx)}
+                          >
+                            {obj.item}{obj.done && ' ✓'}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
-              <div style={{display:'flex', gap:8}}>
-                <button className="nx-pill" onClick={()=>setActive(t)}>Details</button>
-                {t.status !== 'Closed' && (
-                  <button className="nx-pill primary" onClick={()=>{
-                    const updated = tickets.map(x => x.id === t.id ? { ...x, status:'Closed' } : x);
-                    setTickets(updated); persist(updated);
-                  }}>Close</button>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                <button className="nx-pill" onClick={() => setActive(t)}>Details</button>
+                {t.status === 'open' && (
+                  <button className="nx-pill primary" onClick={() => closeTicket(t._id)}>Close</button>
                 )}
               </div>
             </div>
@@ -296,27 +493,68 @@ export default function TicketsTab() {
 
       {active && (
         <div className="nx-modal-overlay" role="dialog" aria-modal="true">
-          <div className="nx-card" style={{width:'min(700px, 94vw)'}}>
+          <div className="nx-card" style={{ width:'min(700px,94vw)' }}>
             <div className="nx-card-header">
-              <div className="nx-card-title">{active.title}</div>
-              <button className="nx-pill" onClick={()=>setActive(null)} aria-label="Close">Close</button>
+              <div className="nx-card-title">{active.description || active.title}</div>
+              <button className="nx-pill" onClick={() => setActive(null)}>Close</button>
             </div>
-            <div className="nx-subtle">Machine: {active.machineId}</div>
-            <div className="nx-subtle">Worker: {active.worker}</div>
-            <div className="nx-subtle">Result: {active.result}</div>
-            <div className="nx-subtle">Created: {new Date(active.createdAt).toLocaleString()}</div>
-            {active.notes && (
-              <div style={{marginTop:8}}>
-                <div className="nx-card-title" style={{fontSize:12, color:'#a3a3b2'}}>Notes</div>
-                <div className="nx-subtle">{JSON.stringify(active.notes)}</div>
+            <div className="nx-subtle">Status: {active.status}</div>
+            <div className="nx-subtle">Interval: {active.ruleInterval || '—'} {active.ruleUnit || ''}</div>
+            <div className="nx-subtle">
+              Baseline: {active.baselineAtOpen ?? '—'} • Due At: {active.dueAtUsage ?? '—'}
+            </div>
+            <div className="nx-subtle">Triggered At: {active.triggeredAtUsage ?? '—'}</div>
+            {active.cumulativeUsageAtClose != null && (
+              <div className="nx-subtle">Closed Usage Snapshot: {active.cumulativeUsageAtClose}</div>
+            )}
+            {Array.isArray(active.checklist) && active.checklist.length > 0 && (
+              <div style={{ marginTop:12 }}>
+                <div className="nx-card-title" style={{ fontSize:12, color:'#a3a3b2' }}>Checklist</div>
+                <ul style={{ paddingLeft:18 }}>
+                  {active.checklist.map((c, idx) => {
+                    const obj = typeof c === 'string' ? { item: c, done: false } : c;
+                    return (
+                      <li
+                        key={idx}
+                        style={{
+                          display:'flex',
+                          gap:6,
+                          fontSize:12,
+                          textDecoration: obj.done ? 'line-through' : 'none',
+                          cursor: active.status === 'open' ? 'pointer' : 'default'
+                        }}
+                        onClick={() => {
+                          if (active.status !== 'open') return;
+                          toggleChecklistItem(active._id, idx);
+                          setActive(a => {
+                            if (!a || a._id !== active._id) return a;
+                            const updated = { ...a };
+                            updated.checklist = updated.checklist.map((item2, i2) => {
+                              if (i2 !== idx) return item2;
+                              const o = typeof item2 === 'string' ? { item: item2, done: false } : item2;
+                              return { ...o, done: !o.done };
+                            });
+                            return updated;
+                          });
+                        }}
+                      >
+                        {obj.item} {obj.done && '✓'}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
             <div className="nx-modal-actions">
-              {active.status !== 'Closed' && <button className="nx-pill primary" onClick={()=>{
-                const updated = tickets.map(x => x.id === active.id ? { ...x, status:'Closed' } : x);
-                setTickets(updated); persist(updated); setActive(null);
-              }}>Close Ticket</button>}
-              <button className="nx-pill" onClick={()=>setActive(null)}>Done</button>
+              {active.status === 'open' && (
+                <button
+                  className="nx-pill primary"
+                  onClick={() => { closeTicket(active._id); setActive(null); }}
+                >
+                  Close Ticket
+                </button>
+              )}
+              <button className="nx-pill" onClick={() => setActive(null)}>Done</button>
             </div>
           </div>
         </div>
@@ -355,14 +593,14 @@ export default function TicketsTab() {
                   <input id="tkTitle" ref={createTitleRef} className="tk-input" placeholder="Short summary (e.g., Replace belt on Treadmill 3)" value={form.title} onChange={(e)=>setForm({...form, title:e.target.value})} />
                 </div>
                 <div className="tk-field" style={{position: 'relative'}}>
-                  <label className="tk-label" htmlFor="tkMachine">Machine ID</label>
+                  <label className="tk-label" htmlFor="tkMachine">Machine Name <span style={{color:'#8b8ba1'}}>(required)</span></label>
                   <input 
                     id="tkMachine" 
                     ref={machineInputRef}
                     className="tk-input" 
-                    placeholder="e.g., TM-003" 
-                    value={form.machineId} 
-                    onChange={(e)=>handleMachineIdChange(e.target.value)}
+                    placeholder="e.g., Treadmill #1" 
+                    value={form.machineName} 
+                    onChange={(e)=>handleMachineNameChange(e.target.value)}
                     onFocus={(e)=>{
                       if (e.target.value.trim().length > 0) {
                         const filtered = MACHINES.filter(machine => 
@@ -383,16 +621,16 @@ export default function TicketsTab() {
                           onClick={() => handleMachineSelect(machine)}
                         >
                           <div style={{fontWeight: '500', color: '#e5e7eb'}}>
-                            <HighlightMatch text={machine.id} query={form.machineId} />
+                            <HighlightMatch text={machine.name} query={form.machineName} />
                           </div>
                           <div style={{fontSize: '12px', color: '#94a3b8'}}>
-                            <HighlightMatch text={`${machine.name} • ${machine.type}`} query={form.machineId} />
+                            <HighlightMatch text={`${machine.id} • ${machine.type}`} query={form.machineName} />
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="tk-helper">Optional. Helps route parts and history.</div>
+                  <div className="tk-helper">Helps route parts and history.</div>
                 </div>
                 <div className="tk-field">
                   <label className="tk-label" htmlFor="tkWorker">Assign To</label>
@@ -412,17 +650,42 @@ export default function TicketsTab() {
                 </div>
                 <div className="tk-field">
                   <label className="tk-label" htmlFor="tkDeadline">Deadline</label>
-                  {/* Keep existing datepicker trigger and functionality intact */}
                   <button id="tkDeadline" className="tk-date" onClick={()=>{ setPickerDateISO(form.deadline || todayISO()); setPickerTime('10:00 AM'); setShowDatePicker(true); }} aria-haspopup="dialog" aria-expanded={showDatePicker}>
                     <span>{form.deadline ? formatDisplay(form.deadline) : 'Select date'}</span>
                     <span style={{opacity:.8}}>▾</span>
                   </button>
                 </div>
+                <div className="tk-field" style={{gridColumn: '1 / -1'}}>
+                  <label className="tk-label" htmlFor="tkChecklist">Checklist Items</label>
+                  <textarea 
+                    id="tkChecklist"
+                    className="tk-input" 
+                    rows={5}
+                    placeholder="One item per line"
+                    value={form.checklistText}
+                    onChange={(e)=>setForm({...form, checklistText:e.target.value})}
+                    style={{minHeight: '100px', resize: 'vertical'}}
+                  />
+                  <div className="tk-helper">Optional. One item per line.</div>
+                </div>
+                {backendURL && (
+                  <div className="tk-field" style={{gridColumn: '1 / -1'}}>
+                    <label style={{display:'flex', alignItems:'center', gap:8, fontSize:13, color:'#c7c7d2', cursor:'pointer'}}>
+                      <input
+                        type="checkbox"
+                        checked={form.sendEmail}
+                        onChange={(e)=>setForm({...form, sendEmail:e.target.checked})}
+                        style={{cursor:'pointer'}}
+                      />
+                      Send email notification (uses machine email)
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
             <div className="tk-footer-bar">
               <button className="tk-btn" type="button" onClick={()=>setCreateOpen(false)}>Cancel</button>
-              <button className="tk-btn primary" type="button" onClick={onCreate} disabled={!form.title}>Create ticket</button>
+              <button className="tk-btn primary" type="button" onClick={onCreate} disabled={!form.title || !form.machineName}>Create ticket</button>
             </div>
           </div>
         </div>
@@ -488,5 +751,3 @@ function TicketDropdown({ value, onChange, options }) {
     </div>
   );
 }
-
-
