@@ -266,9 +266,9 @@ function ChatBot() {
       <div className="chat-header">
         <div className="header-content">
           <h1>Welcome, {displayName || 'User'}</h1>
-          <button onClick={back} className="back-button">
+          {/* <button onClick={back} className="back-button">
             Return To Dashboard
-          </button>
+          </button> */}
         </div>
       </div>
 
