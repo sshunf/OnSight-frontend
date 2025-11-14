@@ -119,12 +119,16 @@ export default function TicketsTab() {
   });
   const [showMachineAutocomplete, setShowMachineAutocomplete] = useState(false);
   const [filteredMachines, setFilteredMachines] = useState([]);
+  const [resolveConfirmTicket, setResolveConfirmTicket] = useState(null);
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
   const machineInputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const detailsModalRef = useRef(null);
+  const resolveModalRef = useRef(null);
 
+  // TEMPORARILY COMMENTED OUT - Backend routing disabled for local storage testing
+  /*
   async function fetchStatus() {
     if (!backendURL) return;
     setLoading(true);
@@ -166,23 +170,24 @@ export default function TicketsTab() {
       setErrorMsg(e.message);
     }
   }
+  */
 
-  async function closeTicket(ticketId) {
+  function resolveTicket(ticketId) {
     setErrorMsg('');
     
-    // If no backend URL, use local storage
-    if (!backendURL) {
-      const updatedTickets = tickets.map(t => {
-        if (t._id === ticketId) {
-          return { ...t, status: 'closed', closedAt: new Date().toISOString() };
-        }
-        return t;
-      });
-      setTickets(updatedTickets);
-      writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
-      return;
-    }
+    // Use local storage only (backend routing commented out)
+    const updatedTickets = tickets.map(t => {
+      if (t._id === ticketId) {
+        return { ...t, status: 'resolved', resolvedAt: new Date().toISOString() };
+      }
+      return t;
+    });
+    setTickets(updatedTickets);
+    writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
+    setResolveConfirmTicket(null);
     
+    // TEMPORARILY COMMENTED OUT - Backend API call
+    /*
     // Backend API call
     try {
       const ticket = tickets.find(t => t._id === ticketId);
@@ -210,6 +215,7 @@ export default function TicketsTab() {
       console.error('Close failed', e);
       setErrorMsg(e.message);
     }
+    */
   }
 
   function toggleChecklistItem(ticketId, idx) {
@@ -233,7 +239,7 @@ export default function TicketsTab() {
     }
   }
 
-  async function onCreate(e) {
+  function onCreate(e) {
     e?.preventDefault?.();
     e?.stopPropagation?.();
     
@@ -248,34 +254,33 @@ export default function TicketsTab() {
       .map(s => s.trim())
       .filter(Boolean);
     
-    // If no backend URL, use local storage
-    if (!backendURL) {
-      const newTicket = {
-        _id: `t_${Date.now()}`,
-        title: form.title,
-        description: form.title,
-        machineName: form.machineName,
-        worker: form.worker || 'Unassigned',
-        priority: form.priority || 'Medium',
-        status: 'open',
-        checklist: checklist.map(item => ({ item, done: false })),
-        createdAt: new Date().toISOString(),
-      };
-      const updatedTickets = [newTicket, ...tickets];
-      setTickets(updatedTickets);
-      writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
-      setCreateOpen(false);
-      setForm({
-        title: '',
-        machineName: '',
-        worker: '',
-        priority: 'Medium',
-        checklistText: '',
-        sendEmail: false
-      });
-      return;
-    }
+    // Always use local storage (backend routing commented out)
+    const newTicket = {
+      _id: `t_${Date.now()}`,
+      title: form.title,
+      description: form.title,
+      machineName: form.machineName,
+      worker: form.worker || 'Unassigned',
+      priority: form.priority || 'Medium',
+      status: 'open',
+      checklist: checklist.map(item => ({ item, done: false })),
+      createdAt: new Date().toISOString(),
+    };
+    const updatedTickets = [newTicket, ...tickets];
+    setTickets(updatedTickets);
+    writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
+    setCreateOpen(false);
+    setForm({
+      title: '',
+      machineName: '',
+      worker: '',
+      priority: 'Medium',
+      checklistText: '',
+      sendEmail: false
+    });
     
+    // TEMPORARILY COMMENTED OUT - Backend API call
+    /*
     // Backend API call
     try {
       const res = await fetch(`${backendURL}/api/maintenance/tickets`, {
@@ -308,10 +313,13 @@ export default function TicketsTab() {
       console.error('Create failed', error);
       setErrorMsg(error.message || 'Failed to create ticket');
     }
+    */
   }
 
-  // Load tickets from local storage or backend
+  // Load tickets from local storage only (backend routing commented out)
   useEffect(() => { 
+    // TEMPORARILY COMMENTED OUT - Backend loading disabled
+    /*
     if (backendURL) {
       fetchStatus(); 
     } else {
@@ -320,15 +328,30 @@ export default function TicketsTab() {
       const list = (s.tickets || []);
       setTickets(list);
     }
+    */
+    // Always use local storage for now
+    const s = readState();
+    const list = (s.tickets || []);
+    setTickets(list);
   }, []);
 
   useEffect(() => {
     if (isCreateOpen) { setTimeout(() => createTitleRef.current?.focus(), 0); }
   }, [isCreateOpen]);
 
+  // Keyboard handling for resolve modal
+  useEffect(() => {
+    if (!resolveConfirmTicket) return;
+    const trap = (e) => {
+      if (e.key === 'Escape') setResolveConfirmTicket(null);
+    };
+    document.addEventListener('keydown', trap);
+    return () => document.removeEventListener('keydown', trap);
+  }, [resolveConfirmTicket]);
+
   // Lock body scroll when any modal is open
   useEffect(() => {
-    const hasModal = active || isCreateOpen;
+    const hasModal = active || isCreateOpen || resolveConfirmTicket;
     if (hasModal) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -661,15 +684,16 @@ export default function TicketsTab() {
         <div style={{ marginBottom:12, color:'#f87171', fontSize:13 }}>Error: {errorMsg}</div>
       )}
 
-      {backendURL && (
-      <div className="nx-card" style={{ marginBottom:16, display:'flex', flexDirection:'column', gap:12 }}>
-        <div className="nx-card-header" style={{ alignItems:'center' }}>
-          <div>
-            <div className="nx-card-title">Maintenance Intervals</div>
-            <div className="nx-subtle">
-              Status records: {statuses.length}{loading && ' • Loading...'}
+      {/* TEMPORARILY COMMENTED OUT - Maintenance Intervals section disabled (backend routing commented out) */}
+      {false && backendURL && (
+        <div className="nx-card" style={{ marginBottom:16, display:'flex', flexDirection:'column', gap:12 }}>
+          <div className="nx-card-header" style={{ alignItems:'center' }}>
+            <div>
+              <div className="nx-card-title">Maintenance Intervals</div>
+              <div className="nx-subtle">
+                Status records: {statuses.length}{loading && ' • Loading...'}
+              </div>
             </div>
-          </div>
             <div style={{ display:'flex', gap:8 }}>
               <button className="nx-pill" onClick={scanIntervals}>Scan Now</button>
               <button
@@ -711,12 +735,11 @@ export default function TicketsTab() {
             >
               {showOpenOnly ? 'Showing Open' : 'Showing All'}
             </button>
-            {backendURL && (
-            <button className="nx-pill" onClick={fetchStatus}>Refresh</button>
+            {/* TEMPORARILY COMMENTED OUT - Backend refresh disabled */}
+            {false && backendURL && (
+            <button className="nx-pill" onClick={() => {}}>Refresh</button>
             )}
-            {!backendURL && (
-              <button className="nx-pill" onClick={() => setCreateOpen(true)}>New Ticket</button>
-            )}
+            <button className="nx-pill" onClick={() => setCreateOpen(true)}>New Ticket</button>
           </div>
         </div>
         <div style={{ overflow:'auto', borderTop:'1px solid #1c1c27', marginTop:8, paddingTop: 8 }}>
@@ -733,7 +756,7 @@ export default function TicketsTab() {
                   <div className="tk-ticket-meta-item">
                     <span className="tk-ticket-meta-label">Status:</span>
                     <span className="tk-ticket-meta-value" style={{ 
-                      color: t.status === 'open' ? '#22c55e' : '#9ca3af',
+                      color: t.status === 'open' ? '#22c55e' : t.status === 'resolved' ? '#9ca3af' : '#9ca3af',
                       fontWeight: '500'
                     }}>{t.status}</span>
                   </div>
@@ -781,7 +804,7 @@ export default function TicketsTab() {
               <div className="tk-ticket-actions">
                 <button className="nx-pill" onClick={() => setActive(t)} style={{ whiteSpace: 'nowrap' }}>Details</button>
                 {t.status === 'open' && (
-                  <button className="nx-pill primary" onClick={() => closeTicket(t._id)} style={{ whiteSpace: 'nowrap' }}>Close</button>
+                  <button className="nx-pill primary" onClick={() => setResolveConfirmTicket(t)} style={{ whiteSpace: 'nowrap' }}>Resolve</button>
                 )}
               </div>
             </div>
@@ -891,9 +914,9 @@ export default function TicketsTab() {
               {active.status === 'open' && (
                 <button
                   className="nx-pill primary"
-                  onClick={() => { closeTicket(active._id); setActive(null); }}
+                  onClick={() => { setResolveConfirmTicket(active); setActive(null); }}
                 >
-                  Close Ticket
+                  Resolve Ticket
                 </button>
               )}
               </div>
@@ -1045,6 +1068,194 @@ export default function TicketsTab() {
                 disabled={!form.title || !form.machineName}
               >
                 Create ticket
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolve Confirmation Modal */}
+      {resolveConfirmTicket && (
+        <div className="nx-modal-overlay" role="dialog" aria-modal="true" onClick={() => setResolveConfirmTicket(null)}>
+          <style>{`
+            .resolve-modal {
+              width: min(560px, 94vw);
+              background: #0f0f16;
+              border: 1px solid #1d1d29;
+              border-radius: 16px;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+              position: relative;
+            }
+            .resolve-header {
+              padding: 24px;
+              border-bottom: 1px solid #1d1d29;
+              background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(124, 58, 237, 0.02) 100%);
+            }
+            .resolve-title {
+              font-size: 20px;
+              font-weight: 700;
+              color: #ffffff;
+              margin-bottom: 12px;
+            }
+            .resolve-message {
+              font-size: 14px;
+              color: #d1d5db;
+              line-height: 1.6;
+              margin-bottom: 16px;
+            }
+            .resolve-ticket-info {
+              background: #13131a;
+              border: 1px solid #1d1d29;
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 8px;
+            }
+            .resolve-info-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            }
+            .resolve-info-row:last-child {
+              margin-bottom: 0;
+            }
+            .resolve-info-label {
+              font-size: 13px;
+              color: #6b7280;
+              font-weight: 500;
+            }
+            .resolve-info-value {
+              font-size: 14px;
+              color: #e5e7eb;
+              font-weight: 500;
+            }
+            .resolve-body {
+              padding: 24px;
+            }
+            .resolve-footer {
+              padding: 16px 24px;
+              border-top: 1px solid #1d1d29;
+              background: #0a0a0f;
+              display: flex;
+              justify-content: flex-end;
+              gap: 12px;
+            }
+            .resolve-btn {
+              padding: 10px 20px;
+              border-radius: 8px;
+              border: 1px solid #262633;
+              background: #13131a;
+              color: #e5e7eb;
+              font-size: 14px;
+              font-weight: 500;
+              cursor: pointer;
+              transition: all 0.2s;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .resolve-btn:hover {
+              background: #1a1a24;
+              border-color: #7c3aed;
+            }
+            .resolve-btn.primary {
+              background: #7c3aed;
+              border-color: #7c3aed;
+              color: #ffffff;
+            }
+            .resolve-btn.primary:hover {
+              background: #6d28d9;
+              border-color: #6d28d9;
+            }
+            .resolve-close {
+              background: transparent;
+              border: 1px solid #262633;
+              color: #e5e7eb;
+              padding: 8px;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              transition: all 0.2s;
+              flex-shrink: 0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              position: absolute;
+              top: 16px;
+              right: 16px;
+              width: 32px;
+              height: 32px;
+            }
+            .resolve-close:hover {
+              background: #13131a;
+              border-color: #7c3aed;
+            }
+          `}</style>
+          <div ref={resolveModalRef} className="resolve-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="resolve-close" onClick={() => setResolveConfirmTicket(null)} aria-label="Close">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+              </svg>
+            </button>
+            <div className="resolve-header">
+              <div className="resolve-title">Resolve Ticket</div>
+              <div className="resolve-message">
+                Are you sure you want to resolve this task? This action will mark the ticket as resolved.
+              </div>
+              <div className="resolve-ticket-info">
+                <div className="resolve-info-row">
+                  <span className="resolve-info-label">Title:</span>
+                  <span className="resolve-info-value">{resolveConfirmTicket.description || resolveConfirmTicket.title}</span>
+                </div>
+                {resolveConfirmTicket.machineName && (
+                  <div className="resolve-info-row">
+                    <span className="resolve-info-label">Machine:</span>
+                    <span className="resolve-info-value">{resolveConfirmTicket.machineName}</span>
+                  </div>
+                )}
+                <div className="resolve-info-row">
+                  <span className="resolve-info-label">Priority:</span>
+                  <span className="resolve-info-value">
+                    <PriorityBadge priority={resolveConfirmTicket.priority} />
+                  </span>
+                </div>
+                {resolveConfirmTicket.worker && (
+                  <div className="resolve-info-row">
+                    <span className="resolve-info-label">Assigned To:</span>
+                    <span className="resolve-info-value">{resolveConfirmTicket.worker}</span>
+                  </div>
+                )}
+                {Array.isArray(resolveConfirmTicket.checklist) && resolveConfirmTicket.checklist.length > 0 && (
+                  <div className="resolve-info-row">
+                    <span className="resolve-info-label">Checklist:</span>
+                    <span className="resolve-info-value">
+                      {resolveConfirmTicket.checklist.filter(item => {
+                        const obj = typeof item === 'string' ? { item, done: false } : item;
+                        return obj.done === true;
+                      }).length} / {resolveConfirmTicket.checklist.length} completed
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="resolve-body">
+              {/* Additional confirmation message could go here */}
+            </div>
+            <div className="resolve-footer">
+              <button 
+                className="resolve-btn" 
+                onClick={() => setResolveConfirmTicket(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="resolve-btn primary" 
+                onClick={() => resolveTicket(resolveConfirmTicket._id)}
+              >
+                Resolve Ticket
               </button>
             </div>
           </div>
