@@ -127,8 +127,7 @@ export default function TicketsTab() {
   const detailsModalRef = useRef(null);
   const resolveModalRef = useRef(null);
 
-  // TEMPORARILY COMMENTED OUT - Backend routing disabled for local storage testing
-  /*
+  // Backend routing - use backend when available, fallback to local storage
   async function fetchStatus() {
     if (!backendURL) return;
     setLoading(true);
@@ -170,24 +169,24 @@ export default function TicketsTab() {
       setErrorMsg(e.message);
     }
   }
-  */
 
-  function resolveTicket(ticketId) {
+  async function resolveTicket(ticketId) {
     setErrorMsg('');
-    
-    // Use local storage only (backend routing commented out)
-    const updatedTickets = tickets.map(t => {
-      if (t._id === ticketId) {
-        return { ...t, status: 'resolved', resolvedAt: new Date().toISOString() };
-      }
-      return t;
-    });
-    setTickets(updatedTickets);
-    writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
     setResolveConfirmTicket(null);
     
-    // TEMPORARILY COMMENTED OUT - Backend API call
-    /*
+    // If no backend URL, use local storage
+    if (!backendURL) {
+      const updatedTickets = tickets.map(t => {
+        if (t._id === ticketId) {
+          return { ...t, status: 'resolved', resolvedAt: new Date().toISOString() };
+        }
+        return t;
+      });
+      setTickets(updatedTickets);
+      writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
+      return;
+    }
+    
     // Backend API call
     try {
       const ticket = tickets.find(t => t._id === ticketId);
@@ -215,7 +214,6 @@ export default function TicketsTab() {
       console.error('Close failed', e);
       setErrorMsg(e.message);
     }
-    */
   }
 
   function toggleChecklistItem(ticketId, idx) {
@@ -239,7 +237,7 @@ export default function TicketsTab() {
     }
   }
 
-  function onCreate(e) {
+  async function onCreate(e) {
     e?.preventDefault?.();
     e?.stopPropagation?.();
     
@@ -254,33 +252,34 @@ export default function TicketsTab() {
       .map(s => s.trim())
       .filter(Boolean);
     
-    // Always use local storage (backend routing commented out)
-    const newTicket = {
-      _id: `t_${Date.now()}`,
-      title: form.title,
-      description: form.title,
-      machineName: form.machineName,
-      worker: form.worker || 'Unassigned',
-      priority: form.priority || 'Medium',
-      status: 'open',
-      checklist: checklist.map(item => ({ item, done: false })),
-      createdAt: new Date().toISOString(),
-    };
-    const updatedTickets = [newTicket, ...tickets];
-    setTickets(updatedTickets);
-    writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
-    setCreateOpen(false);
-    setForm({
-      title: '',
-      machineName: '',
-      worker: '',
-      priority: 'Medium',
-      checklistText: '',
-      sendEmail: false
-    });
+    // If no backend URL, use local storage
+    if (!backendURL) {
+      const newTicket = {
+        _id: `t_${Date.now()}`,
+        title: form.title,
+        description: form.title,
+        machineName: form.machineName,
+        worker: form.worker || 'Unassigned',
+        priority: form.priority || 'Medium',
+        status: 'open',
+        checklist: checklist.map(item => ({ item, done: false })),
+        createdAt: new Date().toISOString(),
+      };
+      const updatedTickets = [newTicket, ...tickets];
+      setTickets(updatedTickets);
+      writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
+      setCreateOpen(false);
+      setForm({
+        title: '',
+        machineName: '',
+        worker: '',
+        priority: 'Medium',
+        checklistText: '',
+        sendEmail: false
+      });
+      return;
+    }
     
-    // TEMPORARILY COMMENTED OUT - Backend API call
-    /*
     // Backend API call
     try {
       const res = await fetch(`${backendURL}/api/maintenance/tickets`, {
@@ -313,13 +312,10 @@ export default function TicketsTab() {
       console.error('Create failed', error);
       setErrorMsg(error.message || 'Failed to create ticket');
     }
-    */
   }
 
-  // Load tickets from local storage only (backend routing commented out)
+  // Load tickets - use backend when available, fallback to local storage
   useEffect(() => { 
-    // TEMPORARILY COMMENTED OUT - Backend loading disabled
-    /*
     if (backendURL) {
       fetchStatus(); 
     } else {
@@ -328,11 +324,6 @@ export default function TicketsTab() {
       const list = (s.tickets || []);
       setTickets(list);
     }
-    */
-    // Always use local storage for now
-    const s = readState();
-    const list = (s.tickets || []);
-    setTickets(list);
   }, []);
 
   useEffect(() => {
@@ -684,8 +675,8 @@ export default function TicketsTab() {
         <div style={{ marginBottom:12, color:'#f87171', fontSize:13 }}>Error: {errorMsg}</div>
       )}
 
-      {/* TEMPORARILY COMMENTED OUT - Maintenance Intervals section disabled (backend routing commented out) */}
-      {false && backendURL && (
+      {/* Maintenance Intervals section - shown when backend is available */}
+      {backendURL && (
         <div className="nx-card" style={{ marginBottom:16, display:'flex', flexDirection:'column', gap:12 }}>
           <div className="nx-card-header" style={{ alignItems:'center' }}>
             <div>
@@ -735,9 +726,9 @@ export default function TicketsTab() {
             >
               {showOpenOnly ? 'Showing Open' : 'Showing All'}
             </button>
-            {/* TEMPORARILY COMMENTED OUT - Backend refresh disabled */}
-            {false && backendURL && (
-            <button className="nx-pill" onClick={() => {}}>Refresh</button>
+            {/* Backend refresh button - shown when backend is available */}
+            {backendURL && (
+            <button className="nx-pill" onClick={fetchStatus}>Refresh</button>
             )}
             <button className="nx-pill" onClick={() => setCreateOpen(true)}>New Ticket</button>
           </div>
