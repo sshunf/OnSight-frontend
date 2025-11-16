@@ -557,20 +557,21 @@ function TempDashboard() {
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
 
-  // Space allocation suggestions
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('dashboard:state');
-      const parsed = raw ? JSON.parse(raw) : {};
-      const seeded = (parsed.suggestions && Array.isArray(parsed.suggestions)) ? parsed.suggestions : [
-        { id: 'sg1', text: 'Move one treadmill from Cardio NE to Cardio SW (even out peak load)', status: 'new' },
-        { id: 'sg2', text: 'Shift two squat racks usage by scheduling time blocks', status: 'new' },
-        { id: 'sg3', text: 'Relocate stretch mats nearer to free weights during 6-8PM', status: 'new' },
-      ];
-      setSuggestions(seeded);
-      localStorage.setItem('dashboard:state', JSON.stringify({ ...(parsed||{}), suggestions: seeded }));
-    } catch {}
-  }, []);
+  // Space allocation suggestions - DISABLED FOR PILOT PROGRAM
+  // Commented out to prevent suggestions from appearing on different browsers
+  // useEffect(() => {
+  //   try {
+  //     const raw = localStorage.getItem('dashboard:state');
+  //     const parsed = raw ? JSON.parse(raw) : {};
+  //     const seeded = (parsed.suggestions && Array.isArray(parsed.suggestions)) ? parsed.suggestions : [
+  //       { id: 'sg1', text: 'Move one treadmill from Cardio NE to Cardio SW (even out peak load)', status: 'new' },
+  //       { id: 'sg2', text: 'Shift two squat racks usage by scheduling time blocks', status: 'new' },
+  //       { id: 'sg3', text: 'Relocate stretch mats nearer to free weights during 6-8PM', status: 'new' },
+  //     ];
+  //     setSuggestions(seeded);
+  //     localStorage.setItem('dashboard:state', JSON.stringify({ ...(parsed||{}), suggestions: seeded }));
+  //   } catch {}
+  // }, []);
 
   function persistSuggestions(next) {
     try {
@@ -952,7 +953,7 @@ function TempDashboard() {
                   </div>
                 </div>
 
-                {/* Space Allocation Suggestions */}
+                {/* Space Allocation Suggestions - DISABLED FOR PILOT PROGRAM */}
                 <div className="nx-grid" style={{marginTop:'8px'}}>
                   <div className="nx-card" style={{gridColumn:'span 12', height:'245px', display:'flex', flexDirection:'column'}}>
                     <div className="nx-card-header">
@@ -962,7 +963,8 @@ function TempDashboard() {
                       </div>
                     </div>
                     <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto'}}>
-                      {(suggestions || []).filter(s => s.status !== 'dismissed').length === 0 ? (
+                      {/* Suggestions display commented out - keeping 245px height for layout */}
+                      {/* {(suggestions || []).filter(s => s.status !== 'dismissed').length === 0 ? (
                         <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No suggestions at this time</div>
                       ) : (
                         <div style={{width:'100%'}}>
@@ -976,7 +978,7 @@ function TempDashboard() {
                             </div>
                           ))}
                         </div>
-                      )}
+                      )} */}
                     </div>
                   </div>
                 </div>

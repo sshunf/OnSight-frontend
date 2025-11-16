@@ -279,7 +279,8 @@ export default function MaintenanceTab() {
               })()}
             </div>
             <div className="nx-subtle" style={{marginBottom:8}}>Click a day or pill to update.</div>
-            {(() => {
+            {/* PILOT PROGRAM: Tasks commented out temporarily */}
+            {/* {(() => {
               const tasksForDay = events.filter(e => e.date === selectedDate);
               if (tasksForDay.length === 0) {
                 return <div className="nx-subtle">No tasks for this day.</div>;
@@ -309,7 +310,8 @@ export default function MaintenanceTab() {
                   ))}
                 </div>
               );
-            })()}
+            })()} */}
+            <div className="nx-subtle">Tasks will appear here soon.</div>
           </div>
         </div>
       </div>
