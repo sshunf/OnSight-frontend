@@ -9,20 +9,22 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px 16px;
-  margin: 12px 0 8px;
-  padding: 10px 12px;
-  background: #202022;                /* subtle card */
-  border: 1px solid rgba(255,255,255,0.08);
+  margin: 20px 0 16px;
+  padding: 16px 20px;
+  background: #2a2a2c;                /* more visible card */
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 10px;
   justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .analytics .control {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #e5e7eb;
-  font-size: 0.95rem;
+  color: #f3f4f6;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
 /* Select wrapper adds a custom caret */
@@ -47,14 +49,16 @@
   -moz-appearance: none;
 
   min-width: 140px;
-  padding: 8px 34px 8px 12px;         /* room for caret */
-  border-radius: 10px;
-  border: 1px solid #4b5563;
-  background: #161616;
+  padding: 10px 36px 10px 14px;         /* room for caret */
+  border-radius: 8px;
+  border: 2px solid #6b7280;
+  background: #1f2937;
   color: #fff;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   line-height: 1.2;
   outline: none;
+  cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
 
