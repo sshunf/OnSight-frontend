@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 import { useNavigate } from 'react-router-dom';
@@ -76,6 +76,7 @@ function TempDashboard() {
   // Analytics data
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [selectedTopN, setSelectedTopN] = useState('all');
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -379,11 +380,22 @@ function TempDashboard() {
       if (!gymId) return;
       
       const url = `${backendURL}/api/dow/avg-per-machine?gymId=${gymId}`;
+      
       const res = await fetch(url);
       const json = await res.json();
       
       if (Array.isArray(json.result)) {
-        setAnalyticsData(json.result);
+        // Double-check that all returned machines belong to this gym
+        const currentGymId = gymId;
+        const filteredData = json.result.filter(m => {
+          const belongsToGym = !m.gymId || String(m.gymId) === String(currentGymId);
+          if (!belongsToGym) {
+            console.warn(`Machine ${m.machineId} (${m.machineName}) belongs to gym ${m.gymId}, not ${currentGymId}`);
+          }
+          return belongsToGym;
+        });
+        
+        setAnalyticsData(filteredData);
       } else {
         console.error("Unexpected response format:", json);
         setAnalyticsData([]);
@@ -396,10 +408,41 @@ function TempDashboard() {
     }
   };
 
+  // Memoize processed analytics data to prevent dependency array size changes
+  const processedAnalyticsData = useMemo(() => {
+    if (!analyticsData || analyticsData.length === 0) return [];
+    
+    // Filter out machines with no data and calculate totals for ranking
+    const withTotals = analyticsData
+      .filter((m) => m && (m.machineName || m.machineId)) // Only include machines with valid names/IDs
+      .map((m) => {
+        const total = (m.days || []).reduce((acc, d) => acc + (d?.avgMinutes || 0), 0);
+        return { ...m, __totalAvg: total / 7 };
+      });
+    
+    // Sort by overall average descending
+    withTotals.sort((a, b) => (b.__totalAvg || 0) - (a.__totalAvg || 0));
+    
+    return withTotals;
+  }, [analyticsData]);
+
+  // Generate dropdown options for Top N selection
+  const topNOptions = useMemo(() => {
+    const totalMachines = processedAnalyticsData.length;
+    if (totalMachines === 0) return [{ value: 'all', label: 'All' }];
+    
+    const options = [];
+    for (let i = 1; i <= totalMachines; i++) {
+      options.push({ value: String(i), label: `Top ${i}` });
+    }
+    options.push({ value: 'all', label: 'All' });
+    return options;
+  }, [processedAnalyticsData.length]);
+
   // Build analytics chart
   useEffect(() => {
     if (activeTab !== 'analytics') return;
-    if (!analyticsChartRef.current || analyticsData.length === 0) return;
+    if (!analyticsChartRef.current || processedAnalyticsData.length === 0) return;
     
     const ctx = analyticsChartRef.current.getContext('2d');
     if (chartInstancesRef.current.analytics) {
@@ -407,26 +450,36 @@ function TempDashboard() {
     }
 
     const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const topN = 5; // Show top 5 machines
     
-    const withTotals = analyticsData.map((m) => {
-      const total = (m.days || []).reduce((acc, d) => acc + (d?.avgMinutes || 0), 0);
-      return { ...m, __totalAvg: total / 7 };
-    });
-    withTotals.sort((a, b) => (b.__totalAvg || 0) - (a.__totalAvg || 0));
-    const top = withTotals.slice(0, topN);
+    // Determine how many machines to show based on selectedTopN
+    const isShowingAll = selectedTopN === 'all';
+    const topN = isShowingAll ? processedAnalyticsData.length : parseInt(selectedTopN, 10);
+    const machinesToShow = processedAnalyticsData.slice(0, topN);
 
-    const colors = ['#7C3AED', '#22C55E', '#3B82F6', '#EF4444', '#F59E0B'];
-    const datasets = top.map((m, idx) => {
-      const byIndex = new Map((m.days || []).map((d) => [d.dayIndex, d.avgMinutes || 0]));
-      const data = days.map((_, i) => byIndex.get(i + 1) ?? 0);
-      return {
-        label: m.machineName || String(m.machineId),
-        data,
-        backgroundColor: colors[idx % colors.length],
-        borderWidth: 0,
-      };
-    });
+    // Extended color palette to handle more machines
+    const colors = [
+      '#7C3AED', '#22C55E', '#3B82F6', '#EF4444', '#F59E0B', 
+      '#20B2AA', '#DA70D6', '#6366F1', '#F97316', '#84CC16',
+      '#EC4899', '#06B6D4', '#8B5CF6', '#10B981', '#F59E0B'
+    ];
+    
+    const datasets = machinesToShow
+      .filter((m) => m && (m.machineName || m.machineId)) // Extra safety filter
+      .map((m, idx) => {
+        const byIndex = new Map((m.days || []).map((d) => [d.dayIndex, d.avgMinutes || 0]));
+        const data = days.map((_, i) => byIndex.get(i + 1) ?? 0);
+        const label = m.machineName || String(m.machineId);
+        return {
+          label,
+          data,
+          backgroundColor: colors[idx % colors.length],
+          borderWidth: 0,
+        };
+      });
+
+    const chartTitle = isShowingAll 
+      ? `Average Usage per Day of Week (All ${processedAnalyticsData.length} Machines)`
+      : `Average Usage per Day of Week (Top ${topN} Machines)`;
 
     chartInstancesRef.current.analytics = new Chart(ctx, {
       type: 'bar',
@@ -438,7 +491,7 @@ function TempDashboard() {
           legend: { labels: { color: '#cbd5e1' } },
           title: {
             display: true,
-            text: 'Average Usage per Day of Week (per Machine, all-time)',
+            text: chartTitle,
             color: '#e5e7eb',
             font: { size: 16, weight: '600' },
           },
@@ -446,8 +499,8 @@ function TempDashboard() {
             callbacks: {
               label: (ctx) => {
                 const label = ctx.dataset?.label || '';
-                const val = Array.isArray(ctx.raw) ? ctx.raw[0] : ctx.raw;
-                return `${label}: ${val} min`;
+                const val = ctx.raw ?? 0;
+                return `${label}: ${val.toFixed(1)} min`;
               },
             }
           }
@@ -466,7 +519,7 @@ function TempDashboard() {
     });
 
     return () => { chartInstancesRef.current.analytics?.destroy(); };
-  }, [activeTab, analyticsData]);
+  }, [activeTab, processedAnalyticsData, selectedTopN]);
 
   // Initialize data on mount and user load
   useEffect(() => {
@@ -557,8 +610,7 @@ function TempDashboard() {
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
 
-  // Space allocation suggestions - DISABLED FOR PILOT PROGRAM
-  // Commented out to prevent suggestions from appearing on different browsers
+  // Space allocation suggestions
   // useEffect(() => {
   //   try {
   //     const raw = localStorage.getItem('dashboard:state');
@@ -740,7 +792,27 @@ function TempDashboard() {
               <div className="nx-dashboard-content">
                 <div className="nx-analytics-grid" style={{marginBottom:'8px'}}>
                   <div className="nx-card" style={{height:`${DASHBOARD_CONTENT_HEIGHT * 0.65}px`}}>
-                    <div style={{height:'100%'}}>
+                    <div className="nx-card-header">
+                      <div>
+                        <div className="nx-card-title">Average Usage per Day of Week</div>
+                        <div className="nx-subtle">
+                          {selectedTopN === 'all' 
+                            ? `Showing all ${processedAnalyticsData.length} machines in this gym`
+                            : `Showing top ${selectedTopN} machines by usage`
+                          }
+                        </div>
+                      </div>
+                      <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                        <span className="nx-subtle" style={{fontSize:'14px'}}>Show:</span>
+                        <NxDropdown
+                          options={topNOptions}
+                          value={selectedTopN}
+                          onChange={setSelectedTopN}
+                          minWidth={90}
+                        />
+                      </div>
+                    </div>
+                    <div style={{height:'calc(100% - 60px)'}}>
                       {analyticsLoading ? (
                         <div style={{color:'#e5e7eb', padding:'20px'}}>Loading analytics...</div>
                       ) : analyticsData.length === 0 ? (
