@@ -137,7 +137,8 @@ export default function MaintenanceCalendar({
               >
                 <span className="mc-num">{d.getDate()}</span>
               </button>
-              {dayEvents.length > 0 && (
+              {/* PILOT PROGRAM: Tasks commented out temporarily */}
+              {/* {dayEvents.length > 0 && (
                 <div className="mc-ev">
                   {(() => {
                     const tasks = dayEvents.filter(e => e.status !== 'Alert' && e.status !== 'Completed');
@@ -156,12 +157,11 @@ export default function MaintenanceCalendar({
                             {alerts.length} Alerts
                           </div>
                         )}
-                        {/* Completed counts are intentionally hidden in the cell; only the sidebar reflects completion */}
                       </>
                     );
                   })()}
                 </div>
-              )}
+              )} */}
             </div>
           );
         })}
