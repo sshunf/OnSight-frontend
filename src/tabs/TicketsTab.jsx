@@ -28,23 +28,23 @@ function generateTimes() {
 }
 
 // Sample machine list for autocomplete
-const MACHINES = [
-  { id: 'TM-001', name: 'Treadmill #1', type: 'Cardio' },
-  { id: 'TM-002', name: 'Treadmill #2', type: 'Cardio' },
-  { id: 'TM-003', name: 'Treadmill #3', type: 'Cardio' },
-  { id: 'BP-001', name: 'Bench Press #1', type: 'Strength' },
-  { id: 'BP-002', name: 'Bench Press #2', type: 'Strength' },
-  { id: 'EL-001', name: 'Elliptical #1', type: 'Cardio' },
-  { id: 'EL-002', name: 'Elliptical #2', type: 'Cardio' },
-  { id: 'BK-001', name: 'Bike #1', type: 'Cardio' },
-  { id: 'BK-002', name: 'Bike #2', type: 'Cardio' },
-  { id: 'SR-001', name: 'Squat Rack #1', type: 'Strength' },
-  { id: 'SR-002', name: 'Squat Rack #2', type: 'Strength' },
-  { id: 'RM-001', name: 'Rowing Machine #1', type: 'Cardio' },
-  { id: 'RM-002', name: 'Rowing Machine #2', type: 'Cardio' },
-  { id: 'SM-001', name: 'Smith Machine #1', type: 'Strength' },
-  { id: 'LP-001', name: 'Leg Press #1', type: 'Strength' },
-];
+// const MACHINES = [
+//   { id: 'TM-001', name: 'Treadmill #1', type: 'Cardio' },
+//   { id: 'TM-002', name: 'Treadmill #2', type: 'Cardio' },
+//   { id: 'TM-003', name: 'Treadmill #3', type: 'Cardio' },
+//   { id: 'BP-001', name: 'Bench Press #1', type: 'Strength' },
+//   { id: 'BP-002', name: 'Bench Press #2', type: 'Strength' },
+//   { id: 'EL-001', name: 'Elliptical #1', type: 'Cardio' },
+//   { id: 'EL-002', name: 'Elliptical #2', type: 'Cardio' },
+//   { id: 'BK-001', name: 'Bike #1', type: 'Cardio' },
+//   { id: 'BK-002', name: 'Bike #2', type: 'Cardio' },
+//   { id: 'SR-001', name: 'Squat Rack #1', type: 'Strength' },
+//   { id: 'SR-002', name: 'Squat Rack #2', type: 'Strength' },
+//   { id: 'RM-001', name: 'Rowing Machine #1', type: 'Cardio' },
+//   { id: 'RM-002', name: 'Rowing Machine #2', type: 'Cardio' },
+//   { id: 'SM-001', name: 'Smith Machine #1', type: 'Strength' },
+//   { id: 'LP-001', name: 'Leg Press #1', type: 'Strength' },
+// ];
 
 // Component to highlight matching text
 function HighlightMatch({ text, query }) {
@@ -253,8 +253,8 @@ export default function TicketsTab() {
 
   async function fetchGymMachines() {
     if (!backendURL) {
-      // Use sample machines if no backend
-      setGymMachines(MACHINES.map(m => ({ value: m.name, label: m.name, id: m.id, type: m.type })));
+      // Use empty array if no backend
+      setGymMachines([]);
       return;
     }
     
@@ -265,23 +265,54 @@ export default function TicketsTab() {
         throw new Error('No gym selected');
       }
       
-      // FIXED: Use the correct API endpoint
-      const res = await fetch(`${backendURL}/api/machines?gymId=${gymId}`);
-      if (!res.ok) throw new Error(`Machines HTTP ${res.status}`);
+      // Use the new simplified machine names endpoint
+      console.log('Fetching machine names for gym:', gymId);
+      const res = await fetch(`${backendURL}/api/maintenance/names/${gymId}`);
       
-      const machines = await res.json();
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Machine names fetch failed:', res.status, errorText);
+        throw new Error(`Machines HTTP ${res.status}`);
+      }
+      
+      const response = await res.json();
+      console.log('Machine names response:', response);
+      
+      // Parse the new response format: { gymId, machineCount, machines: [...] }
+      const machines = response.machines || [];
       const machineOptions = machines.map(m => ({
-        value: m.name || m._id,
-        label: m.name || `Machine ${m._id}`,
-        id: m._id,
+        value: m.name || m.id,
+        label: m.name || `Machine ${m.id}`,
+        id: m.id,
         type: m.type || 'Unknown'
       }));
       
-      setGymMachines(machineOptions);
+      console.log('Processed machine options:', machineOptions);
+      
+      // Add fallback sample machines if empty (for testing)
+      if (machineOptions.length === 0) {
+        console.log('No machines found, using sample machines for testing');
+        const sampleMachines = [
+          { value: 'Treadmill #1', label: 'Treadmill #1', id: 'TM-001', type: 'Cardio' },
+          { value: 'Treadmill #2', label: 'Treadmill #2', id: 'TM-002', type: 'Cardio' },
+          { value: 'Bench Press #1', label: 'Bench Press #1', id: 'BP-001', type: 'Strength' },
+          { value: 'Elliptical #1', label: 'Elliptical #1', id: 'EL-001', type: 'Cardio' }
+        ];
+        setGymMachines(sampleMachines);
+      } else {
+        setGymMachines(machineOptions);
+      }
     } catch (e) {
       console.error('Failed to fetch gym machines', e);
-      // Fallback to sample machines
-      setGymMachines(MACHINES.map(m => ({ value: m.name, label: m.name, id: m.id, type: m.type })));
+      // Fallback to sample machines when error occurs
+      console.log('Using sample machines as fallback due to error');
+      const sampleMachines = [
+        { value: 'Treadmill #1', label: 'Treadmill #1', id: 'TM-001', type: 'Cardio' },
+        { value: 'Treadmill #2', label: 'Treadmill #2', id: 'TM-002', type: 'Cardio' },
+        { value: 'Bench Press #1', label: 'Bench Press #1', id: 'BP-001', type: 'Strength' },
+        { value: 'Elliptical #1', label: 'Elliptical #1', id: 'EL-001', type: 'Cardio' }
+      ];
+      setGymMachines(sampleMachines);
     } finally {
       setMachinesLoading(false);
     }
@@ -1386,10 +1417,10 @@ function MachineAutocomplete({ value, onChange, machines, loading }) {
   const listRef = useRef(null);
 
   const filteredMachines = useMemo(() => {
-    if (!query) return machines.slice(0, 10);
+    if (!query) return machines.slice(0, 50); // Show up to 50 machines when no search query
     return machines
       .filter(m => m.label.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 10);
+      .slice(0, 50); // Show up to 50 filtered results when searching
   }, [machines, query]);
 
   useEffect(() => {
