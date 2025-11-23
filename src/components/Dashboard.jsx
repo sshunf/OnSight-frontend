@@ -11,6 +11,59 @@ import { buildEquipmentRows } from '../utils/occupancyTable';
 console.log("dashboard reached");
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
+function MachineSelectDropdown({ options, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
+  const sortedOptions = [...options]
+    .filter(machine => machine && machine.machineId)
+    .sort((a, b) => (a.machineName || a.machineId).localeCompare(b.machineName || b.machineId));
+  const selected = sortedOptions.find(m => String(m.machineId) === String(value)) || sortedOptions[0];
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div className="machine-select-wrapper" ref={wrapperRef}>
+      <button
+        type="button"
+        className="machine-select-trigger interval-dropdown uppercase tracking-wider"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {selected ? (selected.machineName || selected.machineId) : 'Select Machine'}
+        <span className="machine-select-caret">▾</span>
+      </button>
+      {open && (
+        <div className="machine-select-menu">
+          <div className="machine-select-scroll">
+            {sortedOptions.map(machine => (
+              <button
+                key={machine.machineId}
+                type="button"
+                className={`machine-select-option ${String(machine.machineId) === String(value) ? 'active' : ''}`}
+                onClick={() => {
+                  onChange(machine.machineId);
+                  setOpen(false);
+                }}
+              >
+                {machine.machineName || machine.machineId}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Dashboard() {
   const displayName = localStorage.getItem('displayName');
   const [user, setUser] = useState(null);
@@ -542,20 +595,11 @@ return (
                 <canvas ref={hourlyUsageChartRef}></canvas>
               </div>
               <div className="interval-dropdown-wrapper">
-                <select
+                <MachineSelectDropdown
+                  options={machineOptions}
                   value={selectedMachine}
-                  onChange={(e) => setSelectedMachine(e.target.value)}
-                  className="interval-dropdown uppercase tracking-wider"
-                >
-                  {[...machineOptions]
-                    .filter(machine => machine && machine.machineId)
-                    .sort((a, b) => (a.machineName || a.machineId).localeCompare(b.machineName || b.machineId))
-                    .map((machine) => (
-                      <option key={machine.machineId} value={machine.machineId}>
-                        {machine.machineName || machine.machineId}
-                      </option>
-                    ))}
-                </select>
+                  onChange={setSelectedMachine}
+                />
                 <select
                   value={selectedRange}
                   onChange={e => setSelectedRange(parseInt(e.target.value))}
