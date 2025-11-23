@@ -670,6 +670,46 @@ export default function TicketsTab() {
         .tk-autocomplete-item:hover { 
           background: rgba(124,58,237,0.15); 
         }
+        .tk-autocomplete-empty {
+          padding: 10px 12px;
+          color: #9ca3af;
+          font-size: 13px;
+        }
+        .tk-autocomplete-divider {
+          height: 1px;
+          background: #1c1c27;
+        }
+        .tk-autocomplete-item.custom-option {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-weight: 500;
+          color: #e5e7eb;
+        }
+        .tk-custom-machine {
+          margin-top: 12px;
+          padding: 12px;
+          border-radius: 10px;
+          border: 1px dashed #2f2f44;
+          background: #13131f;
+        }
+        .tk-custom-machine p {
+          margin: 0 0 6px 0;
+          font-size: 13px;
+          color: #9ca3af;
+        }
+        .tk-inline-link {
+          margin-top: 8px;
+          padding: 0;
+          background: none;
+          border: none;
+          color: #a78bfa;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        .tk-inline-link:hover {
+          text-decoration: underline;
+        }
 
         /* Highlight matching text - subtle glassy effect */
         .tk-highlight {
@@ -1382,6 +1422,7 @@ function TicketDropdown({ value, onChange, options, disabled = false }) {
   return (
     <div className="nx-dd" ref={ref}>
       <button 
+        type="button"
         className="nx-dd-button" 
         onClick={()=>!disabled && setOpen(o=>!o)} 
         aria-haspopup="listbox" 
@@ -1413,21 +1454,51 @@ function MachineAutocomplete({ value, onChange, machines, loading }) {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [customValue, setCustomValue] = useState('');
   const inputRef = useRef(null);
   const listRef = useRef(null);
+  const customInputRef = useRef(null);
 
   const filteredMachines = useMemo(() => {
-    if (!query) return machines.slice(0, 50); // Show up to 50 machines when no search query
+    if (!query) return machines.slice(0, 50);
     return machines
       .filter(m => m.label.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 50); // Show up to 50 filtered results when searching
+      .slice(0, 50);
   }, [machines, query]);
 
+  const optionCount = filteredMachines.length + 1; // include custom entry
+
   useEffect(() => {
-    if (isOpen && filteredMachines.length > 0) {
+    if (isOpen) {
       setHighlightedIndex(0);
     }
   }, [filteredMachines, isOpen]);
+
+  useEffect(() => {
+    if (isCustomMode) {
+      setCustomValue(value || '');
+    } else {
+      setQuery(value || '');
+    }
+  }, [value, isCustomMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (inputRef.current && !inputRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isCustomMode) {
+      customInputRef.current?.focus();
+    }
+  }, [isCustomMode]);
 
   const handleKeyDown = (e) => {
     if (!isOpen) {
@@ -1441,20 +1512,22 @@ function MachineAutocomplete({ value, onChange, machines, loading }) {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setHighlightedIndex(prev => 
-          prev < filteredMachines.length - 1 ? prev + 1 : 0
+        setHighlightedIndex(prev =>
+          prev < optionCount - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setHighlightedIndex(prev => 
-          prev > 0 ? prev - 1 : filteredMachines.length - 1
+        setHighlightedIndex(prev =>
+          prev > 0 ? prev - 1 : optionCount - 1
         );
         break;
       case 'Enter':
         e.preventDefault();
-        if (filteredMachines[highlightedIndex]) {
+        if (highlightedIndex < filteredMachines.length && filteredMachines[highlightedIndex]) {
           selectMachine(filteredMachines[highlightedIndex]);
+        } else {
+          activateCustomMode();
         }
         break;
       case 'Escape':
@@ -1465,25 +1538,27 @@ function MachineAutocomplete({ value, onChange, machines, loading }) {
   };
 
   const selectMachine = (machine) => {
+    setIsCustomMode(false);
+    setCustomValue('');
     onChange(machine.value);
     setQuery(machine.value);
     setIsOpen(false);
   };
 
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
+  const activateCustomMode = () => {
+    setIsCustomMode(true);
+    setIsOpen(false);
+    const startingValue = query || value || '';
+    setCustomValue(startingValue);
+    onChange(startingValue);
+  };
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (inputRef.current && !inputRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const exitCustomMode = () => {
+    setIsCustomMode(false);
+    setCustomValue('');
+    setQuery('');
+    onChange('');
+  };
 
   return (
     <div style={{ position: 'relative' }} ref={inputRef}>
@@ -1499,11 +1574,34 @@ function MachineAutocomplete({ value, onChange, machines, loading }) {
         }}
         onKeyDown={handleKeyDown}
         onFocus={() => setIsOpen(true)}
-        disabled={loading}
-        required
+        disabled={loading || isCustomMode}
+        required={!isCustomMode}
       />
-      {isOpen && !loading && filteredMachines.length > 0 && (
+      {isCustomMode && (
+        <div className="tk-custom-machine">
+          <p>Machine not listed? Enter its name below.</p>
+          <input
+            ref={customInputRef}
+            type="text"
+            className="tk-input"
+            placeholder="Custom machine name"
+            value={customValue}
+            onChange={(e) => {
+              setCustomValue(e.target.value);
+              onChange(e.target.value);
+            }}
+            required
+          />
+          <button type="button" className="tk-inline-link" onClick={exitCustomMode}>
+            Select from database list instead
+          </button>
+        </div>
+      )}
+      {isOpen && !loading && (
         <div className="tk-autocomplete" ref={listRef}>
+          {filteredMachines.length === 0 && (
+            <div className="tk-autocomplete-empty">No machines found</div>
+          )}
           {filteredMachines.map((machine, index) => (
             <div
               key={machine.id}
@@ -1521,6 +1619,17 @@ function MachineAutocomplete({ value, onChange, machines, loading }) {
               </div>
             </div>
           ))}
+          <div className="tk-autocomplete-divider" />
+          <div
+            className={`tk-autocomplete-item custom-option${highlightedIndex === filteredMachines.length ? ' active' : ''}`}
+            style={{
+              background: highlightedIndex === filteredMachines.length ? 'rgba(124,58,237,0.15)' : 'transparent'
+            }}
+            onClick={activateCustomMode}
+          >
+            <span>Other machine</span>
+            <span style={{ fontSize: '11px', color: '#a5b4fc' }}>Type manually</span>
+          </div>
         </div>
       )}
     </div>
