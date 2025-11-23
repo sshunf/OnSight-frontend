@@ -695,7 +695,7 @@ function TempDashboard() {
         .nx-dd { position:relative; }
         .nx-dd-button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; }
         .nx-caret { opacity:0.8; }
-        .nx-dd-menu { position:absolute; top:calc(100% + 8px); right:0; background:#111119; border:1px solid #1d1d29; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,0.45); padding:6px; z-index:40; min-width:100%; }
+        .nx-dd-menu { position:absolute; top:calc(100% + 8px); right:0; background:#111119; border:1px solid #1d1d29; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,0.45); padding:6px; z-index:40; min-width:100%; max-height:260px; overflow-y:auto; }
         .nx-dd-item { padding:8px 10px; border-radius:8px; cursor:pointer; color:#e5e7eb; font-size:13px; }
         .nx-dd-item[aria-selected="true"], .nx-dd-item:hover { background:rgba(124,58,237,0.18); color:#c4b5fd; }
         .nx-table { width:100%; border-collapse:separate; border-spacing:0; }
