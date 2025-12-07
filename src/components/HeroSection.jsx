@@ -8,6 +8,7 @@ function HeroSection() {
   const wordIndex = useRef(0);
   const isDeleting = useRef(false);
   const logoParallaxRef = useRef(null);
+  const featuresTitleRef = useRef(null);
 
   //features
   const videoRef = useRef(null);
@@ -34,6 +35,20 @@ function HeroSection() {
       video.removeEventListener('timeupdate', handleTimeUpdate);
     };
   }, []);
+
+  const scrollToDemoVideo = (event) => {
+    // keep the CTA on the homepage and scroll to the feature intro
+    event.preventDefault();
+    const titleElement = featuresTitleRef.current;
+    if (titleElement) {
+      titleElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const fallbackSection = document.getElementById('featuresSection');
+    if (fallbackSection) {
+      fallbackSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const features = [
     {
@@ -140,7 +155,7 @@ function HeroSection() {
             </div>
             <div className="buttons">
               <Link to="/waitlist">Book A Demo</Link>
-              <Link to="/features">Learn More</Link>
+              <a href="#featuresSection" onClick={scrollToDemoVideo}>Learn More</a>
             </div>
           </div>
           <div className="relative logo-container" aria-hidden="true">
@@ -153,7 +168,7 @@ function HeroSection() {
         <div className="relative mx-auto max-w-7xl">
           <div className="text-center mb-16">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl text-white">
-              Empowering Gyms with Smart Insights
+              <span ref={featuresTitleRef}>Empowering Gyms with Smart Insights</span>
             </h2>
             <p className="mt-4 text-base text-gray-400">
               Our sensor solutions provide the data you need to optimize your facility.
