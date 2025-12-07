@@ -6,6 +6,7 @@ import './css/Waitlist.css';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
+import ScrollToTop from './components/ScrollToTop';
 import FeaturesPage from './pages/FeaturesPage';
 import FoundersNotePage from './pages/FoundersNotePage';
 import WaitlistPage from './pages/WaitlistPage';
@@ -28,6 +29,7 @@ import TempDashboardPage from './pages/TempDashboardPage';
 function App() {
   return (
     <>
+      <ScrollToTop />
       <NightBackground />
       <Routes>
         {/* Routes that need header and footer */}
