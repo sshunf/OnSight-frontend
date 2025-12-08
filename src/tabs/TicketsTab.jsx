@@ -140,7 +140,6 @@ export default function TicketsTab() {
   const [form, setForm] = useState({
     title: '',
     machineName: '',
-    worker: '',
     technicianId: '',
     priority: 'Medium',
     checklistText: '',
@@ -201,9 +200,8 @@ export default function TicketsTab() {
               description: ticket.description,
               status: ticket.status,
               priority: ticket.priority,
-              machineName: ticket.machineName,
-              worker: ticket.worker,
-              manual: ticket.manual,
+        machineName: ticket.machineName,
+        manual: ticket.manual,
               ruleKey: ticket.ruleKey,
               ruleInterval: ticket.ruleInterval,
               intervalId: ticket.intervalId,
@@ -514,7 +512,6 @@ export default function TicketsTab() {
         title: form.title,
         description: form.title,
         machineName: form.machineName,
-        worker: form.worker || 'Unassigned',
         priority: form.priority || 'Medium',
         status: 'open',
         manual: true,
@@ -528,7 +525,6 @@ export default function TicketsTab() {
       setForm({
         title: '',
         machineName: '',
-        worker: '',
         technicianId: '',
         priority: 'Medium',
         checklistText: '',
@@ -543,7 +539,6 @@ export default function TicketsTab() {
       console.log('Creating ticket for gym:', gymId, 'with data:', {
         title: form.title,
         machineName: form.machineName,
-        worker: form.worker || undefined,
         priority: form.priority || 'Medium',
         checklist,
         sendEmail: form.sendEmail
@@ -555,7 +550,6 @@ export default function TicketsTab() {
         body: JSON.stringify({
           title: form.title,
           machineName: form.machineName,
-          worker: form.worker || undefined,
           technicianId: form.technicianId || undefined,
           priority: form.priority || 'Medium',
           checklist,
@@ -577,7 +571,6 @@ export default function TicketsTab() {
       setForm({
         title: '',
         machineName: '',
-        worker: '',
         technicianId: '',
         priority: 'Medium',
         checklistText: '',
@@ -1349,17 +1342,6 @@ export default function TicketsTab() {
                     />
                   </div>
                   
-                  <div className="tk-field">
-                    <label className="tk-label">Assigned Worker</label>
-                    <input
-                      type="text"
-                      className="tk-input"
-                      placeholder="Optional"
-                      value={form.worker}
-                      onChange={(e) => setForm(prev => ({ ...prev, worker: e.target.value }))}
-                    />
-                  </div>
-
                   <div className="tk-field">
                     <label className="tk-label">Technician (optional)</label>
                     <select
