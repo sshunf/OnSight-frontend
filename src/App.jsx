@@ -24,6 +24,7 @@ import BlogPage from './pages/BlogPage';
 import GaragePage from './pages/GaragePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import TempDashboardPage from './pages/TempDashboardPage';
+import SchedulePage from './pages/SchedulePage';
 
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
         <Route path="/dashboard" element={<TempDashboardPage />} />
         <Route path="/dashboard-old" element={<DashboardPage />} />
         <Route path="/chatbot" element={<ChatBotPage />} />
+        <Route path="/schedule" element={<SchedulePage />} />
       </Routes>
     </>
   );

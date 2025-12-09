@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import MaintenanceCalendar from '../components/MaintenanceCalendar.jsx';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
