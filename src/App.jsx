@@ -6,6 +6,7 @@ import './css/Waitlist.css';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
+import ScrollToTop from './components/ScrollToTop';
 import FeaturesPage from './pages/FeaturesPage';
 import FoundersNotePage from './pages/FoundersNotePage';
 import WaitlistPage from './pages/WaitlistPage';
@@ -23,11 +24,13 @@ import BlogPage from './pages/BlogPage';
 import GaragePage from './pages/GaragePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import TempDashboardPage from './pages/TempDashboardPage';
+import SchedulePage from './pages/SchedulePage';
 
 
 function App() {
   return (
     <>
+      <ScrollToTop />
       <NightBackground />
       <Routes>
         {/* Routes that need header and footer */}
@@ -49,6 +52,7 @@ function App() {
         <Route path="/dashboard" element={<TempDashboardPage />} />
         <Route path="/dashboard-old" element={<DashboardPage />} />
         <Route path="/chatbot" element={<ChatBotPage />} />
+        <Route path="/schedule" element={<SchedulePage />} />
       </Routes>
     </>
   );
