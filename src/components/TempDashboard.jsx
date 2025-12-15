@@ -97,9 +97,29 @@ function TempDashboard() {
   const avgUsageChartRef = useRef(null);
   const cumUsageChartRef = useRef(null);
   const analyticsChartRef = useRef(null);
+  const [facilityZones, setFacilityZones] = useState([]);
+  const [facilityLoading, setFacilityLoading] = useState(false);
+  const [facilityRange, setFacilityRange] = useState(12);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
+  const facilityZoneConfig = [
+    { id: 'cardio', label: 'Cardio', style: { top: '8%', left: '5%', width: '40%', height: '32%' } },
+    { id: 'machines', label: 'Machines', style: { bottom: '8%', left: '5%', width: '40%', height: '32%' } },
+    { id: 'cable-area', label: 'Cable Area', style: { bottom: '8%', right: '5%', width: '40%', height: '32%' } },
+  ];
+  const sensorZoneMap = {
+    '2': 'cardio',
+    '1': 'cable-area',
+    '3': 'machines',
+  };
+  const zoneAliasMap = {
+    'top-left': 'cardio',
+    'middle': 'machines',
+    'middle-right': 'cable-area',
+    'stretch': 'cable-area',
+    'stretching': 'cable-area',
+  };
 
   // User authentication check
   useEffect(() => {
@@ -408,6 +428,51 @@ function TempDashboard() {
     }
   };
 
+  const fetchFacilityHeatmap = async (rangeHours = 12) => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) return;
+    setFacilityLoading(true);
+    const defaultZones = facilityZoneConfig.map(z => ({ zone: z.id, minutes: 0 }));
+    try {
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${rangeHours}`);
+      const data = await res.json();
+      if (res.ok && data) {
+        const aggregated = {};
+        // Aggregate by sensorId mapping first
+        (data.machines || []).forEach(m => {
+          const sensor = m.sensorId ?? m.sensor_id ?? m.sensor;
+          const mappedBySensor = sensorZoneMap[String(sensor)];
+          const mappedByZone = m.zone ? (zoneAliasMap[String(m.zone)] || m.zone) : undefined;
+          const zoneId = mappedBySensor || mappedByZone || 'unknown';
+          const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
+          const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
+          if (!aggregated[zoneId]) aggregated[zoneId] = 0;
+          aggregated[zoneId] += minutes;
+        });
+        // Merge with any zone-level minutes provided directly
+        (data.zones || []).forEach(z => {
+          const rawZone = z.zone || 'unknown';
+          const zoneId = zoneAliasMap[String(rawZone)] || rawZone;
+          const minutes = z.minutes || 0;
+          if (!aggregated[zoneId]) aggregated[zoneId] = 0;
+          aggregated[zoneId] += minutes;
+        });
+        const mergedZones = facilityZoneConfig.map(z => ({
+          zone: z.id,
+          minutes: aggregated[z.id] || 0,
+        }));
+        setFacilityZones(mergedZones.length ? mergedZones : defaultZones);
+      } else {
+        setFacilityZones(defaultZones);
+      }
+    } catch (e) {
+      console.error('Failed to fetch facility heatmap:', e);
+      setFacilityZones(defaultZones);
+    } finally {
+      setFacilityLoading(false);
+    }
+  };
+
   // Memoize processed analytics data to prevent dependency array size changes
   const processedAnalyticsData = useMemo(() => {
     if (!analyticsData || analyticsData.length === 0) return [];
@@ -532,11 +597,15 @@ function TempDashboard() {
 
   // Build charts when dependencies change
   useEffect(() => {
-    if (user && activeTab === 'dashboard') {
-      buildWeeklyChart();
+    if (!user) return;
+    if (activeTab === 'dashboard') {
       buildCumulativeChart();
+      fetchFacilityHeatmap(facilityRange);
     }
-  }, [user, selectedAvgRange, selectedCumRange, activeTab]);
+    if (activeTab === 'analytics') {
+      buildWeeklyChart();
+    }
+  }, [user, selectedAvgRange, selectedCumRange, activeTab, facilityRange]);
 
   useEffect(() => {
     if (selectedMachine && activeTab === 'dashboard') {
@@ -840,9 +909,33 @@ function TempDashboard() {
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{stats.numDevices}</div>
                       </div>
                     </div>
-                  </div>
                 </div>
-                
+              </div>
+
+                <div className="nx-card" style={{marginTop:8}}>
+                  <div className="nx-card-header">
+                    <div>
+                      <div className="nx-card-title">Average Machine Usage</div>
+                      <div className="nx-subtle">Per machine</div>
+                    </div>
+                    <NxDropdown
+                      value={selectedAvgRange}
+                      onChange={(v) => setSelectedAvgRange(parseInt(v))}
+                      options={[
+                        { value: 6, label: 'Past 6 Hours' },
+                        { value: 8, label: 'Past 8 Hours' },
+                        { value: 12, label: 'Past 12 Hours' },
+                        { value: 24, label: 'Past 24 Hours' },
+                        { value: 168, label: 'Past Week' },
+                        { value: 720, label: 'Past Month' },
+                        { value: 1000, label: 'All Time' }
+                      ]}
+                      minWidth={150}
+                    />
+                  </div>
+                  <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
+                </div>
+
                 <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
                   <div className="nx-card-header">
                     <div>
@@ -971,32 +1064,74 @@ function TempDashboard() {
                   </div>
                 </div>
 
+                {/* Facility map */}
+                <div className="nx-card" style={{marginTop:'8px'}}>
+                  <div className="nx-card-header">
+                    <div>
+                      <div className="nx-card-title">Facility Usage Map</div>
+                      <div className="nx-subtle">Color intensity shows recent usage by zone</div>
+                    </div>
+                    <NxDropdown
+                      value={facilityRange}
+                      onChange={(v) => setFacilityRange(parseInt(v))}
+                      options={[
+                        { value: 1, label: 'Past 1 Hour' },
+                        { value: 3, label: 'Past 3 Hours' },
+                        { value: 6, label: 'Past 6 Hours' },
+                        { value: 12, label: 'Past 12 Hours' },
+                        { value: 24, label: 'Past 24 Hours' },
+                      ]}
+                      minWidth={150}
+                    />
+                  </div>
+                  <div style={{ position:'relative', paddingBottom:'45%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
+                    {facilityZoneConfig.map(zone => {
+                      const z = (facilityZones || []).find(entry => entry.zone === zone.id) || {};
+                      const minutes = z.minutes || 0;
+                      const maxMinutes = Math.max(1, ...(facilityZones || []).map(entry => entry.minutes || 0));
+                      const t = Math.min(1, minutes / maxMinutes);
+                      const color = `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+                      const border = t > 0.7 ? '#facc15' : 'rgba(255,255,255,0.25)';
+                      return (
+                        <div
+                          key={zone.id}
+                          style={{
+                            position:'absolute',
+                            ...zone.style,
+                            background: color,
+                            border: `1px solid ${border}`,
+                            borderRadius:10,
+                            display:'flex',
+                            flexDirection:'column',
+                            justifyContent:'space-between',
+                            padding:10,
+                            color:'#e5e7eb',
+                            fontWeight:600,
+                            boxShadow:'0 10px 30px rgba(0,0,0,0.35)'
+                          }}
+                          title={`${zone.label}: ${minutes.toFixed(1)} min`}
+                        >
+                          <span>{zone.label}</span>
+                          <span style={{fontSize:12, opacity:0.9}}>{minutes.toFixed(1)} min</span>
+                        </div>
+                      );
+                    })}
+                    {facilityLoading && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', background:'rgba(0,0,0,0.35)' }}>
+                        Loading facility map...
+                      </div>
+                    )}
+                    {!facilityLoading && (facilityZones || []).every(z => (z.minutes || 0) === 0) && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                        No facility data returned for this range.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Bottom row */}
                 <div className="nx-grid" style={{marginTop:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 7'}}>
-                    <div className="nx-card-header">
-                      <div>
-                        <div className="nx-card-title">Average Machine Usage</div>
-                        <div className="nx-subtle">Per machine</div>
-                      </div>
-                      <NxDropdown
-                        value={selectedAvgRange}
-                        onChange={(v) => setSelectedAvgRange(parseInt(v))}
-                        options={[
-                          { value: 6, label: 'Past 6 Hours' },
-                          { value: 8, label: 'Past 8 Hours' },
-                          { value: 12, label: 'Past 12 Hours' },
-                          { value: 24, label: 'Past 24 Hours' },
-                          { value: 168, label: 'Past Week' },
-                          { value: 720, label: 'Past Month' },
-                          { value: 1000, label: 'All Time' }
-                        ]}
-                        minWidth={150}
-                      />
-                    </div>
-                    <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
-                  </div>
-                  <div className="nx-card" style={{gridColumn:'span 5'}}>
+                  <div className="nx-card" style={{gridColumn:'span 12'}}>
                     <div className="nx-card-header">
                       <div className="nx-card-title">Equipment Status</div>
                     </div>
