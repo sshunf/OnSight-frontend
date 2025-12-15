@@ -110,6 +110,11 @@ function Footer() {
           </div>
         </div>
       </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="border-t border-gray-800 pt-6 text-center text-xs text-gray-500">
+          © 2025 OnSight LLC. All rights reserved.
+        </div>
+      </div>
       {showToast && (
         <div
           role="status"
