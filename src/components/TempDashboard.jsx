@@ -77,6 +77,7 @@ function TempDashboard() {
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [selectedTopN, setSelectedTopN] = useState('all');
+  const [selectedZone, setSelectedZone] = useState('');
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -100,6 +101,7 @@ function TempDashboard() {
   const [facilityZones, setFacilityZones] = useState([]);
   const [facilityLoading, setFacilityLoading] = useState(false);
   const [facilityRange, setFacilityRange] = useState(12);
+  const [facilityMachines, setFacilityMachines] = useState([]);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
@@ -120,6 +122,17 @@ function TempDashboard() {
     'stretch': 'cable-area',
     'stretching': 'cable-area',
   };
+
+  const filteredMachineOptions = useMemo(() => {
+    if (!selectedZone) return machineOptions;
+    const zoneSet = new Set(
+      (facilityMachines || [])
+        .filter(m => String(m.zone) === String(selectedZone))
+        .map(m => String(m.machineId))
+    );
+    if (zoneSet.size === 0) return [];
+    return machineOptions.filter(m => zoneSet.has(String(m.machineId)));
+  }, [selectedZone, machineOptions, facilityMachines]);
 
   // User authentication check
   useEffect(() => {
@@ -462,12 +475,26 @@ function TempDashboard() {
           minutes: aggregated[z.id] || 0,
         }));
         setFacilityZones(mergedZones.length ? mergedZones : defaultZones);
+        const normalizedMachines = (data.machines || []).map(m => {
+          const sensor = m.sensorId ?? m.sensor_id ?? m.sensor;
+          const mappedBySensor = sensorZoneMap[String(sensor)];
+          const mappedByZone = m.zone ? (zoneAliasMap[String(m.zone)] || m.zone) : undefined;
+          const zoneId = mappedBySensor || mappedByZone || 'unknown';
+          return {
+            machineId: m.machineId,
+            machineName: m.machineName || m.machineId,
+            zone: zoneId
+          };
+        });
+        setFacilityMachines(normalizedMachines);
       } else {
         setFacilityZones(defaultZones);
+        setFacilityMachines([]);
       }
     } catch (e) {
       console.error('Failed to fetch facility heatmap:', e);
       setFacilityZones(defaultZones);
+      setFacilityMachines([]);
     } finally {
       setFacilityLoading(false);
     }
@@ -612,6 +639,35 @@ function TempDashboard() {
       buildUsageChart();
     }
   }, [selectedRange, selectedMachine, activeTab]);
+
+  // Rebuild usage chart when machine list updates or when we auto-select the first machine
+  useEffect(() => {
+    if (!user || activeTab !== 'dashboard') return;
+    if (!selectedMachine && machineOptions.length > 0) {
+      const source = filteredMachineOptions.length ? filteredMachineOptions : machineOptions;
+      setSelectedMachine(source[0]?.machineId || '');
+      return;
+    }
+    if (selectedMachine) {
+      buildUsageChart();
+    }
+  }, [machineOptions, filteredMachineOptions, selectedMachine, activeTab, user]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'dashboard') return;
+    if (selectedZone) {
+      if (filteredMachineOptions.length === 0) {
+        setSelectedMachine('');
+        return;
+      }
+      const exists = filteredMachineOptions.some(m => String(m.machineId) === String(selectedMachine));
+      if (!exists) {
+        setSelectedMachine(filteredMachineOptions[0].machineId);
+      }
+    } else if (!selectedMachine && machineOptions.length > 0) {
+      setSelectedMachine(machineOptions[0].machineId);
+    }
+  }, [selectedZone, filteredMachineOptions, machineOptions, selectedMachine, activeTab, user]);
 
   // Tab change handler
   const handleTabChange = (tab) => {
@@ -1010,6 +1066,74 @@ function TempDashboard() {
                   </div>
                 </div>
 
+                {/* Facility map */}
+                <div className="nx-card" style={{marginTop:'8px'}}>
+                  <div className="nx-card-header">
+                    <div>
+                      <div className="nx-card-title">Facility Usage Map</div>
+                      <div className="nx-subtle">Color intensity shows recent usage by zone</div>
+                    </div>
+                    <NxDropdown
+                      value={facilityRange}
+                      onChange={(v) => setFacilityRange(parseInt(v))}
+                      options={[
+                        { value: 1, label: 'Past 1 Hour' },
+                        { value: 3, label: 'Past 3 Hours' },
+                        { value: 6, label: 'Past 6 Hours' },
+                        { value: 12, label: 'Past 12 Hours' },
+                        { value: 24, label: 'Past 24 Hours' },
+                        { value: 1000, label: 'All Time' },
+                      ]}
+                      minWidth={150}
+                    />
+                  </div>
+                  <div style={{ position:'relative', paddingBottom:'45%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
+                    {facilityZoneConfig.map(zone => {
+                      const z = (facilityZones || []).find(entry => entry.zone === zone.id) || {};
+                      const minutes = z.minutes || 0;
+                      const maxMinutes = Math.max(1, ...(facilityZones || []).map(entry => entry.minutes || 0));
+                      const t = Math.min(1, minutes / maxMinutes);
+                      const color = `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+                      const isSelected = String(selectedZone) === String(zone.id);
+                      return (
+                        <div
+                          key={zone.id}
+                          style={{
+                            position:'absolute',
+                            ...zone.style,
+                            background: color,
+                            border: isSelected ? '2px solid #facc15' : '1px solid rgba(255,255,255,0.25)',
+                            borderRadius:10,
+                            display:'flex',
+                            flexDirection:'column',
+                            justifyContent:'space-between',
+                            padding:10,
+                            color:'#e5e7eb',
+                            fontWeight:600,
+                            boxShadow:'0 10px 30px rgba(0,0,0,0.35)',
+                            cursor:'pointer'
+                          }}
+                          title={`${zone.label}: ${minutes.toFixed(1)} min`}
+                          onClick={() => setSelectedZone(zone.id)}
+                        >
+                          <span>{zone.label}</span>
+                          <span style={{fontSize:12, opacity:0.9}}>{minutes.toFixed(1)} min</span>
+                        </div>
+                      );
+                    })}
+                    {facilityLoading && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', background:'rgba(0,0,0,0.35)' }}>
+                        Loading facility map...
+                      </div>
+                    )}
+                    {!facilityLoading && (facilityZones || []).every(z => (z.minutes || 0) === 0) && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                        No facility data returned for this range.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Main charts row */}
                 <div className="nx-grid" style={{marginTop:'8px'}}>
                   <div className="nx-card" style={{gridColumn:'span 8'}}>
@@ -1025,7 +1149,7 @@ function TempDashboard() {
                         <NxDropdown
                           value={selectedMachine}
                           onChange={(v) => setSelectedMachine(v)}
-                          options={machineOptions.map(m => ({ value: m.machineId, label: m.machineName || m.machineId }))}
+                          options={(filteredMachineOptions.length ? filteredMachineOptions : machineOptions).map(m => ({ value: m.machineId, label: m.machineName || m.machineId }))}
                           minWidth={170}
                         />
                       </div>
@@ -1061,71 +1185,6 @@ function TempDashboard() {
                         ))
                       )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Facility map */}
-                <div className="nx-card" style={{marginTop:'8px'}}>
-                  <div className="nx-card-header">
-                    <div>
-                      <div className="nx-card-title">Facility Usage Map</div>
-                      <div className="nx-subtle">Color intensity shows recent usage by zone</div>
-                    </div>
-                    <NxDropdown
-                      value={facilityRange}
-                      onChange={(v) => setFacilityRange(parseInt(v))}
-                      options={[
-                        { value: 1, label: 'Past 1 Hour' },
-                        { value: 3, label: 'Past 3 Hours' },
-                        { value: 6, label: 'Past 6 Hours' },
-                        { value: 12, label: 'Past 12 Hours' },
-                        { value: 24, label: 'Past 24 Hours' },
-                      ]}
-                      minWidth={150}
-                    />
-                  </div>
-                  <div style={{ position:'relative', paddingBottom:'45%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
-                    {facilityZoneConfig.map(zone => {
-                      const z = (facilityZones || []).find(entry => entry.zone === zone.id) || {};
-                      const minutes = z.minutes || 0;
-                      const maxMinutes = Math.max(1, ...(facilityZones || []).map(entry => entry.minutes || 0));
-                      const t = Math.min(1, minutes / maxMinutes);
-                      const color = `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
-                      const border = t > 0.7 ? '#facc15' : 'rgba(255,255,255,0.25)';
-                      return (
-                        <div
-                          key={zone.id}
-                          style={{
-                            position:'absolute',
-                            ...zone.style,
-                            background: color,
-                            border: `1px solid ${border}`,
-                            borderRadius:10,
-                            display:'flex',
-                            flexDirection:'column',
-                            justifyContent:'space-between',
-                            padding:10,
-                            color:'#e5e7eb',
-                            fontWeight:600,
-                            boxShadow:'0 10px 30px rgba(0,0,0,0.35)'
-                          }}
-                          title={`${zone.label}: ${minutes.toFixed(1)} min`}
-                        >
-                          <span>{zone.label}</span>
-                          <span style={{fontSize:12, opacity:0.9}}>{minutes.toFixed(1)} min</span>
-                        </div>
-                      );
-                    })}
-                    {facilityLoading && (
-                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', background:'rgba(0,0,0,0.35)' }}>
-                        Loading facility map...
-                      </div>
-                    )}
-                    {!facilityLoading && (facilityZones || []).every(z => (z.minutes || 0) === 0) && (
-                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
-                        No facility data returned for this range.
-                      </div>
-                    )}
                   </div>
                 </div>
 
