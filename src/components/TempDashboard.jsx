@@ -102,26 +102,11 @@ function TempDashboard() {
   const [facilityLoading, setFacilityLoading] = useState(false);
   const [facilityRange, setFacilityRange] = useState(12);
   const [facilityMachines, setFacilityMachines] = useState([]);
+  const [mapConfig, setMapConfig] = useState(null);
+  const svgObjectRef = useRef(null);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
-  const facilityZoneConfig = [
-    { id: 'cardio', label: 'Cardio', style: { top: '8%', left: '5%', width: '40%', height: '32%' } },
-    { id: 'machines', label: 'Machines', style: { bottom: '8%', left: '5%', width: '40%', height: '32%' } },
-    { id: 'cable-area', label: 'Cable Area', style: { bottom: '8%', right: '5%', width: '40%', height: '32%' } },
-  ];
-  const sensorZoneMap = {
-    '2': 'cardio',
-    '1': 'cable-area',
-    '3': 'machines',
-  };
-  const zoneAliasMap = {
-    'top-left': 'cardio',
-    'middle': 'machines',
-    'middle-right': 'cable-area',
-    'stretch': 'cable-area',
-    'stretching': 'cable-area',
-  };
 
   const filteredMachineOptions = useMemo(() => {
     if (!selectedZone) return machineOptions;
@@ -445,18 +430,28 @@ function TempDashboard() {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
     setFacilityLoading(true);
-    const defaultZones = facilityZoneConfig.map(z => ({ zone: z.id, minutes: 0 }));
     try {
       const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${rangeHours}`);
       const data = await res.json();
       if (res.ok && data) {
+        const mapCfg = (data.map && data.map.zones && data.map.zones.length) ? data.map : null;
+        const fallbackMapCfg = mapCfg || {
+          layout: 'svg',
+          floorplanUrl: 'floorplans/default-gym.svg',
+          zones: [
+            { id: 'cardio', label: 'Cardio', svgId: 'zone-cardio' },
+            { id: 'machines', label: 'Machines', svgId: 'zone-machines' },
+            { id: 'cables', label: 'Cable Area', svgId: 'zone-cables' },
+          ]
+        };
+        setMapConfig(fallbackMapCfg);
+        const zonesFromConfig = Array.isArray(fallbackMapCfg?.zones)
+          ? fallbackMapCfg.zones.map(z => ({ zone: z.id, minutes: 0 }))
+          : [];
         const aggregated = {};
-        // Aggregate by sensorId mapping first
+        // Aggregate by zone directly from backend
         (data.machines || []).forEach(m => {
-          const sensor = m.sensorId ?? m.sensor_id ?? m.sensor;
-          const mappedBySensor = sensorZoneMap[String(sensor)];
-          const mappedByZone = m.zone ? (zoneAliasMap[String(m.zone)] || m.zone) : undefined;
-          const zoneId = mappedBySensor || mappedByZone || 'unknown';
+          const zoneId = m.zone || 'unknown';
           const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
           const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
@@ -465,21 +460,23 @@ function TempDashboard() {
         // Merge with any zone-level minutes provided directly
         (data.zones || []).forEach(z => {
           const rawZone = z.zone || 'unknown';
-          const zoneId = zoneAliasMap[String(rawZone)] || rawZone;
+          const zoneId = rawZone;
           const minutes = z.minutes || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
           aggregated[zoneId] += minutes;
         });
-        const mergedZones = facilityZoneConfig.map(z => ({
+        const mergedZones = (fallbackMapCfg?.zones || []).map(z => ({
           zone: z.id,
           minutes: aggregated[z.id] || 0,
         }));
-        setFacilityZones(mergedZones.length ? mergedZones : defaultZones);
+        const fallbackZones = (data.zones || []).map(z => ({
+          zone: z.zone || 'unknown',
+          minutes: z.minutes || 0,
+        }));
+        const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
+        setFacilityZones(zonesToSet);
         const normalizedMachines = (data.machines || []).map(m => {
-          const sensor = m.sensorId ?? m.sensor_id ?? m.sensor;
-          const mappedBySensor = sensorZoneMap[String(sensor)];
-          const mappedByZone = m.zone ? (zoneAliasMap[String(m.zone)] || m.zone) : undefined;
-          const zoneId = mappedBySensor || mappedByZone || 'unknown';
+          const zoneId = m.zone || 'unknown';
           return {
             machineId: m.machineId,
             machineName: m.machineName || m.machineId,
@@ -488,17 +485,132 @@ function TempDashboard() {
         });
         setFacilityMachines(normalizedMachines);
       } else {
-        setFacilityZones(defaultZones);
+        const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+        setFacilityZones(zeroZones);
         setFacilityMachines([]);
       }
     } catch (e) {
       console.error('Failed to fetch facility heatmap:', e);
-      setFacilityZones(defaultZones);
+      const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+      setFacilityZones(zeroZones);
       setFacilityMachines([]);
     } finally {
       setFacilityLoading(false);
     }
   };
+
+  const getZoneColor = (minutes, maxMinutes) => {
+    const denom = Math.max(1, maxMinutes);
+    const t = Math.min(1, minutes / denom);
+    return `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+  };
+
+  const applySvgZoneStyles = () => {
+    if (!mapConfig || !mapConfig.zones || mapConfig.zones.length === 0) return;
+    const obj = svgObjectRef.current;
+    if (!obj || !obj.contentDocument) return;
+    const svgDoc = obj.contentDocument;
+    const svgRoot = svgDoc.querySelector('svg');
+    if (!svgRoot) return;
+    const vb = svgRoot.viewBox?.baseVal;
+    const viewBoxWidth = vb?.width || svgRoot.getBoundingClientRect().width || 1;
+    const viewBoxHeight = vb?.height || svgRoot.getBoundingClientRect().height || 1;
+    const maxMinutes = Math.max(1, ...(facilityZones || []).map(z => z.minutes || 0));
+    const labelFontSize = 18;
+    const labelPadding = 6;
+
+    mapConfig.zones.forEach(z => {
+      const el = svgDoc.getElementById(z.svgId);
+      if (!el) return;
+      const entry = (facilityZones || []).find(fz => String(fz.zone) === String(z.id)) || {};
+      const minutes = entry.minutes || 0;
+      const color = getZoneColor(minutes, maxMinutes);
+      const selected = String(selectedZone) === String(z.id);
+      el.style.fill = color;
+      el.style.stroke = selected ? '#facc15' : '#000000';
+      el.style.strokeWidth = selected ? '3' : '1';
+      el.style.cursor = 'pointer';
+      el.onclick = () => setSelectedZone(z.id);
+
+      // Tooltip via <title> inside each zone
+      let titleEl = el.querySelector('title');
+      if (!titleEl) {
+        titleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'title');
+        el.prepend(titleEl);
+      }
+      titleEl.textContent = `${z.label || z.id}: ${minutes.toFixed(1)} min`;
+
+      // Inline label centered on the shape with a consistent-size chip behind it
+      try {
+        const bbox = el.getBBox();
+        const cx = bbox.x + bbox.width / 2;
+        const cy = bbox.y + bbox.height / 2;
+        const labelId = `onsight-label-${z.id}`;
+        let labelGroup = svgDoc.getElementById(labelId);
+        let rectEl = labelGroup?.querySelector('rect');
+        let textEl = labelGroup?.querySelector('text');
+        if (!labelGroup) {
+          labelGroup = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+          labelGroup.setAttribute('id', labelId);
+          labelGroup.style.pointerEvents = 'none';
+          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          labelGroup.appendChild(rectEl);
+          labelGroup.appendChild(textEl);
+          svgRoot.appendChild(labelGroup);
+        }
+        if (!rectEl) {
+          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          labelGroup.insertBefore(rectEl, labelGroup.firstChild);
+        }
+        if (!textEl) {
+          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          labelGroup.appendChild(textEl);
+        }
+
+        textEl.setAttribute('x', `${cx}`);
+        textEl.setAttribute('y', `${cy}`);
+        textEl.setAttribute('text-anchor', 'middle');
+        textEl.setAttribute('dominant-baseline', 'middle');
+        textEl.setAttribute('fill', '#ffffff');
+        textEl.setAttribute('font-size', `${labelFontSize}`);
+        textEl.setAttribute('font-weight', '700');
+        textEl.textContent = z.label || z.id;
+
+        const textBBox = textEl.getBBox();
+        const rectWidth = textBBox.width + labelPadding * 2;
+        const rectHeight = textBBox.height + labelPadding * 2;
+        const rectX = cx - rectWidth / 2;
+        const rectY = cy - rectHeight / 2;
+
+        rectEl.setAttribute('x', `${rectX}`);
+        rectEl.setAttribute('y', `${rectY}`);
+        rectEl.setAttribute('width', `${rectWidth}`);
+        rectEl.setAttribute('height', `${rectHeight}`);
+        rectEl.setAttribute('rx', '6');
+        rectEl.setAttribute('ry', '6');
+        rectEl.setAttribute('fill', '#0f172a');
+        rectEl.setAttribute('fill-opacity', '0.8');
+        rectEl.setAttribute('stroke', selected ? '#facc15' : '#111827');
+        rectEl.setAttribute('stroke-width', selected ? '2' : '1');
+        rectEl.setAttribute('shape-rendering', 'crispEdges');
+      } catch (e) {
+        // If getBBox fails, skip label placement for this zone
+      }
+    });
+  };
+
+  useEffect(() => {
+    const obj = svgObjectRef.current;
+    if (!obj) return;
+    const handleLoad = () => applySvgZoneStyles();
+    obj.addEventListener('load', handleLoad);
+    return () => obj.removeEventListener('load', handleLoad);
+  }, [mapConfig]);
+
+  useEffect(() => {
+    applySvgZoneStyles();
+  }, [facilityZones, selectedZone, mapConfig]);
 
   // Memoize processed analytics data to prevent dependency array size changes
   const processedAnalyticsData = useMemo(() => {
@@ -1087,40 +1199,34 @@ function TempDashboard() {
                       minWidth={150}
                     />
                   </div>
-                  <div style={{ position:'relative', paddingBottom:'45%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
-                    {facilityZoneConfig.map(zone => {
-                      const z = (facilityZones || []).find(entry => entry.zone === zone.id) || {};
-                      const minutes = z.minutes || 0;
-                      const maxMinutes = Math.max(1, ...(facilityZones || []).map(entry => entry.minutes || 0));
-                      const t = Math.min(1, minutes / maxMinutes);
-                      const color = `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
-                      const isSelected = String(selectedZone) === String(zone.id);
-                      return (
-                        <div
-                          key={zone.id}
-                          style={{
-                            position:'absolute',
-                            ...zone.style,
-                            background: color,
-                            border: isSelected ? '2px solid #facc15' : '1px solid rgba(255,255,255,0.25)',
-                            borderRadius:10,
-                            display:'flex',
-                            flexDirection:'column',
-                            justifyContent:'space-between',
-                            padding:10,
-                            color:'#e5e7eb',
-                            fontWeight:600,
-                            boxShadow:'0 10px 30px rgba(0,0,0,0.35)',
-                            cursor:'pointer'
-                          }}
-                          title={`${zone.label}: ${minutes.toFixed(1)} min`}
-                          onClick={() => setSelectedZone(zone.id)}
-                        >
-                          <span>{zone.label}</span>
-                          <span style={{fontSize:12, opacity:0.9}}>{minutes.toFixed(1)} min</span>
-                        </div>
-                      );
-                    })}
+                  <div style={{ position:'relative', paddingBottom:'55%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
+                    {mapConfig && mapConfig.floorplanUrl ? (
+                      <object
+                        ref={svgObjectRef}
+                        type="image/svg+xml"
+                        data={mapConfig.floorplanUrl}
+                        style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
+                        aria-label="Facility floor plan"
+                      />
+                    ) : (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                        No floorplan configured for this gym.
+                      </div>
+                    )}
+                    <div style={{ position:'absolute', top:12, right:12, background:'rgba(15,23,42,0.85)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:10, padding:'10px 12px', color:'#e5e7eb', minWidth:150 }}>
+                      <div style={{ fontSize:12, color:'#cbd5e1', marginBottom:6 }}>Usage legend</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:12, color:'#cbd5e1' }}>Low</span>
+                        <div style={{
+                          flex:1,
+                          height:10,
+                          borderRadius:999,
+                          background:'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(239,68,68,0.8) 100%)',
+                          boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset'
+                        }} />
+                        <span style={{ fontSize:12, color:'#cbd5e1' }}>High</span>
+                      </div>
+                    </div>
                     {facilityLoading && (
                       <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', background:'rgba(0,0,0,0.35)' }}>
                         Loading facility map...
