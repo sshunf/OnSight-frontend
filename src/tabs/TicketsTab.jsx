@@ -98,6 +98,10 @@ function isAutoTicket(ticket) {
   return false;
 }
 
+function isMemberReported(ticket) {
+  return ticket?.source === 'member' || ticket?.createdBy === 'member_report' || ticket?.category === 'Member Reported';
+}
+
 // Priority badge component
 function PriorityBadge({ priority, size = 'small' }) {
   const priorityColors = {
@@ -153,10 +157,42 @@ export default function TicketsTab() {
   const [editingTech, setEditingTech] = useState(null);
   const [techForm, setTechForm] = useState({ name: '', email: '', isPreventativeDefault: false, active: true });
   const [resolveConfirmTicket, setResolveConfirmTicket] = useState(null);
+  const [memberReportUrl, setMemberReportUrl] = useState('');
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [qrError, setQrError] = useState('');
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
   const detailsModalRef = useRef(null);
   const resolveModalRef = useRef(null);
+
+  useEffect(() => {
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      buildMemberQr(gymId);
+    }
+  }, []);
+
+  async function buildMemberQr(gymId) {
+    if (!gymId || typeof window === 'undefined') return;
+    const memberUrl = `${window.location.origin}/member-report.html?gymId=${encodeURIComponent(gymId)}`;
+    setMemberReportUrl(memberUrl);
+    // Use a hosted QR endpoint to avoid bundler deps
+    const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(memberUrl)}&size=220&margin=1&dark=111827&light=ffffff`;
+    setQrDataUrl(qrUrl);
+    setQrError('');
+  }
+
+  async function copyMemberLink() {
+    if (!memberReportUrl || !navigator?.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(memberReportUrl);
+      setQrError('Link copied');
+      setTimeout(() => setQrError(''), 1500);
+    } catch (err) {
+      console.error('Copy failed', err);
+      setQrError('Copy failed');
+    }
+  }
 
   // Backend routing - use backend when available, fallback to local storage
   async function fetchStatus() {
@@ -170,6 +206,7 @@ export default function TicketsTab() {
         setErrorMsg('No gym selected');
         return;
       }
+      await buildMemberQr(gymId);
       
       // Fetch gym-specific tickets directly (this is the main source of truth)
       console.log('Fetching tickets for gym:', gymId);
@@ -1120,6 +1157,18 @@ export default function TicketsTab() {
                       {isAutoTicket(t) ? 'Auto' : 'Manual'}
                     </span>
                   </div>
+                  {isMemberReported(t) && (
+                    <div className="tk-ticket-meta-item">
+                      <span className="tk-ticket-meta-label">Source:</span>
+                      <span className="tk-ticket-meta-value" style={{
+                        color: '#22c55e',
+                        fontWeight: '600',
+                        fontSize: '11px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>Member Reported</span>
+                    </div>
+                  )}
                   <div className="tk-ticket-meta-item">
                     <span className="tk-ticket-meta-label">Priority:</span>
                     <PriorityBadge priority={t.priority} size="small" />
@@ -1183,6 +1232,30 @@ export default function TicketsTab() {
         </div>
       </div>
 
+      {memberReportUrl && (
+        <div className="nx-card" style={{ marginBottom:12, display:'flex', gap:16, alignItems:'center' }}>
+          <div style={{ flex:1 }}>
+            <div className="nx-card-title" style={{ marginBottom:4 }}>Member Report QR</div>
+            <div className="nx-subtle" style={{ marginBottom:8 }}>Print or post this QR in the gym. Members scan to submit an issue.</div>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <input value={memberReportUrl} readOnly className="tk-input" style={{ flex:1, minWidth:240 }} />
+              <button className="nx-pill" type="button" onClick={copyMemberLink}>Copy link</button>
+            </div>
+            {qrError && (
+              <div
+                className="nx-subtle"
+                style={{ color: qrError.toLowerCase().includes('copy') ? '#22c55e' : '#f87171', marginTop:6 }}
+              >
+                {qrError}
+              </div>
+            )}
+          </div>
+          <div style={{ width:132, height:132, borderRadius:12, border:'1px solid #1f2937', background:'#0f172a', display:'flex', alignItems:'center', justifyContent:'center', padding:10 }}>
+            {qrDataUrl ? <img src={qrDataUrl} alt="QR code for member report" style={{ width:'100%', height:'100%' }} /> : <div className="nx-subtle">QR unavailable</div>}
+          </div>
+        </div>
+      )}
+
       {/* Ticket Details Modal */}
       {active && (
         <div className="nx-overlay" onClick={() => setActive(null)}>
@@ -1203,6 +1276,21 @@ export default function TicketsTab() {
                 }}>
                   {isAutoTicket(active) ? 'Auto' : 'Manual'}
                 </div>
+                {isMemberReported(active) && (
+                  <div style={{
+                    color: '#22c55e',
+                    fontWeight: '600',
+                    fontSize: '12px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    background: 'rgba(34,197,94,0.15)',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(34,197,94,0.35)'
+                  }}>
+                    Member Reported
+                  </div>
+                )}
                 <PriorityBadge priority={active.priority} />
                 <div style={{ 
                   color: active.status === 'open' ? '#22c55e' : active.status === 'closed' ? '#9ca3af' : '#9ca3af',
