@@ -52,6 +52,7 @@ function Header() {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-6">
           {/* <Link to="/dashboard" className={isActive('/dashboard') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Dashboard</Link> */}
+          <Link to="/roi" className={isActive('/roi') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>The Numbers</Link>
           <Link to="/foundersNote" className={isActive('/foundersNote') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Founders' Note</Link>
           <Link to="/waitlist" className={isActive('/waitlist') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Book A Demo</Link>
           <Link to="/login" className="bg-transparent hover:bg-white/10 text-gray-300 hover:text-white px-4 py-2 rounded">Login</Link>
@@ -74,6 +75,7 @@ function Header() {
       {/* Mobile expanding header content */}
           <div className="mobile-menu-content">
             <div className="px-6 pt-6 pb-10 flex flex-col gap-6">
+              <button className="menu-item mi-0 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/roi'); }}>The Numbers</button>
               <button className="menu-item mi-1 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/features'); }}>Features</button>
               {/* <button className="menu-item mi-2 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/dashboard'); }}>Dashboard</button> */}
               <button className="menu-item mi-3 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/foundersNote'); }}>Founders' Note</button>
