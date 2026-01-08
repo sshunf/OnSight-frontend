@@ -28,15 +28,16 @@ function Footer() {
           <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Connect</div>
             <div className="flex space-x-4">
-              <button
-                type="button"
-                aria-disabled="true"
-                title="Coming soon"
-                onClick={() => handleSocialClick('YouTube')}
-                className="text-gray-500 hover:text-gray-400 transition-colors cursor-pointer"
+              <a
+                href="https://www.youtube.com/@OnSightTechn"
+                aria-label="OnSight YouTube"
+                title="OnSight YouTube"
+                className="text-gray-500 hover:text-gray-400 transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 <FaYoutube size={24} />
-              </button>
+              </a>
               <button
                 type="button"
                 aria-disabled="true"
@@ -55,15 +56,16 @@ function Footer() {
               >
                 <FaFacebookF size={24} />
               </button>
-              <button
-                type="button"
-                aria-disabled="true"
-                title="Coming soon"
-                onClick={() => handleSocialClick('Instagram')}
-                className="text-gray-500 hover:text-gray-400 transition-colors cursor-pointer"
+              <a
+                href="https://www.instagram.com/onsight.tech/"
+                aria-label="OnSight Instagram"
+                title="OnSight Instagram"
+                className="text-gray-500 hover:text-gray-400 transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 <FaInstagram size={24} />
-              </button>
+              </a>
             </div>
             <div>
               <img src="/MicrosoftStartups_border_widthBased.png" alt="Microsoft for Startups" className="w-36" />
@@ -108,6 +110,11 @@ function Footer() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="border-t border-gray-800 pt-6 text-center text-xs text-gray-500">
+          © 2025 OnSight LLC. All rights reserved.
         </div>
       </div>
       {showToast && (

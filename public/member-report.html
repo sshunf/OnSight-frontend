@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Equipment Issue</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #7c3aed;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(124,58,237,0.07), transparent 25%),
+                  radial-gradient(circle at 80% 0%, rgba(34,197,94,0.06), transparent 30%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(520px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 24px;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 12px;
+    }
+    label {
+      font-size: 13px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0b1221;
+      color: var(--text);
+      font-size: 14px;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+    button {
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(79,70,229,0.4); }
+    button:active { transform: translateY(0); box-shadow: none; }
+    .status {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent-2); }
+    .gym-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(124,58,237,0.15);
+      color: #c4b5fd;
+      border: 1px solid rgba(124,58,237,0.25);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="gym-pill hidden" id="gym-pill"></div>
+    <h1>Report an Equipment Issue</h1>
+    <p id="intro">Scan and submit a quick report. This will be routed directly to the gym's maintenance queue.</p>
+    <form id="report-form">
+      <div>
+        <label for="machineName">Equipment name or location (optional)</label>
+        <input id="machineName" name="machineName" type="text" placeholder="e.g., Treadmill #4 by the windows">
+      </div>
+      <div>
+        <label for="description">What’s wrong? *</label>
+        <textarea id="description" name="description" required placeholder="Describe the issue (noise, broken part, display not working, etc.)"></textarea>
+      </div>
+      <button type="submit">Submit issue</button>
+      <div class="status hidden" id="status"></div>
+    </form>
+    <p style="font-size:12px; margin-top:14px; color:#6b7280;">Powered by OnSight • Thank you for keeping the equipment running smoothly.</p>
+  </div>
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const gymId = params.get('gymId');
+      const machineId = params.get('machineId');
+      const gymPill = document.getElementById('gym-pill');
+      const statusEl = document.getElementById('status');
+      const form = document.getElementById('report-form');
+      const intro = document.getElementById('intro');
+      if (!gymId) {
+        statusEl.textContent = 'Missing gymId. Ask staff for a new QR code.';
+        statusEl.classList.remove('hidden');
+        statusEl.classList.add('error');
+        form.classList.add('hidden');
+        return;
+      }
+      gymPill.textContent = `Gym ID: ${gymId}`;
+      gymPill.classList.remove('hidden');
+      if (machineId) {
+        intro.textContent = 'Machine-specific QR scanned. Submit the issue below.';
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        statusEl.classList.add('hidden');
+        statusEl.classList.remove('error', 'success');
+        const description = document.getElementById('description').value.trim();
+        const machineName = document.getElementById('machineName').value.trim();
+        if (!description) {
+          statusEl.textContent = 'Description is required.';
+          statusEl.classList.remove('hidden');
+          statusEl.classList.add('error');
+          return;
+        }
+        const payload = {
+          gymId,
+          description,
+          machineName: machineName || undefined,
+          machineId: machineId || undefined
+        };
+        try {
+          const res = await fetch('/api/maintenance/member-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.error) {
+            throw new Error(data.error || `Request failed (${res.status})`);
+          }
+          statusEl.textContent = 'Thank you. Your report was submitted.';
+          statusEl.classList.remove('hidden');
+          statusEl.classList.add('success');
+          form.reset();
+        } catch (err) {
+          statusEl.textContent = err.message || 'Could not submit. Please tell staff.';
+          statusEl.classList.remove('hidden');
+          statusEl.classList.add('error');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
