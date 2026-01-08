@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import MaintenanceCalendar from '../components/MaintenanceCalendar.jsx';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
@@ -99,6 +98,10 @@ function isAutoTicket(ticket) {
   return false;
 }
 
+function isMemberReported(ticket) {
+  return ticket?.source === 'member' || ticket?.createdBy === 'member_report' || ticket?.category === 'Member Reported';
+}
+
 // Priority badge component
 function PriorityBadge({ priority, size = 'small' }) {
   const priorityColors = {
@@ -140,18 +143,56 @@ export default function TicketsTab() {
   const [form, setForm] = useState({
     title: '',
     machineName: '',
-    worker: '',
+    technicianId: '',
     priority: 'Medium',
     checklistText: '',
     sendEmail: false
   });
   const [gymMachines, setGymMachines] = useState([]);
   const [machinesLoading, setMachinesLoading] = useState(false);
+  const [technicians, setTechnicians] = useState([]);
+  const [techniciansLoading, setTechniciansLoading] = useState(false);
+  const [techError, setTechError] = useState('');
+  const [isTechModalOpen, setIsTechModalOpen] = useState(false);
+  const [editingTech, setEditingTech] = useState(null);
+  const [techForm, setTechForm] = useState({ name: '', email: '', isPreventativeDefault: false, active: true });
   const [resolveConfirmTicket, setResolveConfirmTicket] = useState(null);
+  const [memberReportUrl, setMemberReportUrl] = useState('');
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [qrError, setQrError] = useState('');
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
   const detailsModalRef = useRef(null);
   const resolveModalRef = useRef(null);
+
+  useEffect(() => {
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      buildMemberQr(gymId);
+    }
+  }, []);
+
+  async function buildMemberQr(gymId) {
+    if (!gymId || typeof window === 'undefined') return;
+    const memberUrl = `${window.location.origin}/member-report.html?gymId=${encodeURIComponent(gymId)}`;
+    setMemberReportUrl(memberUrl);
+    // Use a hosted QR endpoint to avoid bundler deps
+    const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(memberUrl)}&size=220&margin=1&dark=111827&light=ffffff`;
+    setQrDataUrl(qrUrl);
+    setQrError('');
+  }
+
+  async function copyMemberLink() {
+    if (!memberReportUrl || !navigator?.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(memberReportUrl);
+      setQrError('Link copied');
+      setTimeout(() => setQrError(''), 1500);
+    } catch (err) {
+      console.error('Copy failed', err);
+      setQrError('Copy failed');
+    }
+  }
 
   // Backend routing - use backend when available, fallback to local storage
   async function fetchStatus() {
@@ -165,6 +206,7 @@ export default function TicketsTab() {
         setErrorMsg('No gym selected');
         return;
       }
+      await buildMemberQr(gymId);
       
       // Fetch gym-specific tickets directly (this is the main source of truth)
       console.log('Fetching tickets for gym:', gymId);
@@ -194,9 +236,8 @@ export default function TicketsTab() {
               description: ticket.description,
               status: ticket.status,
               priority: ticket.priority,
-              machineName: ticket.machineName,
-              worker: ticket.worker,
-              manual: ticket.manual,
+        machineName: ticket.machineName,
+        manual: ticket.manual,
               ruleKey: ticket.ruleKey,
               ruleInterval: ticket.ruleInterval,
               intervalId: ticket.intervalId,
@@ -315,6 +356,70 @@ export default function TicketsTab() {
       setGymMachines(sampleMachines);
     } finally {
       setMachinesLoading(false);
+    }
+  }
+
+  async function fetchTechnicians() {
+    if (!backendURL) return;
+    setTechniciansLoading(true);
+    setTechError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) throw new Error('No gym selected');
+      const res = await fetch(`${backendURL}/api/maintenance/technicians?gymId=${encodeURIComponent(gymId)}`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `Technicians HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setTechnicians(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch technicians', e);
+      setTechError(e.message);
+    } finally {
+      setTechniciansLoading(false);
+    }
+  }
+
+  function openTechModal(tech = null) {
+    setEditingTech(tech);
+    setTechForm(tech ? {
+      name: tech.name || '',
+      email: tech.email || '',
+      isPreventativeDefault: !!tech.isPreventativeDefault,
+      active: tech.active !== false
+    } : { name: '', email: '', isPreventativeDefault: false, active: true });
+    setIsTechModalOpen(true);
+  }
+
+  async function saveTechnician(e) {
+    e?.preventDefault?.();
+    if (!backendURL) {
+      setTechError('Backend required to manage technicians');
+      return;
+    }
+    setTechError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) throw new Error('No gym selected');
+      const payload = { ...techForm, gymId };
+      const url = editingTech ? `${backendURL}/api/maintenance/technicians/${editingTech._id}` : `${backendURL}/api/maintenance/technicians`;
+      const method = editingTech ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Tech ${method} failed`);
+      }
+      await fetchTechnicians();
+      setIsTechModalOpen(false);
+      setEditingTech(null);
+    } catch (err) {
+      console.error('saveTechnician failed', err);
+      setTechError(err.message);
     }
   }
 
@@ -443,7 +548,6 @@ export default function TicketsTab() {
         title: form.title,
         description: form.title,
         machineName: form.machineName,
-        worker: form.worker || 'Unassigned',
         priority: form.priority || 'Medium',
         status: 'open',
         manual: true,
@@ -457,7 +561,7 @@ export default function TicketsTab() {
       setForm({
         title: '',
         machineName: '',
-        worker: '',
+        technicianId: '',
         priority: 'Medium',
         checklistText: '',
         sendEmail: false
@@ -471,7 +575,6 @@ export default function TicketsTab() {
       console.log('Creating ticket for gym:', gymId, 'with data:', {
         title: form.title,
         machineName: form.machineName,
-        worker: form.worker || undefined,
         priority: form.priority || 'Medium',
         checklist,
         sendEmail: form.sendEmail
@@ -483,7 +586,7 @@ export default function TicketsTab() {
         body: JSON.stringify({
           title: form.title,
           machineName: form.machineName,
-          worker: form.worker || undefined,
+          technicianId: form.technicianId || undefined,
           priority: form.priority || 'Medium',
           checklist,
           sendEmail: form.sendEmail,
@@ -504,7 +607,7 @@ export default function TicketsTab() {
       setForm({
         title: '',
         machineName: '',
-        worker: '',
+        technicianId: '',
         priority: 'Medium',
         checklistText: '',
         sendEmail: false
@@ -520,6 +623,7 @@ export default function TicketsTab() {
     if (backendURL) {
       fetchStatus();
       fetchGymMachines();
+      fetchTechnicians();
     } else {
       // Load from local storage when no backend
       const s = readState();
@@ -534,6 +638,7 @@ export default function TicketsTab() {
       setTimeout(() => createTitleRef.current?.focus(), 0);
       // Refresh machines list when modal opens
       fetchGymMachines();
+      fetchTechnicians();
     }
   }, [isCreateOpen]);
 
@@ -549,7 +654,7 @@ export default function TicketsTab() {
 
   // Lock body scroll when any modal is open
   useEffect(() => {
-    const hasModal = active || isCreateOpen || resolveConfirmTicket;
+    const hasModal = active || isCreateOpen || resolveConfirmTicket || isTechModalOpen;
     if (hasModal) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -558,7 +663,7 @@ export default function TicketsTab() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [active, isCreateOpen]);
+  }, [active, isCreateOpen, resolveConfirmTicket, isTechModalOpen]);
 
   // Keyboard navigation for details modal
   useEffect(() => {
@@ -1052,6 +1157,18 @@ export default function TicketsTab() {
                       {isAutoTicket(t) ? 'Auto' : 'Manual'}
                     </span>
                   </div>
+                  {isMemberReported(t) && (
+                    <div className="tk-ticket-meta-item">
+                      <span className="tk-ticket-meta-label">Source:</span>
+                      <span className="tk-ticket-meta-value" style={{
+                        color: '#22c55e',
+                        fontWeight: '600',
+                        fontSize: '11px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>Member Reported</span>
+                    </div>
+                  )}
                   <div className="tk-ticket-meta-item">
                     <span className="tk-ticket-meta-label">Priority:</span>
                     <PriorityBadge priority={t.priority} size="small" />
@@ -1115,6 +1232,30 @@ export default function TicketsTab() {
         </div>
       </div>
 
+      {memberReportUrl && (
+        <div className="nx-card" style={{ marginBottom:12, display:'flex', gap:16, alignItems:'center' }}>
+          <div style={{ flex:1 }}>
+            <div className="nx-card-title" style={{ marginBottom:4 }}>Member Report QR</div>
+            <div className="nx-subtle" style={{ marginBottom:8 }}>Print or post this QR in the gym. Members scan to submit an issue.</div>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <input value={memberReportUrl} readOnly className="tk-input" style={{ flex:1, minWidth:240 }} />
+              <button className="nx-pill" type="button" onClick={copyMemberLink}>Copy link</button>
+            </div>
+            {qrError && (
+              <div
+                className="nx-subtle"
+                style={{ color: qrError.toLowerCase().includes('copy') ? '#22c55e' : '#f87171', marginTop:6 }}
+              >
+                {qrError}
+              </div>
+            )}
+          </div>
+          <div style={{ width:132, height:132, borderRadius:12, border:'1px solid #1f2937', background:'#0f172a', display:'flex', alignItems:'center', justifyContent:'center', padding:10 }}>
+            {qrDataUrl ? <img src={qrDataUrl} alt="QR code for member report" style={{ width:'100%', height:'100%' }} /> : <div className="nx-subtle">QR unavailable</div>}
+          </div>
+        </div>
+      )}
+
       {/* Ticket Details Modal */}
       {active && (
         <div className="nx-overlay" onClick={() => setActive(null)}>
@@ -1135,6 +1276,21 @@ export default function TicketsTab() {
                 }}>
                   {isAutoTicket(active) ? 'Auto' : 'Manual'}
                 </div>
+                {isMemberReported(active) && (
+                  <div style={{
+                    color: '#22c55e',
+                    fontWeight: '600',
+                    fontSize: '12px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    background: 'rgba(34,197,94,0.15)',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(34,197,94,0.35)'
+                  }}>
+                    Member Reported
+                  </div>
+                )}
                 <PriorityBadge priority={active.priority} />
                 <div style={{ 
                   color: active.status === 'open' ? '#22c55e' : active.status === 'closed' ? '#9ca3af' : '#9ca3af',
@@ -1274,14 +1430,40 @@ export default function TicketsTab() {
                   </div>
                   
                   <div className="tk-field">
-                    <label className="tk-label">Assigned Worker</label>
-                    <input
-                      type="text"
+                    <label className="tk-label">Technician (optional)</label>
+                    <select
                       className="tk-input"
-                      placeholder="Optional"
-                      value={form.worker}
-                      onChange={(e) => setForm(prev => ({ ...prev, worker: e.target.value }))}
-                    />
+                      value={form.technicianId}
+                      onChange={(e) => setForm(prev => ({ ...prev, technicianId: e.target.value }))}
+                    >
+                      <option value="">Unassigned</option>
+                      {technicians.map(t => (
+                        <option key={t._id} value={t._id}>
+                          {t.name} {t.isPreventativeDefault ? '(Preventative default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="tk-helper" style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button type="button" className="tk-btn" onClick={() => openTechModal()} style={{ padding: '6px 10px', height: '32px' }}>
+                        Create Technician
+                      </button>
+                      {technicians.length > 0 && (
+                        <button
+                          type="button"
+                          className="tk-btn"
+                          disabled={!form.technicianId}
+                          onClick={() => {
+                            const selected = technicians.find(t => t._id === form.technicianId);
+                            if (selected) openTechModal(selected);
+                          }}
+                          style={{ padding: '6px 10px', height: '32px' }}
+                        >
+                          Edit Selected Technician
+                        </button>
+                      )}
+                      {techniciansLoading && <span style={{ color: '#9ca3af', fontSize: '12px' }}>Loading technicians…</span>}
+                      {techError && <span style={{ color: '#fca5a5', fontSize: '12px' }}>{techError}</span>}
+                    </div>
                   </div>
                   
                   <div className="tk-field">
@@ -1328,6 +1510,81 @@ export default function TicketsTab() {
                 </button>
                 <button type="submit" className="tk-btn primary">
                   Create Ticket
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Technician Modal */}
+      {isTechModalOpen && (
+        <div className="nx-overlay" onClick={() => setIsTechModalOpen(false)}>
+          <div className="tk-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="tk-header">
+              <div className="tk-title">{editingTech ? 'Edit Technician' : 'Create Technician'}</div>
+              <button className="tk-close" onClick={() => setIsTechModalOpen(false)} aria-label="Close">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={saveTechnician}>
+              <div className="tk-body">
+                <div className="tk-grid">
+                  <div className="tk-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="tk-label">Name *</label>
+                    <input
+                      type="text"
+                      className="tk-input"
+                      value={techForm.name}
+                      onChange={(e) => setTechForm(prev => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="tk-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="tk-label">Email *</label>
+                    <input
+                      type="email"
+                      className="tk-input"
+                      value={techForm.email}
+                      onChange={(e) => setTechForm(prev => ({ ...prev, email: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="tk-field" style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={techForm.isPreventativeDefault}
+                        onChange={(e) => setTechForm(prev => ({ ...prev, isPreventativeDefault: e.target.checked }))}
+                        style={{ width: '16px', height: '16px' }}
+                      />
+                      <span className="tk-label" style={{ margin: 0 }}>Preventative maintenance default</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={techForm.active}
+                        onChange={(e) => setTechForm(prev => ({ ...prev, active: e.target.checked }))}
+                        style={{ width: '16px', height: '16px' }}
+                      />
+                      <span className="tk-label" style={{ margin: 0 }}>Active</span>
+                    </label>
+                  </div>
+                  {techError && (
+                    <div className="tk-helper" style={{ color: '#fca5a5', gridColumn: '1 / -1' }}>
+                      {techError}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="tk-footer-bar">
+                <button type="button" className="tk-btn" onClick={() => setIsTechModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="tk-btn primary">
+                  {editingTech ? 'Save Changes' : 'Create Technician'}
                 </button>
               </div>
             </form>

@@ -3,20 +3,35 @@ import MaintenanceCalendar from '../components/MaintenanceCalendar.jsx';
 import WorkerTasks from '../components/WorkerTasks.jsx';
 import EventCard from '../components/EventCard.jsx';
 import { EMPLOYEES, getPositionColor, getInitials } from '../data/employees';
+import { mergeScheduledEvents } from '../utils/scheduledEvents';
+
+const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
 
 // Local storage key (reuse dashboard pattern). If a higher-level state exists later,
 // this component can be swapped to use that provider without changing its UI.
 const DASHBOARD_STATE_KEY = 'dashboard:state';
+const STORAGE_VERSION = 'v2';
 
 function readState() {
-  try { return JSON.parse(localStorage.getItem(DASHBOARD_STATE_KEY) || '{}'); }
-  catch { return {}; }
+  try {
+    const raw = localStorage.getItem(DASHBOARD_STATE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed?._version !== STORAGE_VERSION) {
+      // Wipe old demo/legacy cached data
+      localStorage.removeItem(DASHBOARD_STATE_KEY);
+      return {};
+    }
+    return parsed;
+  } catch {
+    return {};
+  }
 }
 
 function writeState(updater) {
   const current = readState();
   const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
-  localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(next));
+  localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify({ ...next, _version: STORAGE_VERSION }));
   return next;
 }
 
@@ -32,6 +47,10 @@ function addDays(dateISO, days) {
   return toISODate(d);
 }
 
+function slotKey(dateISO, hour) {
+  return `${dateISO}|${hour}`;
+}
+
 export default function MaintenanceTab() {
   const todayISO = useMemo(() => toISODate(new Date()), []);
   const [intervalDays, setIntervalDays] = useState(90);
@@ -43,6 +62,23 @@ export default function MaintenanceTab() {
   const [activeEvent, setActiveEvent] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayISO);
   const [showWorkerSelector, setShowWorkerSelector] = useState(false);
+  const [availability, setAvailability] = useState([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [scheduledTickets, setScheduledTickets] = useState([]);
+
+  const timeOptions = useMemo(() => {
+    const opts = [];
+    for (let h = 5; h <= 22; h++) {
+      const date = new Date();
+      date.setHours(h, 0, 0, 0);
+      opts.push({
+        hour: h,
+        label: date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      });
+    }
+    return opts;
+  }, []);
 
   // Lock body scroll when any modal is open
   useEffect(() => {
@@ -88,72 +124,101 @@ export default function MaintenanceTab() {
     return () => window.removeEventListener('scheduleMaintenanceFor', handleScheduleMaintenance);
   }, []);
 
+  // Availability helpers
+function slotFor(dateISO, hour) {
+    const start = new Date(dateISO);
+    const [y, m, d] = dateISO.split('-').map(Number);
+    start.setFullYear(y, m - 1, d, hour, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(end.getHours() + 1);
+    return { start, end, key: slotKey(dateISO, hour), hour, dateIso: dateISO };
+  }
+
+  async function fetchAvailability() {
+    if (!backendURL) return;
+    setAvailabilityLoading(true);
+    setAvailabilityError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) throw new Error('No gym selected');
+      const res = await fetch(`${backendURL}/api/maintenance/availability?gymId=${encodeURIComponent(gymId)}`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `Availability HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setAvailability((data.slots || []).map(s => {
+        const start = new Date(s.start);
+        const hourVal = Number(s.hour);
+        const hour = Number.isFinite(hourVal) ? hourVal : start.getHours();
+        const dateISO = s.date || s.dateIso || toISODate(start);
+        return { ...s, start, end: new Date(s.end), key: slotKey(dateISO, hour), hour, dateIso: dateISO };
+      }));
+    } catch (e) {
+      console.error('Failed to fetch availability', e);
+      setAvailabilityError(e.message);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }
+
+  async function saveAvailability(slots) {
+    if (!backendURL) return;
+    setAvailabilityLoading(true);
+    setAvailabilityError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) throw new Error('No gym selected');
+      const res = await fetch(`${backendURL}/api/maintenance/availability`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gymId,
+          slots: slots.map(s => ({
+            start: s.start,
+            end: s.end,
+            hour: s.hour,
+            date: s.dateIso
+          }))
+        })
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `Availability save HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setAvailability((data.slots || []).map(s => ({ ...s, start: new Date(s.start), end: new Date(s.end) })));
+    } catch (e) {
+      console.error('Failed to save availability', e);
+      setAvailabilityError(e.message);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }
+
+  function toggleAvailabilityForSelected(hour) {
+    setAvailability((prev) => {
+      const { start, end, key, dateIso } = slotFor(selectedDate, hour);
+      const exists = prev.find(s => s.key === key);
+      if (exists) {
+        return prev.filter(s => s.key !== key);
+      }
+      return [...prev, { start, end, key, hour, dateIso }];
+    });
+  }
+
   // initialize from storage
   useEffect(() => {
     const s = readState();
     const maint = s.maintenance || {};
     const interval = Number(maint.maintenanceIntervalDays) || 90;
     const last = maint.lastManualDate || null;
-    const ev = maint.events || [
-      { id: 'event1',  title: 'Treadmill Belt Lubrication',     date: '2025-10-15', assignedTo: 'Worker A', deadline: '2025-10-20', status: 'Pending' },
-      { id: 'event2',  title: 'Air Filter Replacement',          date: '2025-11-05', assignedTo: 'Worker B', deadline: '2025-11-07', status: 'Scheduled' },
-      { id: 'event3',  title: 'Weight Machine Inspection',       date: '2025-11-20', assignedTo: 'Worker C', deadline: '2025-11-21', status: 'Completed' },
-      { id: 'event4',  title: 'Elliptical Drive Belt Check',     date: '2025-12-01', assignedTo: 'Worker D', deadline: '2025-12-03', status: 'Scheduled' },
-      { id: 'event5',  title: 'HVAC System Service',             date: '2025-12-15', assignedTo: 'Worker E', deadline: '2025-12-17', status: 'Pending' },
-      { id: 'event6',  title: 'Locker Room Plumbing Check',      date: '2026-01-05', assignedTo: 'Worker F', deadline: '2026-01-07', status: 'Scheduled' },
-      { id: 'event7',  title: 'Emergency Exit Lighting Test',    date: '2026-01-20', assignedTo: 'Worker G', deadline: '2026-01-20', status: 'Completed' },
-      { id: 'event8',  title: 'Sauna Heater Inspection',         date: '2026-02-02', assignedTo: 'Worker H', deadline: '2026-02-04', status: 'Pending' },
-      { id: 'event9',  title: 'Fire Extinguisher Replacement',   date: '2026-02-15', assignedTo: 'Worker I', deadline: '2026-02-18', status: 'Scheduled' },
-      { id: 'event10', title: 'Swimming Pool Chlorine Check',    date: '2026-03-01', assignedTo: 'Worker J', deadline: '2026-03-02', status: 'Pending' },
-      { id: 'event_oct17_1', title: 'Squat Rack Maintenance',   date: '2025-10-17', assignedTo: 'Worker A', deadline: '2025-10-17', status: 'Pending' },
-      { id: 'event_oct17_2', title: 'Rowing Machine Service',   date: '2025-10-17', assignedTo: 'Worker B', deadline: '2025-10-17', status: 'Scheduled' },
-      { id: 'event_oct17_3', title: 'Bench Press Inspection',   date: '2025-10-17', assignedTo: 'Worker C', deadline: '2025-10-17', status: 'Pending' },
-      { id: 'event_oct10', title: 'Daily safety inspection',    date: '2025-10-10', assignedTo: 'Angel', deadline: '2025-10-10', status: 'Pending' },
-    ];
-    // Seed a daily task for every day of the current month so each cell has at least one event
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const workerPool = ['Angel','Matt','Soorya','Shun','Kevin','Matias'];
-    const taskPool = [
-      'Sanitize benches and wipe touchpoints',
-      'Inspect cable tension and pulleys',
-      'Lubricate treadmill belts',
-      'Tighten hardware on weight machines',
-      'Calibrate machine displays',
-      'Clean and realign sensor mounts',
-      'Vacuum debris around moving parts'
-    ];
-    const dailyEvents = Array.from({ length: daysInMonth }, (_, i) => {
-      const d = new Date(monthStart.getFullYear(), monthStart.getMonth(), i + 1);
-      const iso = toISODate(d);
-      const status = 'Pending';
-      const assignedTo = workerPool[i % workerPool.length];
-      const title = taskPool[i % taskPool.length];
-      return { id: `daily_${iso}`, title, date: iso, assignedTo, deadline: iso, status };
-    });
-    // Add alert pills on a few days of this week for visual variety
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()); // Sunday
-    const alertOffsets = [0, 2, 4]; // Sun, Tue, Thu
-    const alertEvents = alertOffsets.map((off, i) => {
-      const d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + off);
-      return { id: `alert_${i+1}`, title: 'Machine Alert', date: toISODate(d), status: 'Alert' };
-    });
+    const ev = maint.events || [];
     setIntervalDays(interval);
     setLastManualDate(last);
-    // Normalize existing events: replace 'Daily check' titles and generic assignees
-    const normalize = (list) => list.map((e, idx) => {
-      const needsTitle = /^Daily\s*check/i.test(e.title || '');
-      const title = needsTitle ? taskPool[idx % taskPool.length] : e.title;
-      const badAssignee = !e.assignedTo || /^(ops|worker\s*#?)/i.test(String(e.assignedTo));
-      const assignedTo = badAssignee ? workerPool[idx % workerPool.length] : e.assignedTo;
-      return { ...e, title, assignedTo };
-    });
-    const combined = normalize([...(ev||[]), ...dailyEvents, ...alertEvents]);
-    const unique = dedupeByDateAndTitle(combined);
-    setEvents(unique);
-    persist({ events: unique });
-    // compute next two dates
+    setEvents(ev);
+    persist({ events: ev });
+    fetchScheduledTickets();
     const base = last || todayISO;
     setNext1(addDays(base, interval));
     setNext2(addDays(base, interval * 2));
@@ -195,6 +260,11 @@ export default function MaintenanceTab() {
     window.dispatchEvent(new CustomEvent('manualMaintenanceApplied', { detail: { manualDate: useISO, source: 'maintenance-tab' } }));
   }
 
+  // Load availability when backend is configured
+  useEffect(() => {
+    if (backendURL) fetchAvailability();
+  }, []);
+
   function onApply() { onApplyWith(); }
 
   function onReset() {
@@ -205,6 +275,22 @@ export default function MaintenanceTab() {
     setNext1(n1); setNext2(n2);
     persist({ lastManualDate: null, maintenanceIntervalDays: intervalDays, nextDates: [n1, n2] });
     window.dispatchEvent(new CustomEvent('maintenanceScheduleReset'));
+  }
+
+  async function fetchScheduledTickets() {
+    if (!backendURL) return;
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) throw new Error('No gym selected');
+      const res = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+      if (!res.ok) throw new Error(`Tickets HTTP ${res.status}`);
+      const data = await res.json();
+      const scheduled = (Array.isArray(data) ? data : []).filter(t => t.scheduledAt && t.gymId === gymId);
+      setScheduledTickets(scheduled);
+    } catch (e) {
+      console.error('Failed to fetch scheduled tickets', e);
+      setScheduledTickets([]);
+    }
   }
 
   function onSaveInterval(v) {
@@ -248,7 +334,7 @@ export default function MaintenanceTab() {
             <MaintenanceCalendar
               manualDate={lastManualDate}
               nextDates={[next1, next2]}
-              events={events}
+              events={mergeScheduledEvents(events, scheduledTickets)}
               selectedDate={selectedDate}
               onEventClick={(ev)=>{ setActiveEvent(ev); setSelectedDate(ev.date); }}
               onSelectDate={(iso)=>{ 
@@ -311,8 +397,115 @@ export default function MaintenanceTab() {
                 </div>
               );
             })()} */}
-            <div className="nx-subtle">Tasks will appear here soon.</div>
+            {(() => {
+              const tasksForDay = (mergeScheduledEvents(events, scheduledTickets) || []).filter(ev => ev.date === selectedDate);
+              if (tasksForDay.length === 0) {
+                return <div className="nx-subtle">No tasks for this day.</div>;
+              }
+              return (
+                <div key={selectedDate}>
+                  {tasksForDay.map(ev => (
+                    <div key={ev.id} className="nx-alert-row" style={{
+                      gridTemplateColumns:'1fr auto',
+                      border: ev.status === 'Completed' ? '1px solid rgba(34,197,94,0.3)' : '1px solid #1c1c27',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginBottom: '8px',
+                      background: ev.status === 'Completed' ? 'rgba(34,197,94,0.05)' : 'transparent'
+                    }}>
+                      <div>
+                        <div style={{
+                          color: ev.status === 'Completed' ? '#22c55e' : '#e5e7eb',
+                          fontWeight: '500'
+                        }}>{ev.title}</div>
+                        <div className="nx-subtle">
+                          Status: {ev.status || 'Scheduled'}
+                          {ev.assignedTo ? ` · Assignee: ${ev.assignedTo}` : ''}
+                          {ev.scheduledAt ? ` · ${new Date(ev.scheduledAt).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' })}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
+        </div>
+      </div>
+
+      {/* Technician availability (calendar-driven) */}
+      <div className="nx-card" style={{ marginBottom: 16 }}>
+        <div className="nx-card-header" style={{ alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <div className="nx-card-title">Technician Scheduling Availability</div>
+            <div className="nx-subtle">Select a day on the calendar above, then pick available times.</div>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button
+              className="nx-pill"
+              onClick={() => setAvailability([])}
+              disabled={availabilityLoading}
+            >
+              Clear Availability
+            </button>
+            <button
+              className="nx-pill primary"
+              onClick={() => saveAvailability(availability)}
+              disabled={availabilityLoading || !backendURL}
+            >
+              {availabilityLoading ? 'Saving…' : 'Save Availability'}
+            </button>
+          </div>
+        </div>
+        {availabilityError && <div style={{ color:'#f87171', fontSize:13, padding:'0 16px 8px' }}>{availabilityError}</div>}
+        {!backendURL && <div className="nx-subtle" style={{ padding:'0 16px 12px' }}>Connect backend to manage availability.</div>}
+        <div style={{ padding:'12px 16px' }}>
+            <div className="nx-subtle" style={{ marginBottom: 8 }}>
+              Selected date: {(() => {
+                try {
+                  const [y,m,d] = selectedDate.split('-').map(Number);
+                  const dt = new Date(y, m-1, d);
+                  return dt.toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' });
+                } catch { return selectedDate; }
+              })()}
+            </div>
+            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+              {timeOptions.map(opt => {
+              const { key } = slotFor(selectedDate, opt.hour);
+              const isOn = availability.some(s => s.key === key);
+              return (
+                <label key={opt.hour} style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', color:'#cbd5e1', fontSize:'13px', padding:'8px 10px', borderRadius:'10px', border: isOn ? '1px solid #7c3aed' : '1px solid #1d1d29', background: isOn ? 'rgba(124,58,237,0.1)' : 'transparent' }}>
+                  <input
+                    type="checkbox"
+                    checked={isOn}
+                    onChange={() => toggleAvailabilityForSelected(opt.hour)}
+                    style={{ width:16, height:16 }}
+                  />
+                  {opt.label}
+                </label>
+              );
+            })}
+          </div>
+          {availability.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="nx-subtle" style={{ marginBottom:6 }}>Published slots</div>
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                {[...availability].sort((a,b)=>new Date(a.start)-new Date(b.start)).map((s, idx) => {
+                  const ts = new Date(s.start);
+                  const dateLabel = ts.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+                  const hourFromKey = s.key ? Number(s.key.split('|')[1]) : ts.getHours();
+                  const displayTs = new Date(ts);
+                  displayTs.setHours(hourFromKey, 0, 0, 0);
+                  const timeLabel = displayTs.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+                  return (
+                    <span key={idx} className="nx-pill" style={{ background:'#111119', border:'1px solid #1d1d29', color:'#e5e7eb' }}>
+                      {dateLabel} · {timeLabel}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

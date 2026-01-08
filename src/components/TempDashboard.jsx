@@ -77,6 +77,7 @@ function TempDashboard() {
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [selectedTopN, setSelectedTopN] = useState('all');
+  const [selectedZone, setSelectedZone] = useState('');
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -97,9 +98,26 @@ function TempDashboard() {
   const avgUsageChartRef = useRef(null);
   const cumUsageChartRef = useRef(null);
   const analyticsChartRef = useRef(null);
+  const [facilityZones, setFacilityZones] = useState([]);
+  const [facilityLoading, setFacilityLoading] = useState(false);
+  const [facilityRange, setFacilityRange] = useState(12);
+  const [facilityMachines, setFacilityMachines] = useState([]);
+  const [mapConfig, setMapConfig] = useState(null);
+  const svgObjectRef = useRef(null);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
+
+  const filteredMachineOptions = useMemo(() => {
+    if (!selectedZone) return machineOptions;
+    const zoneSet = new Set(
+      (facilityMachines || [])
+        .filter(m => String(m.zone) === String(selectedZone))
+        .map(m => String(m.machineId))
+    );
+    if (zoneSet.size === 0) return [];
+    return machineOptions.filter(m => zoneSet.has(String(m.machineId)));
+  }, [selectedZone, machineOptions, facilityMachines]);
 
   // User authentication check
   useEffect(() => {
@@ -408,6 +426,192 @@ function TempDashboard() {
     }
   };
 
+  const fetchFacilityHeatmap = async (rangeHours = 12) => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) return;
+    setFacilityLoading(true);
+    try {
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${rangeHours}`);
+      const data = await res.json();
+      if (res.ok && data) {
+        const mapCfg = (data.map && data.map.zones && data.map.zones.length) ? data.map : null;
+        const fallbackMapCfg = mapCfg || {
+          layout: 'svg',
+          floorplanUrl: 'floorplans/default-gym.svg',
+          zones: [
+            { id: 'cardio', label: 'Cardio', svgId: 'zone-cardio' },
+            { id: 'machines', label: 'Machines', svgId: 'zone-machines' },
+            { id: 'cables', label: 'Cable Area', svgId: 'zone-cables' },
+          ]
+        };
+        setMapConfig(fallbackMapCfg);
+        const zonesFromConfig = Array.isArray(fallbackMapCfg?.zones)
+          ? fallbackMapCfg.zones.map(z => ({ zone: z.id, minutes: 0 }))
+          : [];
+        const aggregated = {};
+        // Aggregate by zone directly from backend
+        (data.machines || []).forEach(m => {
+          const zoneId = m.zone || 'unknown';
+          const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
+          const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
+          if (!aggregated[zoneId]) aggregated[zoneId] = 0;
+          aggregated[zoneId] += minutes;
+        });
+        // Merge with any zone-level minutes provided directly
+        (data.zones || []).forEach(z => {
+          const rawZone = z.zone || 'unknown';
+          const zoneId = rawZone;
+          const minutes = z.minutes || 0;
+          if (!aggregated[zoneId]) aggregated[zoneId] = 0;
+          aggregated[zoneId] += minutes;
+        });
+        const mergedZones = (fallbackMapCfg?.zones || []).map(z => ({
+          zone: z.id,
+          minutes: aggregated[z.id] || 0,
+        }));
+        const fallbackZones = (data.zones || []).map(z => ({
+          zone: z.zone || 'unknown',
+          minutes: z.minutes || 0,
+        }));
+        const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
+        setFacilityZones(zonesToSet);
+        const normalizedMachines = (data.machines || []).map(m => {
+          const zoneId = m.zone || 'unknown';
+          return {
+            machineId: m.machineId,
+            machineName: m.machineName || m.machineId,
+            zone: zoneId
+          };
+        });
+        setFacilityMachines(normalizedMachines);
+      } else {
+        const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+        setFacilityZones(zeroZones);
+        setFacilityMachines([]);
+      }
+    } catch (e) {
+      console.error('Failed to fetch facility heatmap:', e);
+      const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+      setFacilityZones(zeroZones);
+      setFacilityMachines([]);
+    } finally {
+      setFacilityLoading(false);
+    }
+  };
+
+  const getZoneColor = (minutes, maxMinutes) => {
+    const denom = Math.max(1, maxMinutes);
+    const t = Math.min(1, minutes / denom);
+    return `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+  };
+
+  const applySvgZoneStyles = () => {
+    if (!mapConfig || !mapConfig.zones || mapConfig.zones.length === 0) return;
+    const obj = svgObjectRef.current;
+    if (!obj || !obj.contentDocument) return;
+    const svgDoc = obj.contentDocument;
+    const svgRoot = svgDoc.querySelector('svg');
+    if (!svgRoot) return;
+    const vb = svgRoot.viewBox?.baseVal;
+    const viewBoxWidth = vb?.width || svgRoot.getBoundingClientRect().width || 1;
+    const viewBoxHeight = vb?.height || svgRoot.getBoundingClientRect().height || 1;
+    const maxMinutes = Math.max(1, ...(facilityZones || []).map(z => z.minutes || 0));
+    const labelFontSize = 18;
+    const labelPadding = 6;
+
+    mapConfig.zones.forEach(z => {
+      const el = svgDoc.getElementById(z.svgId);
+      if (!el) return;
+      const entry = (facilityZones || []).find(fz => String(fz.zone) === String(z.id)) || {};
+      const minutes = entry.minutes || 0;
+      const color = getZoneColor(minutes, maxMinutes);
+      const selected = String(selectedZone) === String(z.id);
+      el.style.fill = color;
+      el.style.stroke = selected ? '#facc15' : '#000000';
+      el.style.strokeWidth = selected ? '3' : '1';
+      el.style.cursor = 'pointer';
+      el.onclick = () => setSelectedZone(z.id);
+
+      // Tooltip via <title> inside each zone
+      let titleEl = el.querySelector('title');
+      if (!titleEl) {
+        titleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'title');
+        el.prepend(titleEl);
+      }
+      titleEl.textContent = `${z.label || z.id}: ${minutes.toFixed(1)} min`;
+
+      // Inline label centered on the shape with a consistent-size chip behind it
+      try {
+        const bbox = el.getBBox();
+        const cx = bbox.x + bbox.width / 2;
+        const cy = bbox.y + bbox.height / 2;
+        const labelId = `onsight-label-${z.id}`;
+        let labelGroup = svgDoc.getElementById(labelId);
+        let rectEl = labelGroup?.querySelector('rect');
+        let textEl = labelGroup?.querySelector('text');
+        if (!labelGroup) {
+          labelGroup = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+          labelGroup.setAttribute('id', labelId);
+          labelGroup.style.pointerEvents = 'none';
+          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          labelGroup.appendChild(rectEl);
+          labelGroup.appendChild(textEl);
+          svgRoot.appendChild(labelGroup);
+        }
+        if (!rectEl) {
+          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          labelGroup.insertBefore(rectEl, labelGroup.firstChild);
+        }
+        if (!textEl) {
+          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          labelGroup.appendChild(textEl);
+        }
+
+        textEl.setAttribute('x', `${cx}`);
+        textEl.setAttribute('y', `${cy}`);
+        textEl.setAttribute('text-anchor', 'middle');
+        textEl.setAttribute('dominant-baseline', 'middle');
+        textEl.setAttribute('fill', '#ffffff');
+        textEl.setAttribute('font-size', `${labelFontSize}`);
+        textEl.setAttribute('font-weight', '700');
+        textEl.textContent = z.label || z.id;
+
+        const textBBox = textEl.getBBox();
+        const rectWidth = textBBox.width + labelPadding * 2;
+        const rectHeight = textBBox.height + labelPadding * 2;
+        const rectX = cx - rectWidth / 2;
+        const rectY = cy - rectHeight / 2;
+
+        rectEl.setAttribute('x', `${rectX}`);
+        rectEl.setAttribute('y', `${rectY}`);
+        rectEl.setAttribute('width', `${rectWidth}`);
+        rectEl.setAttribute('height', `${rectHeight}`);
+        rectEl.setAttribute('rx', '6');
+        rectEl.setAttribute('ry', '6');
+        rectEl.setAttribute('fill', '#0f172a');
+        rectEl.setAttribute('fill-opacity', '0.8');
+        rectEl.setAttribute('stroke', selected ? '#facc15' : '#111827');
+        rectEl.setAttribute('stroke-width', selected ? '2' : '1');
+        rectEl.setAttribute('shape-rendering', 'crispEdges');
+      } catch (e) {
+        // If getBBox fails, skip label placement for this zone
+      }
+    });
+  };
+
+  useEffect(() => {
+    const obj = svgObjectRef.current;
+    if (!obj) return;
+    const handleLoad = () => applySvgZoneStyles();
+    obj.addEventListener('load', handleLoad);
+    return () => obj.removeEventListener('load', handleLoad);
+  }, [mapConfig]);
+
+  useEffect(() => {
+    applySvgZoneStyles();
+  }, [facilityZones, selectedZone, mapConfig]);
+
   // Memoize processed analytics data to prevent dependency array size changes
   const processedAnalyticsData = useMemo(() => {
     if (!analyticsData || analyticsData.length === 0) return [];
@@ -532,17 +736,50 @@ function TempDashboard() {
 
   // Build charts when dependencies change
   useEffect(() => {
-    if (user && activeTab === 'dashboard') {
-      buildWeeklyChart();
+    if (!user) return;
+    if (activeTab === 'dashboard') {
       buildCumulativeChart();
+      fetchFacilityHeatmap(facilityRange);
     }
-  }, [user, selectedAvgRange, selectedCumRange, activeTab]);
+    if (activeTab === 'analytics') {
+      buildWeeklyChart();
+    }
+  }, [user, selectedAvgRange, selectedCumRange, activeTab, facilityRange]);
 
   useEffect(() => {
     if (selectedMachine && activeTab === 'dashboard') {
       buildUsageChart();
     }
   }, [selectedRange, selectedMachine, activeTab]);
+
+  // Rebuild usage chart when machine list updates or when we auto-select the first machine
+  useEffect(() => {
+    if (!user || activeTab !== 'dashboard') return;
+    if (!selectedMachine && machineOptions.length > 0) {
+      const source = filteredMachineOptions.length ? filteredMachineOptions : machineOptions;
+      setSelectedMachine(source[0]?.machineId || '');
+      return;
+    }
+    if (selectedMachine) {
+      buildUsageChart();
+    }
+  }, [machineOptions, filteredMachineOptions, selectedMachine, activeTab, user]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'dashboard') return;
+    if (selectedZone) {
+      if (filteredMachineOptions.length === 0) {
+        setSelectedMachine('');
+        return;
+      }
+      const exists = filteredMachineOptions.some(m => String(m.machineId) === String(selectedMachine));
+      if (!exists) {
+        setSelectedMachine(filteredMachineOptions[0].machineId);
+      }
+    } else if (!selectedMachine && machineOptions.length > 0) {
+      setSelectedMachine(machineOptions[0].machineId);
+    }
+  }, [selectedZone, filteredMachineOptions, machineOptions, selectedMachine, activeTab, user]);
 
   // Tab change handler
   const handleTabChange = (tab) => {
@@ -840,9 +1077,33 @@ function TempDashboard() {
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{stats.numDevices}</div>
                       </div>
                     </div>
-                  </div>
                 </div>
-                
+              </div>
+
+                <div className="nx-card" style={{marginTop:8}}>
+                  <div className="nx-card-header">
+                    <div>
+                      <div className="nx-card-title">Average Machine Usage</div>
+                      <div className="nx-subtle">Per machine</div>
+                    </div>
+                    <NxDropdown
+                      value={selectedAvgRange}
+                      onChange={(v) => setSelectedAvgRange(parseInt(v))}
+                      options={[
+                        { value: 6, label: 'Past 6 Hours' },
+                        { value: 8, label: 'Past 8 Hours' },
+                        { value: 12, label: 'Past 12 Hours' },
+                        { value: 24, label: 'Past 24 Hours' },
+                        { value: 168, label: 'Past Week' },
+                        { value: 720, label: 'Past Month' },
+                        { value: 1000, label: 'All Time' }
+                      ]}
+                      minWidth={150}
+                    />
+                  </div>
+                  <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
+                </div>
+
                 <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
                   <div className="nx-card-header">
                     <div>
@@ -917,6 +1178,68 @@ function TempDashboard() {
                   </div>
                 </div>
 
+                {/* Facility map */}
+                <div className="nx-card" style={{marginTop:'8px'}}>
+                  <div className="nx-card-header">
+                    <div>
+                      <div className="nx-card-title">Facility Usage Map</div>
+                      <div className="nx-subtle">Color intensity shows recent usage by zone</div>
+                    </div>
+                    <NxDropdown
+                      value={facilityRange}
+                      onChange={(v) => setFacilityRange(parseInt(v))}
+                      options={[
+                        { value: 1, label: 'Past 1 Hour' },
+                        { value: 3, label: 'Past 3 Hours' },
+                        { value: 6, label: 'Past 6 Hours' },
+                        { value: 12, label: 'Past 12 Hours' },
+                        { value: 24, label: 'Past 24 Hours' },
+                        { value: 1000, label: 'All Time' },
+                      ]}
+                      minWidth={150}
+                    />
+                  </div>
+                  <div style={{ position:'relative', paddingBottom:'55%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
+                    {mapConfig && mapConfig.floorplanUrl ? (
+                      <object
+                        ref={svgObjectRef}
+                        type="image/svg+xml"
+                        data={mapConfig.floorplanUrl}
+                        style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
+                        aria-label="Facility floor plan"
+                      />
+                    ) : (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                        No floorplan configured for this gym.
+                      </div>
+                    )}
+                    <div style={{ position:'absolute', top:12, right:12, background:'rgba(15,23,42,0.85)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:10, padding:'10px 12px', color:'#e5e7eb', minWidth:150 }}>
+                      <div style={{ fontSize:12, color:'#cbd5e1', marginBottom:6 }}>Usage legend</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:12, color:'#cbd5e1' }}>Low</span>
+                        <div style={{
+                          flex:1,
+                          height:10,
+                          borderRadius:999,
+                          background:'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(239,68,68,0.8) 100%)',
+                          boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset'
+                        }} />
+                        <span style={{ fontSize:12, color:'#cbd5e1' }}>High</span>
+                      </div>
+                    </div>
+                    {facilityLoading && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', background:'rgba(0,0,0,0.35)' }}>
+                        Loading facility map...
+                      </div>
+                    )}
+                    {!facilityLoading && (facilityZones || []).every(z => (z.minutes || 0) === 0) && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                        No facility data returned for this range.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Main charts row */}
                 <div className="nx-grid" style={{marginTop:'8px'}}>
                   <div className="nx-card" style={{gridColumn:'span 8'}}>
@@ -932,7 +1255,7 @@ function TempDashboard() {
                         <NxDropdown
                           value={selectedMachine}
                           onChange={(v) => setSelectedMachine(v)}
-                          options={machineOptions.map(m => ({ value: m.machineId, label: m.machineName || m.machineId }))}
+                          options={(filteredMachineOptions.length ? filteredMachineOptions : machineOptions).map(m => ({ value: m.machineId, label: m.machineName || m.machineId }))}
                           minWidth={170}
                         />
                       </div>
@@ -973,30 +1296,7 @@ function TempDashboard() {
 
                 {/* Bottom row */}
                 <div className="nx-grid" style={{marginTop:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 7'}}>
-                    <div className="nx-card-header">
-                      <div>
-                        <div className="nx-card-title">Average Machine Usage</div>
-                        <div className="nx-subtle">Per machine</div>
-                      </div>
-                      <NxDropdown
-                        value={selectedAvgRange}
-                        onChange={(v) => setSelectedAvgRange(parseInt(v))}
-                        options={[
-                          { value: 6, label: 'Past 6 Hours' },
-                          { value: 8, label: 'Past 8 Hours' },
-                          { value: 12, label: 'Past 12 Hours' },
-                          { value: 24, label: 'Past 24 Hours' },
-                          { value: 168, label: 'Past Week' },
-                          { value: 720, label: 'Past Month' },
-                          { value: 1000, label: 'All Time' }
-                        ]}
-                        minWidth={150}
-                      />
-                    </div>
-                    <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
-                  </div>
-                  <div className="nx-card" style={{gridColumn:'span 5'}}>
+                  <div className="nx-card" style={{gridColumn:'span 12'}}>
                     <div className="nx-card-header">
                       <div className="nx-card-title">Equipment Status</div>
                     </div>
