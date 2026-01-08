@@ -25,6 +25,8 @@ import GaragePage from './pages/GaragePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import TempDashboardPage from './pages/TempDashboardPage';
 import SchedulePage from './pages/SchedulePage';
+import RoiCalculatorPage from './pages/RoiCalculatorPage';
+import StatsShowcasePage from './pages/StatsShowcasePage';
 
 
 function App() {
@@ -46,6 +48,8 @@ function App() {
         <Route path="/blog" element={<Layout><BlogPage /></Layout>} />
         <Route path="/garage" element={<Layout><GaragePage /></Layout>} />
         <Route path="/gym-select" element={<Layout><GymSelectScreen /></Layout>} />
+        <Route path="/roi" element={<Layout><StatsShowcasePage /></Layout>} />
+        <Route path="/roi-calculator" element={<Layout><RoiCalculatorPage /></Layout>} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         
         {/* Routes without header and footer */}
