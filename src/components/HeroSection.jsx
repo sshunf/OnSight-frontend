@@ -144,7 +144,7 @@ function HeroSection() {
               </span>
             </h1>
             <p>
-              Let us manage your gym equipment so you don’t have to.
+              Manage your gym with real usage data.
             </p>
             <div className="hero-logo-inline">
               <img
