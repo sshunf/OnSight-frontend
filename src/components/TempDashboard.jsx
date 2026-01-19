@@ -81,6 +81,8 @@ function TempDashboard() {
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState('');
   const [maintOpen, setMaintOpen] = useState(false);
   const [formStep, setFormStep] = useState(0);
   const [activeAlert, setActiveAlert] = useState(null);
@@ -809,10 +811,22 @@ function TempDashboard() {
 
   // Alert management functions
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
-  const resolveAlert = (id) => {
+  const resolveAlert = async (alert) => {
+    if (alert?.ticketId && backendURL) {
+      try {
+        await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        await fetchAlerts();
+        return;
+      } catch (err) {
+        console.error('Failed to close alert ticket', err);
+      }
+    }
     setUndoStack(prev => [...prev, snapshotAlerts()]);
     setRedoStack([]);
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, resolved: true } : a));
+    setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, resolved: true } : a));
   };
   const undoResolve = () => {
     if (undoStack.length === 0) return;
@@ -846,6 +860,43 @@ function TempDashboard() {
 
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
+
+  const fetchAlerts = async () => {
+    if (!backendURL) return;
+    setAlertsLoading(true);
+    setAlertsError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) return;
+      const res = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+      if (!res.ok) throw new Error(`Alerts HTTP ${res.status}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      const lowUsage = list.filter(t =>
+        t.status === 'open' && (t.category === 'Low Usage' || t.createdBy === 'low_usage_monitor')
+      );
+      setAlerts(lowUsage.map(t => ({
+        id: `ticket_${t._id}`,
+        ticketId: t._id,
+        title: t.machineName || 'Low usage detected',
+        machineId: t.machineName || t.equipment || 'Unknown',
+        description: t.description || 'Low usage alert',
+        resolved: false
+      })));
+    } catch (err) {
+      console.error('Failed to fetch alerts', err);
+      setAlertsError(err.message);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!backendURL || activeTab !== 'dashboard') return;
+    fetchAlerts();
+    const id = setInterval(fetchAlerts, 60000);
+    return () => clearInterval(id);
+  }, [activeTab]);
 
   // Space allocation suggestions
   // useEffect(() => {
@@ -1274,7 +1325,11 @@ function TempDashboard() {
                       </div>
                     </div>
                     <div>
-                      {alerts.filter(a=>!a.resolved).length === 0 ? (
+                      {alertsLoading ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading alerts…</div>
+                      ) : alertsError ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>{alertsError}</div>
+                      ) : alerts.filter(a=>!a.resolved).length === 0 ? (
                         <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No active alerts</div>
                       ) : (
                         alerts.filter(a=>!a.resolved).map(a => (
@@ -1284,7 +1339,7 @@ function TempDashboard() {
                               <div className="nx-subtle">{a.machineId} • {a.description}</div>
                             </div>
                             <div style={{display:'flex', gap:8}}>
-                              <button className="nx-pill primary" onClick={()=>resolveAlert(a.id)}>Resolve</button>
+                              <button className="nx-pill primary" onClick={()=>resolveAlert(a)}>Resolve</button>
                               <button className="nx-pill" onClick={()=>openMaint(a)}>Details</button>
                             </div>
                           </div>
