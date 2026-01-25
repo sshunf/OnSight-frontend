@@ -112,6 +112,7 @@
 <body>
   <div class="card">
     <div class="gym-pill hidden" id="gym-pill"></div>
+    <div class="gym-pill hidden" id="zone-pill"></div>
     <h1>Report an Equipment Issue</h1>
     <p id="intro">Scan and submit a quick report. This will be routed directly to the gym's maintenance queue.</p>
     <form id="report-form">
@@ -134,9 +135,11 @@
       const gymId = params.get('gymId');
       const machineId = params.get('machineId');
       const gymPill = document.getElementById('gym-pill');
+      const zonePill = document.getElementById('zone-pill');
       const statusEl = document.getElementById('status');
       const form = document.getElementById('report-form');
       const intro = document.getElementById('intro');
+      const zone = params.get('zone');
       if (!gymId) {
         statusEl.textContent = 'Missing gymId. Ask staff for a new QR code.';
         statusEl.classList.remove('hidden');
@@ -146,6 +149,11 @@
       }
       gymPill.textContent = `Gym ID: ${gymId}`;
       gymPill.classList.remove('hidden');
+      if (zone) {
+        zonePill.textContent = `Zone: ${zone}`;
+        zonePill.classList.remove('hidden');
+        intro.textContent = 'Zone-specific QR scanned. Submit the issue below.';
+      }
       if (machineId) {
         intro.textContent = 'Machine-specific QR scanned. Submit the issue below.';
       }
@@ -166,7 +174,8 @@
           gymId,
           description,
           machineName: machineName || undefined,
-          machineId: machineId || undefined
+          machineId: machineId || undefined,
+          zone: zone || undefined
         };
         try {
           const res = await fetch('/api/maintenance/member-report', {
