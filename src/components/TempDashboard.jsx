@@ -94,6 +94,10 @@ function TempDashboard() {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  
+  // Resolve modal state
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [alertToResolve, setAlertToResolve] = useState(null);
 
   const chartInstancesRef = useRef({});
   const hourlyUsageChartRef = useRef(null);
@@ -131,6 +135,18 @@ function TempDashboard() {
       setUser({ email: userEmail });
     }
   }, [navigate]);
+
+  // Clear alerts when gymId changes (user switches gyms)
+  useEffect(() => {
+    const gymId = localStorage.getItem('gymId');
+    if (gymId && user) {
+      // Clear current alerts when switching to a different gym
+      setAlerts([]);
+      setUndoStack([]);
+      setRedoStack([]);
+      // Alerts will be refetched by the main useEffect when user changes
+    }
+  }, [localStorage.getItem('gymId'), user]);
 
   // Fetch dashboard stats from backend
   const fetchDashboardData = async () => {
@@ -733,6 +749,7 @@ function TempDashboard() {
       fetchDashboardData();
       fetchMachineOptions();
       fetchAnalyticsData();
+      fetchAlertsData(); // Fetch gym-specific alerts
     }
   }, [user]);
 
@@ -811,29 +828,68 @@ function TempDashboard() {
 
   // Alert management functions
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
-  const resolveAlert = async (alert) => {
-    if (alert?.ticketId && backendURL) {
-      try {
-        await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        await fetchAlerts();
-        return;
-      } catch (err) {
-        console.error('Failed to close alert ticket', err);
-      }
+const resolveAlert = (alert) => {
+  setAlertToResolve(alert);
+  setResolveModalOpen(true);
+};
+
+const handleResolveYes = async () => {
+  const alert = alertToResolve;
+  setResolveModalOpen(false);
+  setAlertToResolve(null);
+
+  // If this alert is tied to a backend ticket, close it
+  if (alert?.ticketId && backendURL) {
+    try {
+      await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      await fetchAlerts();
+      return;
+    } catch (err) {
+      console.error('Failed to close alert ticket', err);
+      // fall through to tickets tab if closing fails
     }
+  }
+
+  // Otherwise, go to tickets tab so user can create one
+  setActiveTab('tickets');
+};
+
+const handleResolveNo = () => {
+  if (alertToResolve) {
     setUndoStack(prev => [...prev, snapshotAlerts()]);
     setRedoStack([]);
-    setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, resolved: true } : a));
-  };
+
+    const newAlerts = alerts.map(a =>
+      a.id === alertToResolve.id ? { ...a, resolved: true } : a
+    );
+    setAlerts(newAlerts);
+
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+    }
+  }
+
+  setResolveModalOpen(false);
+  setAlertToResolve(null);
+};
+
+  
   const undoResolve = () => {
     if (undoStack.length === 0) return;
     const prevState = undoStack[undoStack.length - 1];
     setUndoStack(s => s.slice(0, -1));
     setRedoStack(s => [...s, snapshotAlerts()]);
     setAlerts(prevState);
+    
+    // Update localStorage
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(prevState));
+    }
   };
   const redoResolve = () => {
     if (redoStack.length === 0) return;
@@ -841,6 +897,12 @@ function TempDashboard() {
     setRedoStack(s => s.slice(0, -1));
     setUndoStack(s => [...s, snapshotAlerts()]);
     setAlerts(nextState);
+    
+    // Update localStorage
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(nextState));
+    }
   };
   const openMaint = (alert) => {
     setActiveAlert(alert);
@@ -939,6 +1001,81 @@ function TempDashboard() {
       console.error('Error navigating back to login:', error);
     }
   }
+
+  // Fetch alerts data from backend (gym-specific)
+  const fetchAlertsData = async () => {
+    try {
+      const gymId = localStorage.getItem('gymId');
+      const userEmail = localStorage.getItem('userEmail');
+      if (!gymId || !userEmail) return;
+      
+      // Try to fetch real alerts from backend first
+      try {
+        const res = await fetch(`${backendURL}/api/alerts?gymId=${gymId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.alerts)) {
+            // Filter alerts to only show those belonging to current gym
+            const gymSpecificAlerts = data.alerts.filter(alert => 
+              !alert.gymId || String(alert.gymId) === String(gymId)
+            );
+            setAlerts(gymSpecificAlerts);
+            return;
+          }
+        }
+      } catch (backendError) {
+        console.log("Backend alerts not available, using sample data");
+      }
+      
+      // Fallback: Create gym-specific sample alerts based on gymId
+      const alertId1 = `${gymId}_alert1`;
+      const alertId2 = `${gymId}_alert2`;
+      
+      // Get stored alerts from localStorage to persist across sessions
+      const storedAlerts = localStorage.getItem(`alerts_${gymId}`);
+      if (storedAlerts) {
+        try {
+          const parsedAlerts = JSON.parse(storedAlerts);
+          if (Array.isArray(parsedAlerts)) {
+            setAlerts(parsedAlerts);
+            return;
+          }
+        } catch (e) {
+          console.warn("Failed to parse stored alerts");
+        }
+      }
+      
+      // Create new sample alerts specific to this gym
+      const gymSpecificAlerts = [
+        {
+          id: alertId1,
+          title: 'Sensor Malfunction',
+          machineId: `Treadmill-${gymId.slice(-2)}`, // Use last 2 chars of gymId for uniqueness
+          description: 'Usage sensor not responding',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        },
+        {
+          id: alertId2,
+          title: 'Maintenance Required',
+          machineId: `Elliptical-${gymId.slice(-2)}`,
+          description: 'Unusual vibration detected',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        }
+      ];
+      
+      setAlerts(gymSpecificAlerts);
+      // Store alerts in localStorage for persistence
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(gymSpecificAlerts));
+      
+    } catch (error) {
+      console.error('Error fetching alerts data:', error);
+      setAlerts([]);
+    }
+  };
 
   if (!user) return null;
 
@@ -1491,6 +1628,28 @@ function TempDashboard() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Resolve Alert Modal */}
+        {resolveModalOpen && (
+          <div className="nx-modal-overlay" role="dialog" aria-modal="true">
+            <div className="nx-modal">
+              <div className="nx-modal-title">Resolve Alert — {alertToResolve?.machineId}</div>
+              <div>
+                <div className="nx-modal-q">Are you sure?</div>
+                <div className="nx-subtle" style={{marginBottom: '16px'}}>
+                  {alertToResolve?.title} • {alertToResolve?.description}
+                </div>
+                <div className="nx-modal-row">
+                  <button className="nx-modal-btn" onClick={handleResolveYes}>Yes, create ticket</button>
+                  <button className="nx-modal-btn" onClick={handleResolveNo}>No, dismiss alert</button>
+                </div>
+                <div className="nx-modal-actions">
+                  <button className="nx-modal-btn" onClick={() => setResolveModalOpen(false)}>Cancel</button>
+                </div>
+              </div>
             </div>
           </div>
         )}
