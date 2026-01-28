@@ -81,6 +81,8 @@ function TempDashboard() {
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState('');
   const [maintOpen, setMaintOpen] = useState(false);
   const [formStep, setFormStep] = useState(0);
   const [activeAlert, setActiveAlert] = useState(null);
@@ -826,35 +828,55 @@ function TempDashboard() {
 
   // Alert management functions
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
-  
-  const resolveAlert = (alert) => {
-    setAlertToResolve(alert);
-    setResolveModalOpen(true);
-  };
-  
-  const handleResolveYes = () => {
-    setResolveModalOpen(false);
-    setAlertToResolve(null);
-    // Navigate to tickets page to create new ticket
-    setActiveTab('tickets');
-  };
-  
-  const handleResolveNo = () => {
-    if (alertToResolve) {
-      setUndoStack(prev => [...prev, snapshotAlerts()]);
-      setRedoStack([]);
-      const newAlerts = alerts.filter(a => a.id !== alertToResolve.id);
-      setAlerts(newAlerts);
-      
-      // Update localStorage to persist alert removal for this gym
-      const gymId = localStorage.getItem('gymId');
-      if (gymId) {
-        localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
-      }
+const resolveAlert = (alert) => {
+  setAlertToResolve(alert);
+  setResolveModalOpen(true);
+};
+
+const handleResolveYes = async () => {
+  const alert = alertToResolve;
+  setResolveModalOpen(false);
+  setAlertToResolve(null);
+
+  // If this alert is tied to a backend ticket, close it
+  if (alert?.ticketId && backendURL) {
+    try {
+      await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      await fetchAlerts();
+      return;
+    } catch (err) {
+      console.error('Failed to close alert ticket', err);
+      // fall through to tickets tab if closing fails
     }
-    setResolveModalOpen(false);
-    setAlertToResolve(null);
-  };
+  }
+
+  // Otherwise, go to tickets tab so user can create one
+  setActiveTab('tickets');
+};
+
+const handleResolveNo = () => {
+  if (alertToResolve) {
+    setUndoStack(prev => [...prev, snapshotAlerts()]);
+    setRedoStack([]);
+
+    const newAlerts = alerts.map(a =>
+      a.id === alertToResolve.id ? { ...a, resolved: true } : a
+    );
+    setAlerts(newAlerts);
+
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+    }
+  }
+
+  setResolveModalOpen(false);
+  setAlertToResolve(null);
+};
+
   
   const undoResolve = () => {
     if (undoStack.length === 0) return;
@@ -900,6 +922,43 @@ function TempDashboard() {
 
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
+
+  const fetchAlerts = async () => {
+    if (!backendURL) return;
+    setAlertsLoading(true);
+    setAlertsError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) return;
+      const res = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+      if (!res.ok) throw new Error(`Alerts HTTP ${res.status}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      const lowUsage = list.filter(t =>
+        t.status === 'open' && (t.category === 'Low Usage' || t.createdBy === 'low_usage_monitor')
+      );
+      setAlerts(lowUsage.map(t => ({
+        id: `ticket_${t._id}`,
+        ticketId: t._id,
+        title: t.machineName || 'Low usage detected',
+        machineId: t.machineName || t.equipment || 'Unknown',
+        description: t.description || 'Low usage alert',
+        resolved: false
+      })));
+    } catch (err) {
+      console.error('Failed to fetch alerts', err);
+      setAlertsError(err.message);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!backendURL || activeTab !== 'dashboard') return;
+    fetchAlerts();
+    const id = setInterval(fetchAlerts, 60000);
+    return () => clearInterval(id);
+  }, [activeTab]);
 
   // Space allocation suggestions
   // useEffect(() => {
@@ -1403,7 +1462,11 @@ function TempDashboard() {
                       </div>
                     </div>
                     <div>
-                      {alerts.filter(a=>!a.resolved).length === 0 ? (
+                      {alertsLoading ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading alerts…</div>
+                      ) : alertsError ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>{alertsError}</div>
+                      ) : alerts.filter(a=>!a.resolved).length === 0 ? (
                         <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No active alerts</div>
                       ) : (
                         alerts.filter(a=>!a.resolved).map(a => (
