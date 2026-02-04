@@ -12,6 +12,27 @@ function writeState(updater) {
   return next;
 }
 
+function buildMemberReportUrl(gymId, zoneId) {
+  if (!gymId || typeof window === 'undefined') return '';
+  const base = `${window.location.origin}/member-report.html?gymId=${encodeURIComponent(gymId)}`;
+  if (!zoneId) return base;
+  return `${base}&zone=${encodeURIComponent(zoneId)}`;
+}
+
+function buildQrImageUrl(targetUrl) {
+  if (!targetUrl) return '';
+  return `https://quickchart.io/qr?text=${encodeURIComponent(targetUrl)}&size=220&margin=1&dark=111827&light=ffffff`;
+}
+
+function formatZoneLabel(value) {
+  if (!value) return 'Zone';
+  const trimmed = String(value).trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('zone')) return trimmed;
+  if (/^\d+$/.test(trimmed)) return `Zone ${trimmed}`;
+  return trimmed;
+}
+
 function generateTimes() {
   const times = [];
   const start = 8 * 60; // 8:00
@@ -160,6 +181,8 @@ export default function TicketsTab() {
   const [memberReportUrl, setMemberReportUrl] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [qrError, setQrError] = useState('');
+  const [zoneQrList, setZoneQrList] = useState([]);
+  const [zoneQrError, setZoneQrError] = useState('');
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
   const detailsModalRef = useRef(null);
@@ -169,17 +192,71 @@ export default function TicketsTab() {
     const gymId = localStorage.getItem('gymId');
     if (gymId) {
       buildMemberQr(gymId);
+      buildZoneQrs(gymId);
     }
   }, []);
 
   async function buildMemberQr(gymId) {
     if (!gymId || typeof window === 'undefined') return;
-    const memberUrl = `${window.location.origin}/member-report.html?gymId=${encodeURIComponent(gymId)}`;
+    const memberUrl = buildMemberReportUrl(gymId);
     setMemberReportUrl(memberUrl);
     // Use a hosted QR endpoint to avoid bundler deps
-    const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(memberUrl)}&size=220&margin=1&dark=111827&light=ffffff`;
+    const qrUrl = buildQrImageUrl(memberUrl);
     setQrDataUrl(qrUrl);
     setQrError('');
+  }
+
+  function extractZones(mapCfg) {
+    if (!mapCfg) return [];
+    if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
+      return mapCfg.floors.flatMap(f => (
+        (Array.isArray(f.zones) ? f.zones : []).map(z => ({
+          ...z,
+          floorId: f.id,
+          floorLabel: f.label
+        }))
+      ));
+    }
+    return Array.isArray(mapCfg.zones) ? mapCfg.zones : [];
+  }
+
+  async function buildZoneQrs(gymId) {
+    if (!backendURL || !gymId || typeof window === 'undefined') return;
+    try {
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${encodeURIComponent(gymId)}&hours=12`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || `Zones HTTP ${res.status}`);
+      }
+      const zoneList = extractZones(data?.map || {});
+      const sorted = zoneList.slice().sort((a, b) => {
+        const aNum = Number(a.id);
+        const bNum = Number(b.id);
+        if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
+        return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
+      });
+      const seen = new Set();
+      const qrs = sorted.reduce((acc, z) => {
+        const zoneId = z?.id ? String(z.id) : '';
+        if (!zoneId || seen.has(zoneId)) return acc;
+        seen.add(zoneId);
+        const reportUrl = buildMemberReportUrl(gymId, zoneId);
+        acc.push({
+          id: zoneId,
+          label: formatZoneLabel(z.label || zoneId),
+          floorLabel: z.floorLabel,
+          reportUrl,
+          qrUrl: buildQrImageUrl(reportUrl)
+        });
+        return acc;
+      }, []);
+      setZoneQrList(qrs);
+      setZoneQrError('');
+    } catch (err) {
+      console.error('Failed to build zone QRs', err);
+      setZoneQrList([]);
+      setZoneQrError('Zone QR codes unavailable. Configure floorplan zones first.');
+    }
   }
 
   async function copyMemberLink() {
@@ -1231,6 +1308,12 @@ export default function TicketsTab() {
                       <span className="tk-ticket-meta-value">{t.machineName}</span>
                     </div>
                   )}
+                  {t.zone && (
+                    <div className="tk-ticket-meta-item">
+                      <span className="tk-ticket-meta-label">Zone:</span>
+                      <span className="tk-ticket-meta-value">{formatZoneLabel(t.zone)}</span>
+                    </div>
+                  )}
                   {t.worker && t.worker !== 'Unassigned' && (
                     <div className="tk-ticket-meta-item">
                       <span className="tk-ticket-meta-label">Assigned:</span>
@@ -1301,6 +1384,34 @@ export default function TicketsTab() {
         </div>
       )}
 
+      {memberReportUrl && (
+        <div className="nx-card" style={{ marginBottom:12 }}>
+          <div className="nx-card-title" style={{ marginBottom:4 }}>Zone Report QRs</div>
+          <div className="nx-subtle" style={{ marginBottom:8 }}>Print and post a QR in each zone so reports include the zone automatically.</div>
+          {zoneQrError && (
+            <div className="nx-subtle" style={{ color:'#f87171', marginBottom:8 }}>
+              {zoneQrError}
+            </div>
+          )}
+          {zoneQrList.length > 0 ? (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))', gap:12 }}>
+              {zoneQrList.map(zone => (
+                <div key={zone.id} style={{ border:'1px solid #1f2937', borderRadius:12, background:'#0f172a', padding:10, display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+                  <div style={{ fontSize:12, color:'#cbd5e1', textAlign:'center' }}>
+                    {zone.floorLabel ? `${zone.floorLabel} - ${zone.label}` : zone.label}
+                  </div>
+                  <div style={{ width:120, height:120, borderRadius:10, border:'1px solid #1f2937', background:'#0b1221', display:'flex', alignItems:'center', justifyContent:'center', padding:8 }}>
+                    {zone.qrUrl ? <img src={zone.qrUrl} alt={`QR code for ${zone.label}`} style={{ width:'100%', height:'100%' }} /> : <div className="nx-subtle">QR unavailable</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            !zoneQrError && <div className="nx-subtle">No zones configured yet.</div>
+          )}
+        </div>
+      )}
+
       {/* Ticket Details Modal */}
       {active && (
         <div className="nx-overlay" onClick={() => setActive(null)}>
@@ -1359,6 +1470,11 @@ export default function TicketsTab() {
                   <div style={{ marginBottom: '12px' }}>
                     <strong style={{ color: '#e5e7eb' }}>Machine:</strong> {active.machineName || 'Not specified'}
                   </div>
+                  {active.zone && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong style={{ color: '#e5e7eb' }}>Zone:</strong> {formatZoneLabel(active.zone)}
+                    </div>
+                  )}
                   {active.worker && active.worker !== 'Unassigned' && (
                     <div style={{ marginBottom: '12px' }}>
                       <strong style={{ color: '#e5e7eb' }}>Assigned to:</strong> {active.worker}
