@@ -81,6 +81,8 @@ function TempDashboard() {
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState('');
   const [maintOpen, setMaintOpen] = useState(false);
   const [formStep, setFormStep] = useState(0);
   const [activeAlert, setActiveAlert] = useState(null);
@@ -92,6 +94,11 @@ function TempDashboard() {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  
+  // Resolve modal state
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [alertToResolve, setAlertToResolve] = useState(null);
+
 
   const chartInstancesRef = useRef({});
   const hourlyUsageChartRef = useRef(null);
@@ -130,6 +137,18 @@ function TempDashboard() {
     }
   }, [navigate]);
 
+  // Clear alerts when gymId changes (user switches gyms)
+  useEffect(() => {
+    const gymId = localStorage.getItem('gymId');
+    if (gymId && user) {
+      // Clear current alerts when switching to a different gym
+      setAlerts([]);
+      setUndoStack([]);
+      setRedoStack([]);
+      // Alerts will be refetched by the main useEffect when user changes
+    }
+  }, [localStorage.getItem('gymId'), user]);
+
   // Fetch dashboard stats from backend
   const fetchDashboardData = async () => {
     try {
@@ -162,6 +181,42 @@ function TempDashboard() {
 
       const rows = buildEquipmentRows(occData);
       setEquipmentRows(rows);
+
+      // Auto-remove alerts for machines that are now active
+      // Check if any machines with "active" status have corresponding alerts
+      if (Array.isArray(occData.machines)) {
+        const activeMachineNames = new Set(
+          occData.machines
+            .filter(m => m.status === 'active')
+            .map(m => m.machineName || m.name || m.id)
+        );
+        
+        // Filter out alerts for machines that are now active
+        setAlerts(prevAlerts => {
+          const filteredAlerts = prevAlerts.filter(alert => {
+            const alertMachine = alert.machineId || alert.machineName;
+            const shouldKeep = !activeMachineNames.has(alertMachine);
+            
+            if (!shouldKeep) {
+              console.log(`Auto-removing alert for ${alertMachine} - machine is now active`);
+            }
+            
+            return shouldKeep;
+          });
+          
+          // Only update localStorage if alerts were removed
+          if (filteredAlerts.length !== prevAlerts.length) {
+            try {
+              localStorage.setItem(`alerts_${gymId}`, JSON.stringify(filteredAlerts));
+              console.log(`Auto-removed ${prevAlerts.length - filteredAlerts.length} alerts due to machine activity`);
+            } catch (e) {
+              console.warn('Failed to persist alert auto-removal', e);
+            }
+          }
+          
+          return filteredAlerts;
+        });
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -731,6 +786,7 @@ function TempDashboard() {
       fetchDashboardData();
       fetchMachineOptions();
       fetchAnalyticsData();
+      fetchAlertsData(); // Fetch gym-specific alerts
     }
   }, [user]);
 
@@ -809,17 +865,154 @@ function TempDashboard() {
 
   // Alert management functions
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
-  const resolveAlert = (id) => {
+  const resolveAlert = (alert) => {
+    setAlertToResolve(alert);
+    setResolveModalOpen(true);
+  };
+
+const handleResolveYes = async () => {
+  const alert = alertToResolve;
+  if (!alert) return;
+
+  const gymId = localStorage.getItem('gymId');
+  const userEmail = localStorage.getItem('userEmail') || 'unknown';
+  if (!gymId) {
+    setAlertsError('No gym selected');
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+    return;
+  }
+
+  try {
+    setAlertsLoading(true);
+    setAlertsError('');
+
+    // If this alert came from backend (has ticketId), close it on the backend first
+    if (backendURL && alert.ticketId) {
+      try {
+        console.log('Closing backend ticket/alert:', alert.ticketId);
+        const closeRes = await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            gymId,
+            checklistUpdates: [],
+            resolvedBy: userEmail,
+            notes: 'Converted to ticket from dashboard alert'
+          })
+        });
+        
+        if (!closeRes.ok) {
+          console.warn('Failed to close alert on backend:', closeRes.status);
+        } else {
+          console.log('Alert closed on backend successfully');
+        }
+      } catch (e) {
+        console.warn('Error closing alert on backend:', e);
+        // Continue anyway - we'll still remove it locally
+      }
+    }
+
+    // Remove the alert from local state
     setUndoStack(prev => [...prev, snapshotAlerts()]);
     setRedoStack([]);
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, resolved: true } : a));
-  };
+    const newAlerts = alerts.filter(a => a.id !== alert.id);
+    setAlerts(newAlerts);
+    
+    // Persist alert removal to localStorage
+    try {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+      console.log('Alert removed from localStorage, remaining alerts:', newAlerts.length);
+    } catch (e) {
+      console.warn('Failed to persist alerts to localStorage', e);
+    }
+
+    // Create ticket purely on frontend (localStorage) — no backend calls
+    const ticketsKey = `tickets_${gymId}`;
+    let tickets = [];
+    try {
+      const raw = localStorage.getItem(ticketsKey);
+      tickets = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(tickets)) tickets = [];
+    } catch (e) {
+      tickets = [];
+    }
+
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Use machineId as the primary name, fallback to title
+    const machineName = alert.machineId || alert.machineName || 'Unknown Machine';
+    const ticketTitle = `${machineName}`;
+
+    const newTicket = {
+      _id: localId,
+      title: ticketTitle,
+      description: alert.description || alert.title || 'Alert generated ticket',
+      equipment: machineName,
+      machineName: machineName,
+      category: 'Alert',
+      status: 'open',
+      priority: 'medium',
+      createdBy: userEmail,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      source: 'alert'
+    };
+
+    tickets.push(newTicket);
+    localStorage.setItem(ticketsKey, JSON.stringify(tickets));
+    
+    console.log('Ticket created:', newTicket);
+    console.log('Alert removed, new alerts count:', newAlerts.length);
+
+    // close modal UI and clear selection pointer AFTER alert removal
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+
+    // Switch to tickets tab
+    setActiveTab('tickets');
+  } catch (e) {
+    console.error('Error creating ticket locally for alert', e);
+    setAlertsError(e?.message || 'Failed to create ticket');
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+  } finally {
+    setAlertsLoading(false);
+  }
+};
+
+const handleResolveNo = () => {
+  if (alertToResolve) {
+    setUndoStack(prev => [...prev, snapshotAlerts()]);
+    setRedoStack([]);
+
+    const newAlerts = alerts.map(a =>
+      a.id === alertToResolve.id ? { ...a, resolved: true } : a
+    );
+    setAlerts(newAlerts);
+
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+    }
+  }
+
+  setResolveModalOpen(false);
+  setAlertToResolve(null);
+};
+
+  
   const undoResolve = () => {
     if (undoStack.length === 0) return;
     const prevState = undoStack[undoStack.length - 1];
     setUndoStack(s => s.slice(0, -1));
     setRedoStack(s => [...s, snapshotAlerts()]);
     setAlerts(prevState);
+    
+    // Update localStorage
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(prevState));
+    }
   };
   const redoResolve = () => {
     if (redoStack.length === 0) return;
@@ -827,6 +1020,12 @@ function TempDashboard() {
     setRedoStack(s => s.slice(0, -1));
     setUndoStack(s => [...s, snapshotAlerts()]);
     setAlerts(nextState);
+    
+    // Update localStorage
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(nextState));
+    }
   };
   const openMaint = (alert) => {
     setActiveAlert(alert);
@@ -846,6 +1045,97 @@ function TempDashboard() {
 
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
+
+  const fetchAlerts = async () => {
+    if (!backendURL) return;
+    setAlertsLoading(true);
+    setAlertsError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) return;
+      const res = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+      if (!res.ok) throw new Error(`Alerts HTTP ${res.status}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      const lowUsage = list.filter(t =>
+        t.status === 'open' && (t.category === 'Low Usage' || t.createdBy === 'low_usage_monitor')
+      );
+      setAlerts(lowUsage.map(t => ({
+        id: `ticket_${t._id}`,
+        ticketId: t._id,
+        title: t.machineName || 'Low usage detected',
+        machineId: t.machineName || t.equipment || 'Unknown',
+        description: t.description || 'Low usage alert',
+        resolved: false
+      })));
+    } catch (err) {
+      console.error('Failed to fetch alerts', err);
+      setAlertsError(err.message);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  // Fetch alerts data from localStorage (gym-specific)
+  const fetchAlertsData = async () => {
+    try {
+      const gymId = localStorage.getItem('gymId');
+      const userEmail = localStorage.getItem('userEmail');
+      if (!gymId || !userEmail) return;
+
+      // Read persisted per-gym alerts or seed sample alerts
+      const storedAlerts = localStorage.getItem(`alerts_${gymId}`);
+      if (storedAlerts) {
+        try {
+          const parsedAlerts = JSON.parse(storedAlerts);
+          if (Array.isArray(parsedAlerts)) {
+            setAlerts(parsedAlerts);
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse stored alerts for gym, will seed sample data');
+        }
+      }
+
+      // Seed sample alerts for this gym if none exist
+      const alertId1 = `${gymId}_alert1`;
+      const alertId2 = `${gymId}_alert2`;
+      const gymSpecificAlerts = [
+        {
+          id: alertId1,
+          title: 'Sensor Malfunction',
+          machineId: `Treadmill-${gymId.slice(-2)}`,
+          description: 'Usage sensor not responding',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        },
+        {
+          id: alertId2,
+          title: 'Maintenance Required',
+          machineId: `Elliptical-${gymId.slice(-2)}`,
+          description: 'Unusual vibration detected',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        }
+      ];
+
+      setAlerts(gymSpecificAlerts);
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(gymSpecificAlerts));
+
+    } catch (error) {
+      console.error('Error fetching alerts data:', error);
+      setAlerts([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!backendURL || activeTab !== 'dashboard') return;
+    fetchAlerts();
+    const id = setInterval(fetchAlerts, 60000);
+    return () => clearInterval(id);
+  }, [activeTab]);
 
   // Space allocation suggestions
   // useEffect(() => {
@@ -1274,7 +1564,11 @@ function TempDashboard() {
                       </div>
                     </div>
                     <div>
-                      {alerts.filter(a=>!a.resolved).length === 0 ? (
+                      {alertsLoading ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading alerts…</div>
+                      ) : alertsError ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>{alertsError}</div>
+                      ) : alerts.filter(a=>!a.resolved).length === 0 ? (
                         <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No active alerts</div>
                       ) : (
                         alerts.filter(a=>!a.resolved).map(a => (
@@ -1284,7 +1578,7 @@ function TempDashboard() {
                               <div className="nx-subtle">{a.machineId} • {a.description}</div>
                             </div>
                             <div style={{display:'flex', gap:8}}>
-                              <button className="nx-pill primary" onClick={()=>resolveAlert(a.id)}>Resolve</button>
+                              <button className="nx-pill primary" onClick={()=>resolveAlert(a)}>Resolve</button>
                               <button className="nx-pill" onClick={()=>openMaint(a)}>Details</button>
                             </div>
                           </div>
@@ -1439,9 +1733,32 @@ function TempDashboard() {
             </div>
           </div>
         )}
+
+        {/* Resolve Alert Modal */}
+        {resolveModalOpen && (
+          <div className="nx-modal-overlay" role="dialog" aria-modal="true">
+            <div className="nx-modal">
+              <div className="nx-modal-title">Resolve Alert — {alertToResolve?.machineId}</div>
+              <div>
+                <div className="nx-modal-q">Are you sure?</div>
+                <div className="nx-subtle" style={{marginBottom: '16px'}}>
+                  {alertToResolve?.title} • {alertToResolve?.description}
+                </div>
+                <div className="nx-modal-row">
+                  <button className="nx-modal-btn" onClick={handleResolveYes}>Yes, create ticket</button>
+                  <button className="nx-modal-btn" onClick={handleResolveNo}>No, dismiss alert</button>
+                </div>
+                <div className="nx-modal-actions">
+                  <button className="nx-modal-btn" onClick={() => setResolveModalOpen(false)}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 
 export default TempDashboard;
