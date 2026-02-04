@@ -196,7 +196,6 @@ export default function TicketsTab() {
 
   // Backend routing - use backend when available, fallback to local storage
   async function fetchStatus() {
-    if (!backendURL) return;
     setLoading(true);
     setErrorMsg('');
     try {
@@ -208,11 +207,29 @@ export default function TicketsTab() {
       }
       await buildMemberQr(gymId);
       
-      // Fetch gym-specific tickets directly (this is the main source of truth)
-      console.log('Fetching tickets for gym:', gymId);
-      const ticketsRes = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
-      if (ticketsRes.ok) {
-        const tData = await ticketsRes.json();
+      let allTickets = [];
+      
+      // First, load tickets from localStorage (tickets created from alerts)
+      const localStorageKey = `tickets_${gymId}`;
+      try {
+        const localTicketsRaw = localStorage.getItem(localStorageKey);
+        if (localTicketsRaw) {
+          const localTickets = JSON.parse(localTicketsRaw);
+          if (Array.isArray(localTickets)) {
+            console.log('Loaded tickets from localStorage:', localTickets.length);
+            allTickets = localTickets;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse localStorage tickets:', e);
+      }
+      
+      // Then, fetch from backend if available and merge
+      if (backendURL) {
+        console.log('Fetching tickets from backend for gym:', gymId);
+        const ticketsRes = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+        if (ticketsRes.ok) {
+          const tData = await ticketsRes.json();
         console.log('Tickets response:', tData); // Debug log
         console.log('Number of tickets fetched:', Array.isArray(tData) ? tData.length : 0);
         
@@ -254,42 +271,27 @@ export default function TicketsTab() {
           console.log('=== END TICKETS DEBUG ===');
         }
         
-        // The endpoint returns an array directly
+        // Merge backend tickets with localStorage tickets (avoid duplicates)
         if (Array.isArray(tData)) {
-          setTickets(tData);
-        } else {
-          console.warn('Unexpected tickets response format:', tData);
-          setTickets([]);
+          const backendTicketIds = new Set(tData.map(t => t._id));
+          const localOnlyTickets = allTickets.filter(t => !backendTicketIds.has(t._id));
+          allTickets = [...tData, ...localOnlyTickets];
+          console.log('Merged tickets: backend=' + tData.length + ', local=' + localOnlyTickets.length + ', total=' + allTickets.length);
         }
       } else {
-        console.error(`Tickets HTTP ${ticketsRes.status}`);
         const errorText = await ticketsRes.text();
-        console.error('Tickets error response:', errorText);
-        setTickets([]);
+        console.error('Failed to fetch tickets:', ticketsRes.status, errorText);
       }
-      
-      // Fetch maintenance statuses (for intervals) - optional
-      try {
-        const statusRes = await fetch(`${backendURL}/api/maintenance/status?gymId=${gymId}`);
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          setStatuses(Array.isArray(statusData.statuses) ? statusData.statuses : []);
-        } else {
-          console.warn(`Status HTTP ${statusRes.status}`);
-          setStatuses([]);
-        }
-      } catch (statusError) {
-        console.warn('Status fetch failed (non-critical):', statusError);
-        setStatuses([]);
-      }
-    } catch (e) {
-      console.error('Fetch status failed', e);
-      setErrorMsg(e.message || 'Failed to load');
-      setTickets([]);
-      setStatuses([]);
-    } finally {
-      setLoading(false);
     }
+    
+    // Set the merged tickets
+    setTickets(allTickets);
+  } catch (e) {
+    console.error('Error fetching tickets:', e);
+    setErrorMsg(e.message);
+  } finally {
+    setLoading(false);
+  }
   }
 
   async function fetchGymMachines() {
@@ -455,7 +457,48 @@ export default function TicketsTab() {
     setErrorMsg('');
     setResolveConfirmTicket(null);
     
-    // If no backend URL, use local storage
+    const ticket = tickets.find(t => t._id === ticketId);
+    const gymId = localStorage.getItem('gymId');
+    
+    // Check if this is a localStorage-only ticket (created from alert)
+    const isLocalTicket = ticketId.startsWith('local_');
+    
+    if (isLocalTicket) {
+      // Handle localStorage ticket - update in localStorage only
+      const localStorageKey = `tickets_${gymId}`;
+      try {
+        const localTicketsRaw = localStorage.getItem(localStorageKey);
+        const localTickets = localTicketsRaw ? JSON.parse(localTicketsRaw) : [];
+        
+        // Update the ticket status to closed
+        const updatedTickets = localTickets.map(t => {
+          if (t._id === ticketId) {
+            return { ...t, status: 'closed', closedAt: new Date().toISOString() };
+          }
+          return t;
+        });
+        
+        // Save back to localStorage
+        localStorage.setItem(localStorageKey, JSON.stringify(updatedTickets));
+        
+        // Update state to reflect the change
+        setTickets(tickets.map(t => {
+          if (t._id === ticketId) {
+            return { ...t, status: 'closed', closedAt: new Date().toISOString() };
+          }
+          return t;
+        }));
+        
+        console.log('Local ticket closed successfully:', ticketId);
+        return;
+      } catch (e) {
+        console.error('Failed to close local ticket:', e);
+        setErrorMsg('Failed to close ticket');
+        return;
+      }
+    }
+    
+    // Handle backend ticket - send to API
     if (!backendURL) {
       const updatedTickets = tickets.map(t => {
         if (t._id === ticketId) {
@@ -470,7 +513,6 @@ export default function TicketsTab() {
     
     // Backend API call
     try {
-      const ticket = tickets.find(t => t._id === ticketId);
       let checklistUpdates = [];
       if (ticket && Array.isArray(ticket.checklist)) {
         checklistUpdates = ticket.checklist
@@ -481,7 +523,7 @@ export default function TicketsTab() {
           })
           .filter(Boolean);
       }
-      const gymId = localStorage.getItem('gymId');
+      
       console.log('Closing ticket:', ticketId, 'for gym:', gymId, 'with checklist updates:', checklistUpdates);
       
       const res = await fetch(`${backendURL}/api/maintenance/tickets/${ticketId}/close`, {
@@ -688,18 +730,21 @@ export default function TicketsTab() {
 
   const sortedTickets = useMemo(() => {
     const arr = [...tickets];
-    // Sort by priority first (High > Medium > Low), then by status
     const priorityOrder = { High: 3, Medium: 2, Low: 1 };
+    
     arr.sort((a, b) => {
+      // First: Open tickets first
       if ((a.status === 'open') !== (b.status === 'open')) return a.status === 'open' ? -1 : 1;
+      
+      // Second: Sort by priority (High > Medium > Low)
       const aPriority = priorityOrder[a.priority] || 2;
       const bPriority = priorityOrder[b.priority] || 2;
-      if (aPriority !== bPriority) return bPriority - aPriority; // Higher priority first
-      const aAuto = !!a.ruleKey, bAuto = !!b.ruleKey;
-      if (aAuto !== bAuto) return aAuto ? -1 : 1;
-      if ((a.ruleUnit || '') !== (b.ruleUnit || '')) return (a.ruleUnit || '').localeCompare(b.ruleUnit || '');
-      if ((a.ruleInterval || 0) !== (b.ruleInterval || 0)) return (a.ruleInterval || 0) - (b.ruleInterval || 0);
-      return (a.dueAtUsage || 0) - (b.dueAtUsage || 0);
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      
+      // Third: Within same priority, sort by created date (newest first)
+      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bDate - aDate;
     });
     return arr;
   }, [tickets]);
@@ -1651,6 +1696,7 @@ export default function TicketsTab() {
                 onClick={() => setResolveConfirmTicket(null)}
               >
                 Cancel
+
               </button>
               <button 
                 className="resolve-btn primary" 
