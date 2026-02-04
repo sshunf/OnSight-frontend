@@ -99,6 +99,7 @@ function TempDashboard() {
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [alertToResolve, setAlertToResolve] = useState(null);
 
+
   const chartInstancesRef = useRef({});
   const hourlyUsageChartRef = useRef(null);
   const avgUsageChartRef = useRef(null);
@@ -180,6 +181,42 @@ function TempDashboard() {
 
       const rows = buildEquipmentRows(occData);
       setEquipmentRows(rows);
+
+      // Auto-remove alerts for machines that are now active
+      // Check if any machines with "active" status have corresponding alerts
+      if (Array.isArray(occData.machines)) {
+        const activeMachineNames = new Set(
+          occData.machines
+            .filter(m => m.status === 'active')
+            .map(m => m.machineName || m.name || m.id)
+        );
+        
+        // Filter out alerts for machines that are now active
+        setAlerts(prevAlerts => {
+          const filteredAlerts = prevAlerts.filter(alert => {
+            const alertMachine = alert.machineId || alert.machineName;
+            const shouldKeep = !activeMachineNames.has(alertMachine);
+            
+            if (!shouldKeep) {
+              console.log(`Auto-removing alert for ${alertMachine} - machine is now active`);
+            }
+            
+            return shouldKeep;
+          });
+          
+          // Only update localStorage if alerts were removed
+          if (filteredAlerts.length !== prevAlerts.length) {
+            try {
+              localStorage.setItem(`alerts_${gymId}`, JSON.stringify(filteredAlerts));
+              console.log(`Auto-removed ${prevAlerts.length - filteredAlerts.length} alerts due to machine activity`);
+            } catch (e) {
+              console.warn('Failed to persist alert auto-removal', e);
+            }
+          }
+          
+          return filteredAlerts;
+        });
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -828,33 +865,119 @@ function TempDashboard() {
 
   // Alert management functions
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
-const resolveAlert = (alert) => {
-  setAlertToResolve(alert);
-  setResolveModalOpen(true);
-};
+  const resolveAlert = (alert) => {
+    setAlertToResolve(alert);
+    setResolveModalOpen(true);
+  };
 
 const handleResolveYes = async () => {
   const alert = alertToResolve;
-  setResolveModalOpen(false);
-  setAlertToResolve(null);
+  if (!alert) return;
 
-  // If this alert is tied to a backend ticket, close it
-  if (alert?.ticketId && backendURL) {
-    try {
-      await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      await fetchAlerts();
-      return;
-    } catch (err) {
-      console.error('Failed to close alert ticket', err);
-      // fall through to tickets tab if closing fails
-    }
+  const gymId = localStorage.getItem('gymId');
+  const userEmail = localStorage.getItem('userEmail') || 'unknown';
+  if (!gymId) {
+    setAlertsError('No gym selected');
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+    return;
   }
 
-  // Otherwise, go to tickets tab so user can create one
-  setActiveTab('tickets');
+  try {
+    setAlertsLoading(true);
+    setAlertsError('');
+
+    // If this alert came from backend (has ticketId), close it on the backend first
+    if (backendURL && alert.ticketId) {
+      try {
+        console.log('Closing backend ticket/alert:', alert.ticketId);
+        const closeRes = await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            gymId,
+            checklistUpdates: [],
+            resolvedBy: userEmail,
+            notes: 'Converted to ticket from dashboard alert'
+          })
+        });
+        
+        if (!closeRes.ok) {
+          console.warn('Failed to close alert on backend:', closeRes.status);
+        } else {
+          console.log('Alert closed on backend successfully');
+        }
+      } catch (e) {
+        console.warn('Error closing alert on backend:', e);
+        // Continue anyway - we'll still remove it locally
+      }
+    }
+
+    // Remove the alert from local state
+    setUndoStack(prev => [...prev, snapshotAlerts()]);
+    setRedoStack([]);
+    const newAlerts = alerts.filter(a => a.id !== alert.id);
+    setAlerts(newAlerts);
+    
+    // Persist alert removal to localStorage
+    try {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+      console.log('Alert removed from localStorage, remaining alerts:', newAlerts.length);
+    } catch (e) {
+      console.warn('Failed to persist alerts to localStorage', e);
+    }
+
+    // Create ticket purely on frontend (localStorage) — no backend calls
+    const ticketsKey = `tickets_${gymId}`;
+    let tickets = [];
+    try {
+      const raw = localStorage.getItem(ticketsKey);
+      tickets = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(tickets)) tickets = [];
+    } catch (e) {
+      tickets = [];
+    }
+
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Use machineId as the primary name, fallback to title
+    const machineName = alert.machineId || alert.machineName || 'Unknown Machine';
+    const ticketTitle = `${machineName}`;
+
+    const newTicket = {
+      _id: localId,
+      title: ticketTitle,
+      description: alert.description || alert.title || 'Alert generated ticket',
+      equipment: machineName,
+      machineName: machineName,
+      category: 'Alert',
+      status: 'open',
+      priority: 'medium',
+      createdBy: userEmail,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      source: 'alert'
+    };
+
+    tickets.push(newTicket);
+    localStorage.setItem(ticketsKey, JSON.stringify(tickets));
+    
+    console.log('Ticket created:', newTicket);
+    console.log('Alert removed, new alerts count:', newAlerts.length);
+
+    // close modal UI and clear selection pointer AFTER alert removal
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+
+    // Switch to tickets tab
+    setActiveTab('tickets');
+  } catch (e) {
+    console.error('Error creating ticket locally for alert', e);
+    setAlertsError(e?.message || 'Failed to create ticket');
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+  } finally {
+    setAlertsLoading(false);
+  }
 };
 
 const handleResolveNo = () => {
@@ -953,6 +1076,60 @@ const handleResolveNo = () => {
     }
   };
 
+  // Fetch alerts data from localStorage (gym-specific)
+  const fetchAlertsData = async () => {
+    try {
+      const gymId = localStorage.getItem('gymId');
+      const userEmail = localStorage.getItem('userEmail');
+      if (!gymId || !userEmail) return;
+
+      // Read persisted per-gym alerts or seed sample alerts
+      const storedAlerts = localStorage.getItem(`alerts_${gymId}`);
+      if (storedAlerts) {
+        try {
+          const parsedAlerts = JSON.parse(storedAlerts);
+          if (Array.isArray(parsedAlerts)) {
+            setAlerts(parsedAlerts);
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse stored alerts for gym, will seed sample data');
+        }
+      }
+
+      // Seed sample alerts for this gym if none exist
+      const alertId1 = `${gymId}_alert1`;
+      const alertId2 = `${gymId}_alert2`;
+      const gymSpecificAlerts = [
+        {
+          id: alertId1,
+          title: 'Sensor Malfunction',
+          machineId: `Treadmill-${gymId.slice(-2)}`,
+          description: 'Usage sensor not responding',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        },
+        {
+          id: alertId2,
+          title: 'Maintenance Required',
+          machineId: `Elliptical-${gymId.slice(-2)}`,
+          description: 'Unusual vibration detected',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        }
+      ];
+
+      setAlerts(gymSpecificAlerts);
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(gymSpecificAlerts));
+
+    } catch (error) {
+      console.error('Error fetching alerts data:', error);
+      setAlerts([]);
+    }
+  };
+
   useEffect(() => {
     if (!backendURL || activeTab !== 'dashboard') return;
     fetchAlerts();
@@ -1001,81 +1178,6 @@ const handleResolveNo = () => {
       console.error('Error navigating back to login:', error);
     }
   }
-
-  // Fetch alerts data from backend (gym-specific)
-  const fetchAlertsData = async () => {
-    try {
-      const gymId = localStorage.getItem('gymId');
-      const userEmail = localStorage.getItem('userEmail');
-      if (!gymId || !userEmail) return;
-      
-      // Try to fetch real alerts from backend first
-      try {
-        const res = await fetch(`${backendURL}/api/alerts?gymId=${gymId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.alerts)) {
-            // Filter alerts to only show those belonging to current gym
-            const gymSpecificAlerts = data.alerts.filter(alert => 
-              !alert.gymId || String(alert.gymId) === String(gymId)
-            );
-            setAlerts(gymSpecificAlerts);
-            return;
-          }
-        }
-      } catch (backendError) {
-        console.log("Backend alerts not available, using sample data");
-      }
-      
-      // Fallback: Create gym-specific sample alerts based on gymId
-      const alertId1 = `${gymId}_alert1`;
-      const alertId2 = `${gymId}_alert2`;
-      
-      // Get stored alerts from localStorage to persist across sessions
-      const storedAlerts = localStorage.getItem(`alerts_${gymId}`);
-      if (storedAlerts) {
-        try {
-          const parsedAlerts = JSON.parse(storedAlerts);
-          if (Array.isArray(parsedAlerts)) {
-            setAlerts(parsedAlerts);
-            return;
-          }
-        } catch (e) {
-          console.warn("Failed to parse stored alerts");
-        }
-      }
-      
-      // Create new sample alerts specific to this gym
-      const gymSpecificAlerts = [
-        {
-          id: alertId1,
-          title: 'Sensor Malfunction',
-          machineId: `Treadmill-${gymId.slice(-2)}`, // Use last 2 chars of gymId for uniqueness
-          description: 'Usage sensor not responding',
-          resolved: false,
-          timestamp: new Date().toISOString(),
-          gymId: gymId
-        },
-        {
-          id: alertId2,
-          title: 'Maintenance Required',
-          machineId: `Elliptical-${gymId.slice(-2)}`,
-          description: 'Unusual vibration detected',
-          resolved: false,
-          timestamp: new Date().toISOString(),
-          gymId: gymId
-        }
-      ];
-      
-      setAlerts(gymSpecificAlerts);
-      // Store alerts in localStorage for persistence
-      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(gymSpecificAlerts));
-      
-    } catch (error) {
-      console.error('Error fetching alerts data:', error);
-      setAlerts([]);
-    }
-  };
 
   if (!user) return null;
 
@@ -1657,5 +1759,6 @@ const handleResolveNo = () => {
     </div>
   );
 }
+
 
 export default TempDashboard;
