@@ -50,6 +50,14 @@ function NxDropdown({ options, value, onChange, minWidth = 160 }) {
   );
 }
 
+function getConfiguredZones(mapCfg) {
+  if (!mapCfg) return [];
+  if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
+    return mapCfg.floors.flatMap(f => (Array.isArray(f.zones) ? f.zones : []));
+  }
+  return Array.isArray(mapCfg.zones) ? mapCfg.zones : [];
+}
+
 function TempDashboard() {
   const displayName = localStorage.getItem('displayName') || 'Guest User';
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -108,9 +116,50 @@ function TempDashboard() {
   const [facilityZones, setFacilityZones] = useState([]);
   const [facilityLoading, setFacilityLoading] = useState(false);
   const [facilityRange, setFacilityRange] = useState(12);
+  const [selectedFloorId, setSelectedFloorId] = useState('');
   const [facilityMachines, setFacilityMachines] = useState([]);
   const [mapConfig, setMapConfig] = useState(null);
   const svgObjectRef = useRef(null);
+
+  const mapFloors = useMemo(() => {
+    if (!mapConfig || !Array.isArray(mapConfig.floors)) return [];
+    return mapConfig.floors.filter(f => f && f.id);
+  }, [mapConfig]);
+
+  const floorOptions = useMemo(() => (
+    mapFloors.map(f => ({ value: f.id, label: f.label || f.id }))
+  ), [mapFloors]);
+
+  const defaultFloorId = useMemo(() => (
+    mapConfig?.defaultFloorId || mapFloors[0]?.id || ''
+  ), [mapConfig, mapFloors]);
+
+  const activeFloorId = useMemo(() => {
+    if (!mapFloors.length) return '';
+    const match = mapFloors.find(f => String(f.id) === String(selectedFloorId));
+    return match ? match.id : defaultFloorId;
+  }, [mapFloors, selectedFloorId, defaultFloorId]);
+
+  const activeFloor = useMemo(() => {
+    if (!mapFloors.length) return null;
+    return mapFloors.find(f => String(f.id) === String(activeFloorId)) || mapFloors[0];
+  }, [mapFloors, activeFloorId]);
+
+  const activeZones = useMemo(() => {
+    if (activeFloor && Array.isArray(activeFloor.zones)) return activeFloor.zones;
+    if (Array.isArray(mapConfig?.zones)) return mapConfig.zones;
+    return [];
+  }, [activeFloor, mapConfig]);
+
+  const activeFloorplanUrl = activeFloor?.svgUrl || mapConfig?.floorplanUrl || '';
+
+  const activeZoneMinutes = useMemo(() => {
+    if (!activeZones.length) return [];
+    return activeZones.map(z => {
+      const match = (facilityZones || []).find(fz => String(fz.zone) === String(z.id));
+      return { zone: z.id, minutes: match?.minutes || 0 };
+    });
+  }, [activeZones, facilityZones]);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
@@ -125,6 +174,21 @@ function TempDashboard() {
     if (zoneSet.size === 0) return [];
     return machineOptions.filter(m => zoneSet.has(String(m.machineId)));
   }, [selectedZone, machineOptions, facilityMachines]);
+
+  useEffect(() => {
+    if (!mapFloors.length) return;
+    const hasSelection = mapFloors.some(f => String(f.id) === String(selectedFloorId));
+    const next = hasSelection ? selectedFloorId : defaultFloorId;
+    if (next && next !== selectedFloorId) {
+      setSelectedFloorId(next);
+    }
+  }, [mapFloors, defaultFloorId, selectedFloorId]);
+
+  useEffect(() => {
+    if (!selectedZone || !activeZones.length) return;
+    const inActiveFloor = activeZones.some(z => String(z.id) === String(selectedZone));
+    if (!inActiveFloor) setSelectedZone('');
+  }, [activeZones, selectedZone]);
 
   // User authentication check
   useEffect(() => {
@@ -489,7 +553,10 @@ function TempDashboard() {
       const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${rangeHours}`);
       const data = await res.json();
       if (res.ok && data) {
-        const mapCfg = (data.map && data.map.zones && data.map.zones.length) ? data.map : null;
+        const mapCfg = (data.map && (
+          (Array.isArray(data.map.zones) && data.map.zones.length) ||
+          (Array.isArray(data.map.floors) && data.map.floors.length)
+        )) ? data.map : null;
         const fallbackMapCfg = mapCfg || {
           layout: 'svg',
           floorplanUrl: 'floorplans/default-gym.svg',
@@ -500,9 +567,8 @@ function TempDashboard() {
           ]
         };
         setMapConfig(fallbackMapCfg);
-        const zonesFromConfig = Array.isArray(fallbackMapCfg?.zones)
-          ? fallbackMapCfg.zones.map(z => ({ zone: z.id, minutes: 0 }))
-          : [];
+        const configuredZones = getConfiguredZones(fallbackMapCfg);
+        const zonesFromConfig = configuredZones.map(z => ({ zone: z.id, minutes: 0 }));
         const aggregated = {};
         // Aggregate by zone directly from backend
         (data.machines || []).forEach(m => {
@@ -520,7 +586,7 @@ function TempDashboard() {
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
           aggregated[zoneId] += minutes;
         });
-        const mergedZones = (fallbackMapCfg?.zones || []).map(z => ({
+        const mergedZones = configuredZones.map(z => ({
           zone: z.id,
           minutes: aggregated[z.id] || 0,
         }));
@@ -540,13 +606,13 @@ function TempDashboard() {
         });
         setFacilityMachines(normalizedMachines);
       } else {
-        const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+        const zeroZones = getConfiguredZones(mapConfig).map(z => ({ zone: z.id, minutes: 0 }));
         setFacilityZones(zeroZones);
         setFacilityMachines([]);
       }
     } catch (e) {
       console.error('Failed to fetch facility heatmap:', e);
-      const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+      const zeroZones = getConfiguredZones(mapConfig).map(z => ({ zone: z.id, minutes: 0 }));
       setFacilityZones(zeroZones);
       setFacilityMachines([]);
     } finally {
@@ -561,20 +627,19 @@ function TempDashboard() {
   };
 
   const applySvgZoneStyles = () => {
-    if (!mapConfig || !mapConfig.zones || mapConfig.zones.length === 0) return;
+    if (!activeZones || activeZones.length === 0) return;
     const obj = svgObjectRef.current;
     if (!obj || !obj.contentDocument) return;
     const svgDoc = obj.contentDocument;
     const svgRoot = svgDoc.querySelector('svg');
     if (!svgRoot) return;
-    const vb = svgRoot.viewBox?.baseVal;
-    const viewBoxWidth = vb?.width || svgRoot.getBoundingClientRect().width || 1;
-    const viewBoxHeight = vb?.height || svgRoot.getBoundingClientRect().height || 1;
-    const maxMinutes = Math.max(1, ...(facilityZones || []).map(z => z.minutes || 0));
-    const labelFontSize = 18;
-    const labelPadding = 6;
+      const vb = svgRoot.viewBox?.baseVal;
+      const viewBoxWidth = vb?.width || svgRoot.getBoundingClientRect().width || 1;
+      const viewBoxHeight = vb?.height || svgRoot.getBoundingClientRect().height || 1;
+      const maxMinutes = Math.max(1, ...(activeZoneMinutes || []).map(z => z.minutes || 0));
+      svgDoc.querySelectorAll('[id^="onsight-label-"]').forEach(el => el.remove());
 
-    mapConfig.zones.forEach(z => {
+    activeZones.forEach(z => {
       const el = svgDoc.getElementById(z.svgId);
       if (!el) return;
       const entry = (facilityZones || []).find(fz => String(fz.zone) === String(z.id)) || {};
@@ -595,64 +660,7 @@ function TempDashboard() {
       }
       titleEl.textContent = `${z.label || z.id}: ${minutes.toFixed(1)} min`;
 
-      // Inline label centered on the shape with a consistent-size chip behind it
-      try {
-        const bbox = el.getBBox();
-        const cx = bbox.x + bbox.width / 2;
-        const cy = bbox.y + bbox.height / 2;
-        const labelId = `onsight-label-${z.id}`;
-        let labelGroup = svgDoc.getElementById(labelId);
-        let rectEl = labelGroup?.querySelector('rect');
-        let textEl = labelGroup?.querySelector('text');
-        if (!labelGroup) {
-          labelGroup = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
-          labelGroup.setAttribute('id', labelId);
-          labelGroup.style.pointerEvents = 'none';
-          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
-          labelGroup.appendChild(rectEl);
-          labelGroup.appendChild(textEl);
-          svgRoot.appendChild(labelGroup);
-        }
-        if (!rectEl) {
-          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          labelGroup.insertBefore(rectEl, labelGroup.firstChild);
-        }
-        if (!textEl) {
-          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
-          labelGroup.appendChild(textEl);
-        }
-
-        textEl.setAttribute('x', `${cx}`);
-        textEl.setAttribute('y', `${cy}`);
-        textEl.setAttribute('text-anchor', 'middle');
-        textEl.setAttribute('dominant-baseline', 'middle');
-        textEl.setAttribute('fill', '#ffffff');
-        textEl.setAttribute('font-size', `${labelFontSize}`);
-        textEl.setAttribute('font-weight', '700');
-        textEl.textContent = z.label || z.id;
-
-        const textBBox = textEl.getBBox();
-        const rectWidth = textBBox.width + labelPadding * 2;
-        const rectHeight = textBBox.height + labelPadding * 2;
-        const rectX = cx - rectWidth / 2;
-        const rectY = cy - rectHeight / 2;
-
-        rectEl.setAttribute('x', `${rectX}`);
-        rectEl.setAttribute('y', `${rectY}`);
-        rectEl.setAttribute('width', `${rectWidth}`);
-        rectEl.setAttribute('height', `${rectHeight}`);
-        rectEl.setAttribute('rx', '6');
-        rectEl.setAttribute('ry', '6');
-        rectEl.setAttribute('fill', '#0f172a');
-        rectEl.setAttribute('fill-opacity', '0.8');
-        rectEl.setAttribute('stroke', selected ? '#facc15' : '#111827');
-        rectEl.setAttribute('stroke-width', selected ? '2' : '1');
-        rectEl.setAttribute('shape-rendering', 'crispEdges');
-      } catch (e) {
-        // If getBBox fails, skip label placement for this zone
-      }
-    });
+      });
   };
 
   useEffect(() => {
@@ -661,11 +669,11 @@ function TempDashboard() {
     const handleLoad = () => applySvgZoneStyles();
     obj.addEventListener('load', handleLoad);
     return () => obj.removeEventListener('load', handleLoad);
-  }, [mapConfig]);
+  }, [activeFloorplanUrl]);
 
   useEffect(() => {
     applySvgZoneStyles();
-  }, [facilityZones, selectedZone, mapConfig]);
+  }, [facilityZones, selectedZone, activeZones, activeFloorplanUrl]);
 
   // Memoize processed analytics data to prevent dependency array size changes
   const processedAnalyticsData = useMemo(() => {
@@ -1475,26 +1483,36 @@ const handleResolveNo = () => {
                       <div className="nx-card-title">Facility Usage Map</div>
                       <div className="nx-subtle">Color intensity shows recent usage by zone</div>
                     </div>
-                    <NxDropdown
-                      value={facilityRange}
-                      onChange={(v) => setFacilityRange(parseInt(v))}
-                      options={[
-                        { value: 1, label: 'Past 1 Hour' },
-                        { value: 3, label: 'Past 3 Hours' },
-                        { value: 6, label: 'Past 6 Hours' },
-                        { value: 12, label: 'Past 12 Hours' },
-                        { value: 24, label: 'Past 24 Hours' },
-                        { value: 1000, label: 'All Time' },
-                      ]}
-                      minWidth={150}
-                    />
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <NxDropdown
+                        value={facilityRange}
+                        onChange={(v) => setFacilityRange(parseInt(v))}
+                        options={[
+                          { value: 1, label: 'Past 1 Hour' },
+                          { value: 3, label: 'Past 3 Hours' },
+                          { value: 6, label: 'Past 6 Hours' },
+                          { value: 12, label: 'Past 12 Hours' },
+                          { value: 24, label: 'Past 24 Hours' },
+                          { value: 1000, label: 'All Time' },
+                        ]}
+                        minWidth={150}
+                      />
+                      {floorOptions.length > 0 && (
+                        <NxDropdown
+                          value={activeFloorId || floorOptions[0]?.value}
+                          onChange={(v) => setSelectedFloorId(String(v))}
+                          options={floorOptions}
+                          minWidth={130}
+                        />
+                      )}
+                    </div>
                   </div>
                   <div style={{ position:'relative', paddingBottom:'55%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
-                    {mapConfig && mapConfig.floorplanUrl ? (
+                    {activeFloorplanUrl ? (
                       <object
                         ref={svgObjectRef}
                         type="image/svg+xml"
-                        data={mapConfig.floorplanUrl}
+                        data={activeFloorplanUrl}
                         style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
                         aria-label="Facility floor plan"
                       />
@@ -1522,7 +1540,7 @@ const handleResolveNo = () => {
                         Loading facility map...
                       </div>
                     )}
-                    {!facilityLoading && (facilityZones || []).every(z => (z.minutes || 0) === 0) && (
+                    {!facilityLoading && activeZoneMinutes.length > 0 && activeZoneMinutes.every(z => (z.minutes || 0) === 0) && (
                       <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
                         No facility data returned for this range.
                       </div>
