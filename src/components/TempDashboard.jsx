@@ -9,6 +9,74 @@ import TicketsTab from '../tabs/TicketsTab.jsx';
 import { buildEquipmentRows } from '../utils/occupancyTable';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
+const LEGACY_ZONE_ID_MAP = Object.freeze({
+  '10': '22',
+  '20': '23',
+});
+
+function canonicalZoneKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function stripZonePrefix(value) {
+  const key = canonicalZoneKey(value);
+  if (!key) return '';
+  if (key.startsWith('zone-')) return key.slice(5);
+  if (key.startsWith('zone')) return key.slice(4).replace(/^-+/, '');
+  return key;
+}
+
+function normalizeZoneId(value) {
+  const stripped = stripZonePrefix(value);
+  if (!stripped) return '';
+  const remapped = LEGACY_ZONE_ID_MAP[stripped] || stripped;
+  return /^\d+$/.test(remapped) ? String(Number(remapped)) : remapped;
+}
+
+function normalizeZoneSvgId(value, zoneId = '') {
+  const raw = String(value || '').trim();
+  if (raw) {
+    if (canonicalZoneKey(raw).startsWith('zone')) {
+      const normalized = normalizeZoneId(raw);
+      return normalized ? `zone-${normalized}` : raw;
+    }
+    return raw;
+  }
+  const normalizedZone = normalizeZoneId(zoneId);
+  return normalizedZone ? `zone-${normalizedZone}` : '';
+}
+
+function normalizeZoneConfig(zone) {
+  const zoneId = normalizeZoneId(zone?.id);
+  if (!zoneId) return null;
+  return {
+    ...zone,
+    id: zoneId,
+    svgId: normalizeZoneSvgId(zone?.svgId, zoneId),
+  };
+}
+
+function normalizeMapConfig(mapCfg) {
+  if (!mapCfg || typeof mapCfg !== 'object') return null;
+  const zones = Array.isArray(mapCfg.zones)
+    ? mapCfg.zones.map(normalizeZoneConfig).filter(Boolean)
+    : [];
+  const floors = Array.isArray(mapCfg.floors)
+    ? mapCfg.floors
+        .filter(f => f && f.id)
+        .map(f => ({
+          ...f,
+          zones: Array.isArray(f.zones)
+            ? f.zones.map(normalizeZoneConfig).filter(Boolean)
+            : [],
+        }))
+    : [];
+  return {
+    ...mapCfg,
+    zones,
+    floors,
+  };
+}
 
 // In-house dropdown styled like our dark buttons
 function NxDropdown({ options, value, onChange, minWidth = 160 }) {
@@ -53,9 +121,14 @@ function NxDropdown({ options, value, onChange, minWidth = 160 }) {
 function getConfiguredZones(mapCfg) {
   if (!mapCfg) return [];
   if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
-    return mapCfg.floors.flatMap(f => (Array.isArray(f.zones) ? f.zones : []));
+    return mapCfg.floors
+      .flatMap(f => (Array.isArray(f.zones) ? f.zones : []))
+      .map(normalizeZoneConfig)
+      .filter(Boolean);
   }
-  return Array.isArray(mapCfg.zones) ? mapCfg.zones : [];
+  return Array.isArray(mapCfg.zones)
+    ? mapCfg.zones.map(normalizeZoneConfig).filter(Boolean)
+    : [];
 }
 
 function TempDashboard() {
@@ -556,8 +629,8 @@ function TempDashboard() {
         const mapCfg = (data.map && (
           (Array.isArray(data.map.zones) && data.map.zones.length) ||
           (Array.isArray(data.map.floors) && data.map.floors.length)
-        )) ? data.map : null;
-        const fallbackMapCfg = mapCfg || {
+        )) ? normalizeMapConfig(data.map) : null;
+        const fallbackMapCfg = mapCfg || normalizeMapConfig({
           layout: 'svg',
           floorplanUrl: 'floorplans/default-gym.svg',
           zones: [
@@ -565,14 +638,14 @@ function TempDashboard() {
             { id: 'machines', label: 'Machines', svgId: 'zone-machines' },
             { id: 'cables', label: 'Cable Area', svgId: 'zone-cables' },
           ]
-        };
+        });
         setMapConfig(fallbackMapCfg);
         const configuredZones = getConfiguredZones(fallbackMapCfg);
         const zonesFromConfig = configuredZones.map(z => ({ zone: z.id, minutes: 0 }));
         const aggregated = {};
         // Aggregate by zone directly from backend
         (data.machines || []).forEach(m => {
-          const zoneId = m.zone || 'unknown';
+          const zoneId = normalizeZoneId(m.zone) || 'unknown';
           const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
           const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
@@ -580,8 +653,7 @@ function TempDashboard() {
         });
         // Merge with any zone-level minutes provided directly
         (data.zones || []).forEach(z => {
-          const rawZone = z.zone || 'unknown';
-          const zoneId = rawZone;
+          const zoneId = normalizeZoneId(z.zone) || 'unknown';
           const minutes = z.minutes || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
           aggregated[zoneId] += minutes;
@@ -591,13 +663,13 @@ function TempDashboard() {
           minutes: aggregated[z.id] || 0,
         }));
         const fallbackZones = (data.zones || []).map(z => ({
-          zone: z.zone || 'unknown',
+          zone: normalizeZoneId(z.zone) || 'unknown',
           minutes: z.minutes || 0,
         }));
         const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
         setFacilityZones(zonesToSet);
         const normalizedMachines = (data.machines || []).map(m => {
-          const zoneId = m.zone || 'unknown';
+          const zoneId = normalizeZoneId(m.zone) || 'unknown';
           return {
             machineId: m.machineId,
             machineName: m.machineName || m.machineId,

@@ -1,6 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
+const LEGACY_ZONE_ID_MAP = Object.freeze({
+  '10': '22',
+  '20': '23',
+});
+
+function canonicalZoneKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function stripZonePrefix(value) {
+  const key = canonicalZoneKey(value);
+  if (!key) return '';
+  if (key.startsWith('zone-')) return key.slice(5);
+  if (key.startsWith('zone')) return key.slice(4).replace(/^-+/, '');
+  return key;
+}
+
+function normalizeZoneId(value) {
+  const stripped = stripZonePrefix(value);
+  if (!stripped) return '';
+  const remapped = LEGACY_ZONE_ID_MAP[stripped] || stripped;
+  return /^\d+$/.test(remapped) ? String(Number(remapped)) : remapped;
+}
 
 // Local storage for tickets when backend is not available
 const DASHBOARD_STATE_KEY = 'dashboard:state';
@@ -206,19 +229,29 @@ export default function TicketsTab() {
     setQrError('');
   }
 
-  function extractZones(mapCfg) {
-    if (!mapCfg) return [];
-    if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
-      return mapCfg.floors.flatMap(f => (
-        (Array.isArray(f.zones) ? f.zones : []).map(z => ({
-          ...z,
-          floorId: f.id,
-          floorLabel: f.label
-        }))
-      ));
-    }
-    return Array.isArray(mapCfg.zones) ? mapCfg.zones : [];
+function extractZones(mapCfg) {
+  if (!mapCfg) return [];
+  const normalizeZoneEntry = (zone, floor = {}) => {
+    const zoneId = normalizeZoneId(zone?.id);
+    if (!zoneId) return null;
+    return {
+      ...zone,
+      id: zoneId,
+      floorId: floor.id,
+      floorLabel: floor.label
+    };
+  };
+  if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
+    return mapCfg.floors.flatMap(f => (
+      (Array.isArray(f.zones) ? f.zones : [])
+        .map(z => normalizeZoneEntry(z, f))
+        .filter(Boolean)
+    ));
   }
+  return Array.isArray(mapCfg.zones)
+    ? mapCfg.zones.map(z => normalizeZoneEntry(z)).filter(Boolean)
+    : [];
+}
 
   async function buildZoneQrs(gymId) {
     if (!backendURL || !gymId || typeof window === 'undefined') return;
