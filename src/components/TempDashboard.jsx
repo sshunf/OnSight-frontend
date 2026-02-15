@@ -13,6 +13,12 @@ const LEGACY_ZONE_ID_MAP = Object.freeze({
   '10': '22',
   '20': '23',
 });
+const LEGACY_ZONE_ID_REVERSE_MAP = Object.freeze(
+  Object.entries(LEGACY_ZONE_ID_MAP).reduce((acc, [legacy, canonical]) => {
+    acc[canonical] = legacy;
+    return acc;
+  }, {})
+);
 
 function canonicalZoneKey(value) {
   return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
@@ -31,6 +37,19 @@ function normalizeZoneId(value) {
   if (!stripped) return '';
   const remapped = LEGACY_ZONE_ID_MAP[stripped] || stripped;
   return /^\d+$/.test(remapped) ? String(Number(remapped)) : remapped;
+}
+
+function normalizeMachineIdValue(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^ObjectId\(["']?([0-9a-fA-F]{24})["']?\)$/i);
+  return match ? match[1] : raw;
+}
+
+function deriveZoneFromMachineId(value) {
+  const machineId = normalizeMachineIdValue(value);
+  const match = machineId.match(/^([1-9]\d*?)0+/);
+  if (!match) return '';
+  return String(Number(match[1]));
 }
 
 function normalizeZoneSvgId(value, zoneId = '') {
@@ -76,6 +95,27 @@ function normalizeMapConfig(mapCfg) {
     zones,
     floors,
   };
+}
+
+function getZoneSvgCandidates(zone) {
+  const ids = new Set();
+  const add = (value) => {
+    const id = String(value || '').trim();
+    if (id) ids.add(id);
+  };
+
+  const zoneId = normalizeZoneId(zone?.id);
+  add(zone?.svgId);
+  add(zoneId ? `zone-${zoneId}` : '');
+
+  const legacyZoneId = LEGACY_ZONE_ID_REVERSE_MAP[zoneId];
+  add(legacyZoneId ? `zone-${legacyZoneId}` : '');
+
+  const normalizedSvgZone = normalizeZoneId(zone?.svgId);
+  const legacyFromSvg = LEGACY_ZONE_ID_REVERSE_MAP[normalizedSvgZone];
+  add(legacyFromSvg ? `zone-${legacyFromSvg}` : '');
+
+  return Array.from(ids);
 }
 
 // In-house dropdown styled like our dark buttons
@@ -192,6 +232,7 @@ function TempDashboard() {
   const [selectedFloorId, setSelectedFloorId] = useState('');
   const [facilityMachines, setFacilityMachines] = useState([]);
   const [mapConfig, setMapConfig] = useState(null);
+  const [svgDiscoveredZones, setSvgDiscoveredZones] = useState([]);
   const svgObjectRef = useRef(null);
 
   const mapFloors = useMemo(() => {
@@ -219,10 +260,30 @@ function TempDashboard() {
   }, [mapFloors, activeFloorId]);
 
   const activeZones = useMemo(() => {
-    if (activeFloor && Array.isArray(activeFloor.zones)) return activeFloor.zones;
-    if (Array.isArray(mapConfig?.zones)) return mapConfig.zones;
+    const discoveredZoneSet = new Set(
+      (svgDiscoveredZones || [])
+        .map(z => normalizeZoneId(z?.id))
+        .filter(Boolean)
+        .map(String)
+    );
+
+    if (activeFloor && Array.isArray(activeFloor.zones) && activeFloor.zones.length) {
+      if (!discoveredZoneSet.size) return activeFloor.zones;
+      const hasOverlap = activeFloor.zones.some(z => discoveredZoneSet.has(String(normalizeZoneId(z?.id))));
+      return hasOverlap ? activeFloor.zones : svgDiscoveredZones;
+    }
+
+    if (activeFloor && svgDiscoveredZones.length) return svgDiscoveredZones;
+
+    if (Array.isArray(mapConfig?.zones) && mapConfig.zones.length) {
+      if (!discoveredZoneSet.size) return mapConfig.zones;
+      const hasOverlap = mapConfig.zones.some(z => discoveredZoneSet.has(String(normalizeZoneId(z?.id))));
+      return hasOverlap ? mapConfig.zones : svgDiscoveredZones;
+    }
+
+    if (svgDiscoveredZones.length) return svgDiscoveredZones;
     return [];
-  }, [activeFloor, mapConfig]);
+  }, [activeFloor, mapConfig, svgDiscoveredZones]);
 
   const activeFloorplanUrl = activeFloor?.svgUrl || mapConfig?.floorplanUrl || '';
 
@@ -233,6 +294,13 @@ function TempDashboard() {
       return { zone: z.id, minutes: match?.minutes || 0 };
     });
   }, [activeZones, facilityZones]);
+
+  const shouldShowNoFacilityData = useMemo(() => {
+    if (facilityLoading) return false;
+    if (!activeZoneMinutes.length) return false;
+    const hasAnyMachineRows = Array.isArray(facilityMachines) && facilityMachines.length > 0;
+    return !hasAnyMachineRows && activeZoneMinutes.every(z => (z.minutes || 0) === 0);
+  }, [facilityLoading, activeZoneMinutes, facilityMachines]);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
@@ -645,7 +713,8 @@ function TempDashboard() {
         const aggregated = {};
         // Aggregate by zone directly from backend
         (data.machines || []).forEach(m => {
-          const zoneId = normalizeZoneId(m.zone) || 'unknown';
+          const derivedZone = deriveZoneFromMachineId(m.machineId);
+          const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
           const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
           const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
@@ -669,7 +738,8 @@ function TempDashboard() {
         const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
         setFacilityZones(zonesToSet);
         const normalizedMachines = (data.machines || []).map(m => {
-          const zoneId = normalizeZoneId(m.zone) || 'unknown';
+          const derivedZone = deriveZoneFromMachineId(m.machineId);
+          const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
           return {
             machineId: m.machineId,
             machineName: m.machineName || m.machineId,
@@ -699,30 +769,56 @@ function TempDashboard() {
   };
 
   const applySvgZoneStyles = () => {
-    if (!activeZones || activeZones.length === 0) return;
     const obj = svgObjectRef.current;
     if (!obj || !obj.contentDocument) return;
     const svgDoc = obj.contentDocument;
     const svgRoot = svgDoc.querySelector('svg');
     if (!svgRoot) return;
-      const vb = svgRoot.viewBox?.baseVal;
-      const viewBoxWidth = vb?.width || svgRoot.getBoundingClientRect().width || 1;
-      const viewBoxHeight = vb?.height || svgRoot.getBoundingClientRect().height || 1;
-      const maxMinutes = Math.max(1, ...(activeZoneMinutes || []).map(z => z.minutes || 0));
-      svgDoc.querySelectorAll('[id^="onsight-label-"]').forEach(el => el.remove());
+    const zoneElements = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
+      .filter(el => {
+        const id = String(el?.id || '');
+        return id && !canonicalZoneKey(id).startsWith('zone-label');
+      });
+    if (!zoneElements.length) return;
 
-    activeZones.forEach(z => {
-      const el = svgDoc.getElementById(z.svgId);
-      if (!el) return;
-      const entry = (facilityZones || []).find(fz => String(fz.zone) === String(z.id)) || {};
-      const minutes = entry.minutes || 0;
+    const activeZoneList = Array.isArray(activeZones) ? activeZones : [];
+    const zoneBySvgCandidate = new Map();
+    activeZoneList.forEach(z => {
+      getZoneSvgCandidates(z).forEach(candidate => {
+        zoneBySvgCandidate.set(canonicalZoneKey(candidate), z);
+      });
+    });
+
+    const maxMinutes = Math.max(
+      1,
+      ...((facilityZones || []).map(z => Number(z?.minutes) || 0))
+    );
+
+    // Disable pointer interception from non-zone SVG elements (invisible text boxes, guides, etc.)
+    svgDoc.querySelectorAll('*').forEach(node => {
+      node.style.pointerEvents = 'none';
+    });
+    svgDoc.querySelectorAll('[id^="onsight-label-"]').forEach(el => el.remove());
+
+    zoneElements.forEach(el => {
+      const rawId = String(el?.id || '').trim();
+      const mappedZone = zoneBySvgCandidate.get(canonicalZoneKey(rawId));
+      const resolvedZoneId = normalizeZoneId(mappedZone?.id || rawId) || String(mappedZone?.id || '').trim();
+      if (!resolvedZoneId) return;
+
+      const entry = (facilityZones || []).find(fz => (
+        String(normalizeZoneId(fz?.zone)) === String(resolvedZoneId)
+      )) || {};
+      const minutes = Number(entry?.minutes) || 0;
       const color = getZoneColor(minutes, maxMinutes);
-      const selected = String(selectedZone) === String(z.id);
+      const selected = String(selectedZone) === String(resolvedZoneId);
+
       el.style.fill = color;
       el.style.stroke = selected ? '#facc15' : '#000000';
       el.style.strokeWidth = selected ? '3' : '1';
       el.style.cursor = 'pointer';
-      el.onclick = () => setSelectedZone(z.id);
+      el.style.pointerEvents = 'all';
+      el.onclick = () => setSelectedZone(String(resolvedZoneId));
 
       // Tooltip via <title> inside each zone
       let titleEl = el.querySelector('title');
@@ -730,15 +826,42 @@ function TempDashboard() {
         titleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'title');
         el.prepend(titleEl);
       }
-      titleEl.textContent = `${z.label || z.id}: ${minutes.toFixed(1)} min`;
+      titleEl.textContent = `${mappedZone?.label || resolvedZoneId}: ${minutes.toFixed(1)} min`;
+    });
+  };
 
+  const discoverZonesFromSvg = () => {
+    const obj = svgObjectRef.current;
+    if (!obj || !obj.contentDocument) return;
+    const svgDoc = obj.contentDocument;
+    const rawZones = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
+      .map(el => String(el?.id || '').trim())
+      .filter(id => id && !canonicalZoneKey(id).startsWith('zone-label'));
+
+    const seen = new Set();
+    const discovered = [];
+    rawZones.forEach(rawId => {
+      const zoneId = normalizeZoneId(rawId);
+      if (!zoneId || seen.has(zoneId)) return;
+      seen.add(zoneId);
+      discovered.push({
+        id: zoneId,
+        label: zoneId,
+        svgId: rawId,
       });
+    });
+
+    setSvgDiscoveredZones(discovered);
   };
 
   useEffect(() => {
+    setSvgDiscoveredZones([]);
     const obj = svgObjectRef.current;
     if (!obj) return;
-    const handleLoad = () => applySvgZoneStyles();
+    const handleLoad = () => {
+      discoverZonesFromSvg();
+      applySvgZoneStyles();
+    };
     obj.addEventListener('load', handleLoad);
     return () => obj.removeEventListener('load', handleLoad);
   }, [activeFloorplanUrl]);
@@ -1612,8 +1735,8 @@ const handleResolveNo = () => {
                         Loading facility map...
                       </div>
                     )}
-                    {!facilityLoading && activeZoneMinutes.length > 0 && activeZoneMinutes.every(z => (z.minutes || 0) === 0) && (
-                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                    {shouldShowNoFacilityData && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af', pointerEvents:'none' }}>
                         No facility data returned for this range.
                       </div>
                     )}
