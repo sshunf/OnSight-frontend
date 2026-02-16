@@ -19,6 +19,7 @@ const LEGACY_ZONE_ID_REVERSE_MAP = Object.freeze(
     return acc;
   }, {})
 );
+const EXCLUDED_ZONE_IDS = new Set(['21']);
 
 function canonicalZoneKey(value) {
   return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
@@ -37,6 +38,11 @@ function normalizeZoneId(value) {
   if (!stripped) return '';
   const remapped = LEGACY_ZONE_ID_MAP[stripped] || stripped;
   return /^\d+$/.test(remapped) ? String(Number(remapped)) : remapped;
+}
+
+function isExcludedZone(value) {
+  const zoneId = normalizeZoneId(value);
+  return Boolean(zoneId) && EXCLUDED_ZONE_IDS.has(String(zoneId));
 }
 
 function normalizeMachineIdValue(value) {
@@ -67,7 +73,7 @@ function normalizeZoneSvgId(value, zoneId = '') {
 
 function normalizeZoneConfig(zone) {
   const zoneId = normalizeZoneId(zone?.id);
-  if (!zoneId) return null;
+  if (!zoneId || isExcludedZone(zoneId)) return null;
   return {
     ...zone,
     id: zoneId,
@@ -715,6 +721,7 @@ function TempDashboard() {
         (data.machines || []).forEach(m => {
           const derivedZone = deriveZoneFromMachineId(m.machineId);
           const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
+          if (isExcludedZone(zoneId)) return;
           const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
           const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
@@ -723,6 +730,7 @@ function TempDashboard() {
         // Merge with any zone-level minutes provided directly
         (data.zones || []).forEach(z => {
           const zoneId = normalizeZoneId(z.zone) || 'unknown';
+          if (isExcludedZone(zoneId)) return;
           const minutes = z.minutes || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
           aggregated[zoneId] += minutes;
@@ -734,7 +742,7 @@ function TempDashboard() {
         const fallbackZones = (data.zones || []).map(z => ({
           zone: normalizeZoneId(z.zone) || 'unknown',
           minutes: z.minutes || 0,
-        }));
+        })).filter(z => !isExcludedZone(z.zone));
         const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
         setFacilityZones(zonesToSet);
         const normalizedMachines = (data.machines || []).map(m => {
@@ -745,7 +753,7 @@ function TempDashboard() {
             machineName: m.machineName || m.machineId,
             zone: zoneId
           };
-        });
+        }).filter(m => !isExcludedZone(m.zone));
         setFacilityMachines(normalizedMachines);
       } else {
         const zeroZones = getConfiguredZones(mapConfig).map(z => ({ zone: z.id, minutes: 0 }));
@@ -804,7 +812,7 @@ function TempDashboard() {
       const rawId = String(el?.id || '').trim();
       const mappedZone = zoneBySvgCandidate.get(canonicalZoneKey(rawId));
       const resolvedZoneId = normalizeZoneId(mappedZone?.id || rawId) || String(mappedZone?.id || '').trim();
-      if (!resolvedZoneId) return;
+      if (!resolvedZoneId || isExcludedZone(resolvedZoneId)) return;
 
       const entry = (facilityZones || []).find(fz => (
         String(normalizeZoneId(fz?.zone)) === String(resolvedZoneId)
@@ -842,7 +850,7 @@ function TempDashboard() {
     const discovered = [];
     rawZones.forEach(rawId => {
       const zoneId = normalizeZoneId(rawId);
-      if (!zoneId || seen.has(zoneId)) return;
+      if (!zoneId || isExcludedZone(zoneId) || seen.has(zoneId)) return;
       seen.add(zoneId);
       discovered.push({
         id: zoneId,
