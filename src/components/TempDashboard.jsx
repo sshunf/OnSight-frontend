@@ -1606,8 +1606,6 @@ const handleResolveNo = () => {
         .nx-card-title { font-size:13px; font-weight:600; color:#a3a3b2; }
         .nx-metric { font-size:28px; font-weight:700; color:#ffffff; letter-spacing:0.2px; }
         .nx-subtle { font-size:12px; color:#9ca3af; }
-        .nx-chip { background:rgba(124,58,237,0.15); color:#c4b5fd; font-size:11px; padding:2px 6px; border-radius:999px; margin-left:8px; border:1px solid rgba(124,58,237,0.35); }
-        .nx-chip.red { background:rgba(239,68,68,0.12); color:#fecaca; border-color:rgba(239,68,68,0.35); }
         .nx-chart { height:260px; }
         .nx-select { padding:6px 10px; border-radius:8px; border:1px solid #262633; background:#13131a; color:#e5e7eb; font-size:12px; }
         .nx-mobile-tabs { display:none; }
@@ -1758,7 +1756,7 @@ const handleResolveNo = () => {
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{machineOptions.length}</div>
                       </div>
                       <div style={{marginBottom:'12px'}}>
-                        <div className="nx-subtle">Active Today</div>
+                        <div className="nx-subtle">Connected Machines</div>
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#22c55e'}}>{stats.currentOccupancy}</div>
                       </div>
                       <div style={{marginBottom:'12px'}}>
@@ -1982,35 +1980,23 @@ const handleResolveNo = () => {
                 <div className="nx-grid" style={{marginBottom:'0px'}}>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Daily Favorite</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.dailyFav?.machineName || '--'}
-                      <span className="nx-chip">New</span>
-                    </div>
+                    <div className="nx-metric">{stats.dailyFav?.machineName || '--'}</div>
                     <div className="nx-subtle">Today's most used machine</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Peak Hours</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.peakHours}
-                      <span className="nx-chip">+15.8%</span>
-                    </div>
+                    <div className="nx-metric">{stats.peakHours}</div>
                     <div className="nx-subtle">Most active time today</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
-                    <div className="nx-card-header"><span className="nx-card-title">Current Occupancy</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.currentOccupancy}
-                      <span className="nx-chip">Live</span>
-                    </div>
-                    <div className="nx-subtle">Machines in use</div>
+                    <div className="nx-card-header"><span className="nx-card-title">Connected Machines</span></div>
+                    <div className="nx-metric">{stats.currentOccupancy}</div>
+                    <div className="nx-subtle">Machines being tracked</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
-                    <div className="nx-card-header"><span className="nx-card-title">Machine Sensors</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.numDevices}
-                      <span className="nx-chip">Stable</span>
-                    </div>
-                    <div className="nx-subtle">Connected sensors</div>
+                    <div className="nx-card-header"><span className="nx-card-title">Connected Sensors</span></div>
+                    <div className="nx-metric">{stats.numDevices}</div>
+                    <div className="nx-subtle">Sensors online</div>
                   </div>
                 </div>
 
