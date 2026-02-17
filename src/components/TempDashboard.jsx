@@ -205,7 +205,7 @@ function TempDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [avgUsageRows, setAvgUsageRows] = useState([]);
   const [selectedSearchRange, setSelectedSearchRange] = useState('all');
-  const [selectedTopN, setSelectedTopN] = useState('all');
+  const [selectedTopN, setSelectedTopN] = useState('5');
   const [selectedZone, setSelectedZone] = useState('');
   const [usageRankSort, setUsageRankSort] = useState('most');
   const [analyticsSearchTerm, setAnalyticsSearchTerm] = useState('');
@@ -1769,7 +1769,7 @@ const handleResolveNo = () => {
                 </div>
               </div>
 
-                <div className="nx-card" style={{marginTop:8}}>
+                <div className="nx-card" style={{marginTop:8, order:2}}>
                   <div className="nx-card-header">
                     <div>
                       <div className="nx-card-title">Average Machine Usage</div>
@@ -1793,7 +1793,7 @@ const handleResolveNo = () => {
                   <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
                 </div>
 
-                <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
+                <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`, order:1}}>
                   <div className="nx-card-header">
                     <div>
                       <div className="nx-card-title">Machine Usage Search</div>
