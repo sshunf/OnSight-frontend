@@ -203,8 +203,16 @@ function TempDashboard() {
   // Analytics data
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [avgUsageRows, setAvgUsageRows] = useState([]);
+  const [selectedSearchRange, setSelectedSearchRange] = useState('all');
   const [selectedTopN, setSelectedTopN] = useState('all');
   const [selectedZone, setSelectedZone] = useState('');
+  const [usageRankSort, setUsageRankSort] = useState('most');
+  const [analyticsSearchTerm, setAnalyticsSearchTerm] = useState('');
+  const [selectedAnalyticsZones, setSelectedAnalyticsZones] = useState([]);
+  const [analyticsPage, setAnalyticsPage] = useState(0);
+  const [analyticsZoneFilterOpen, setAnalyticsZoneFilterOpen] = useState(false);
+  const [machineZoneMap, setMachineZoneMap] = useState({});
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -240,6 +248,7 @@ function TempDashboard() {
   const [mapConfig, setMapConfig] = useState(null);
   const [svgDiscoveredZones, setSvgDiscoveredZones] = useState([]);
   const svgObjectRef = useRef(null);
+  const analyticsZoneFilterRef = useRef(null);
 
   const mapFloors = useMemo(() => {
     if (!mapConfig || !Array.isArray(mapConfig.floors)) return [];
@@ -310,6 +319,7 @@ function TempDashboard() {
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
+  const ANALYTICS_RANK_PAGE_SIZE = 8;
 
   const filteredMachineOptions = useMemo(() => {
     if (!selectedZone) return machineOptions;
@@ -438,12 +448,35 @@ function TempDashboard() {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
     try {
-      const res = await fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`);
-      const data = await res.json();
-      if (Array.isArray(data.machineIds)) {
-        setMachineOptions(data.machineIds);
-        if (!selectedMachine && data.machineIds.length > 0) {
-          setSelectedMachine(data.machineIds[0].machineId);
+      const [optionsResult, machinesResult] = await Promise.allSettled([
+        fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`),
+        fetch(`${backendURL}/api/machines?gymId=${gymId}`),
+      ]);
+
+      if (optionsResult.status === 'fulfilled') {
+        const res = optionsResult.value;
+        const data = await res.json();
+        if (Array.isArray(data.machineIds)) {
+          setMachineOptions(data.machineIds);
+          if (!selectedMachine && data.machineIds.length > 0) {
+            setSelectedMachine(data.machineIds[0].machineId);
+          }
+        }
+      }
+
+      if (machinesResult.status === 'fulfilled') {
+        const res = machinesResult.value;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const nextZoneMap = {};
+          data.forEach(machine => {
+            const machineId = String(machine?._id || machine?.machineId || '').trim();
+            if (!machineId) return;
+            const normalizedZone = normalizeZoneId(machine?.zone) || normalizeZoneId(deriveZoneFromMachineId(machineId));
+            if (!normalizedZone || isExcludedZone(normalizedZone)) return;
+            nextZoneMap[machineId] = normalizedZone;
+          });
+          setMachineZoneMap(nextZoneMap);
         }
       }
     } catch (err) {
@@ -577,6 +610,36 @@ function TempDashboard() {
       }
     } catch (err) {
       console.error('Failed to build weekly average chart:', err);
+    }
+  };
+
+  const fetchUsageSearchRows = async () => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) {
+      setAvgUsageRows([]);
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({ gymId: String(gymId) });
+      if (selectedSearchRange !== 'all') {
+        params.set('hours', String(selectedSearchRange));
+      }
+      const res = await fetch(`${backendURL}/api/weekly/usage?${params.toString()}`);
+      const data = await res.json();
+      if (!Array.isArray(data.result)) {
+        setAvgUsageRows([]);
+        return;
+      }
+      const normalizedRows = data.result.map((d) => ({
+        machineId: String(d.machineId || '').trim(),
+        machineName: String(d.machineName || d.machineId || 'Unknown').trim(),
+        avgMinutes: Number.isFinite(Number(d.avgMinutes)) ? Number(d.avgMinutes) : 0,
+      }));
+      setAvgUsageRows(normalizedRows);
+    } catch (err) {
+      console.error('Failed to fetch usage search rows:', err);
+      setAvgUsageRows([]);
     }
   };
 
@@ -909,6 +972,97 @@ function TempDashboard() {
     return options;
   }, [processedAnalyticsData.length]);
 
+  const analyticsZoneLookup = useMemo(() => {
+    const lookup = {};
+
+    Object.entries(machineZoneMap || {}).forEach(([machineId, zoneId]) => {
+      const normalized = normalizeZoneId(zoneId);
+      if (machineId && normalized && !isExcludedZone(normalized)) {
+        lookup[String(machineId)] = normalized;
+      }
+    });
+
+    (facilityMachines || []).forEach(m => {
+      const machineId = String(m?.machineId || '').trim();
+      const normalized = normalizeZoneId(m?.zone);
+      if (machineId && normalized && !isExcludedZone(normalized)) {
+        lookup[machineId] = normalized;
+      }
+    });
+
+    return lookup;
+  }, [machineZoneMap, facilityMachines]);
+
+  const analyticsRankRows = useMemo(() => {
+    const selectedZonesSet = new Set((selectedAnalyticsZones || []).map(String));
+    const q = String(analyticsSearchTerm || '').trim().toLowerCase();
+
+    const rows = (avgUsageRows || [])
+      .map((m) => {
+        const machineId = String(m?.machineId || '').trim();
+        const machineName = String(m?.machineName || machineId || 'Unknown').trim();
+        const derivedZone = normalizeZoneId(deriveZoneFromMachineId(machineId));
+        const zone = analyticsZoneLookup[machineId] || derivedZone || 'unknown';
+        const avgUsageMinutes = Number.isFinite(Number(m?.avgMinutes)) ? Number(m.avgMinutes) : 0;
+        return {
+          machineId,
+          machineName,
+          zone,
+          avgUsageMinutes,
+        };
+      })
+      .filter(row => row.machineId && !isExcludedZone(row.zone));
+
+    const filteredRows = rows.filter(row => {
+      const inZoneFilter = selectedZonesSet.size === 0 || selectedZonesSet.has(String(row.zone));
+      if (!inZoneFilter) return false;
+      if (!q) return true;
+      const name = row.machineName.toLowerCase();
+      const id = row.machineId.toLowerCase();
+      return name.includes(q) || id.includes(q);
+    });
+
+    filteredRows.sort((a, b) => {
+      const diff = usageRankSort === 'least'
+        ? a.avgUsageMinutes - b.avgUsageMinutes
+        : b.avgUsageMinutes - a.avgUsageMinutes;
+      if (Math.abs(diff) > 0.0001) return diff;
+      return a.machineName.localeCompare(b.machineName);
+    });
+
+    return filteredRows.map((row, idx) => ({ ...row, rank: idx + 1 }));
+  }, [avgUsageRows, analyticsZoneLookup, selectedAnalyticsZones, analyticsSearchTerm, usageRankSort]);
+
+  const analyticsZoneOptions = useMemo(() => {
+    const zoneSet = new Set();
+    Object.values(analyticsZoneLookup || {}).forEach(zone => {
+      const normalized = normalizeZoneId(zone);
+      if (normalized && normalized !== 'unknown' && !isExcludedZone(normalized)) {
+        zoneSet.add(String(normalized));
+      }
+    });
+
+    return Array.from(zoneSet)
+      .sort((a, b) => {
+        if (/^\d+$/.test(a) && /^\d+$/.test(b)) return Number(a) - Number(b);
+        return a.localeCompare(b);
+      })
+      .map(zone => ({ value: zone, label: /^\d+$/.test(zone) ? `Zone ${zone}` : zone }));
+  }, [analyticsZoneLookup]);
+
+  const analyticsRankTotalPages = useMemo(() => (
+    Math.max(1, Math.ceil((analyticsRankRows.length || 0) / ANALYTICS_RANK_PAGE_SIZE))
+  ), [analyticsRankRows.length, ANALYTICS_RANK_PAGE_SIZE]);
+
+  const safeAnalyticsPage = useMemo(() => (
+    Math.min(analyticsPage, analyticsRankTotalPages - 1)
+  ), [analyticsPage, analyticsRankTotalPages]);
+
+  const analyticsRankPageRows = useMemo(() => {
+    const start = safeAnalyticsPage * ANALYTICS_RANK_PAGE_SIZE;
+    return analyticsRankRows.slice(start, start + ANALYTICS_RANK_PAGE_SIZE);
+  }, [safeAnalyticsPage, analyticsRankRows, ANALYTICS_RANK_PAGE_SIZE]);
+
   // Build analytics chart
   useEffect(() => {
     if (activeTab !== 'analytics') return;
@@ -1014,6 +1168,11 @@ function TempDashboard() {
   }, [user, selectedAvgRange, selectedCumRange, activeTab, facilityRange]);
 
   useEffect(() => {
+    if (!user || activeTab !== 'analytics') return;
+    fetchUsageSearchRows();
+  }, [user, activeTab, selectedSearchRange]);
+
+  useEffect(() => {
     if (selectedMachine && activeTab === 'dashboard') {
       buildUsageChart();
     }
@@ -1047,6 +1206,35 @@ function TempDashboard() {
       setSelectedMachine(machineOptions[0].machineId);
     }
   }, [selectedZone, filteredMachineOptions, machineOptions, selectedMachine, activeTab, user]);
+
+  useEffect(() => {
+    setAnalyticsPage(0);
+  }, [analyticsSearchTerm, usageRankSort, selectedAnalyticsZones, selectedSearchRange]);
+
+  useEffect(() => {
+    if (analyticsPage > safeAnalyticsPage) {
+      setAnalyticsPage(safeAnalyticsPage);
+    }
+  }, [analyticsPage, safeAnalyticsPage]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!analyticsZoneFilterRef.current) return;
+      if (!analyticsZoneFilterRef.current.contains(e.target)) {
+        setAnalyticsZoneFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggleAnalyticsZoneSelection = (zoneId) => {
+    setSelectedAnalyticsZones(prev => (
+      prev.includes(zoneId)
+        ? prev.filter(z => z !== zoneId)
+        : [...prev, zoneId]
+    ));
+  };
 
   // Tab change handler
   const handleTabChange = (tab) => {
@@ -1608,20 +1796,167 @@ const handleResolveNo = () => {
                 <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
                   <div className="nx-card-header">
                     <div>
-                      <div className="nx-card-title">Maintenance Prioritization</div>
-                      <div className="nx-subtle">Equipment ranked by maintenance urgency based on usage patterns</div>
+                      <div className="nx-card-title">Machine Usage Search</div>
+                      <div className="nx-subtle">Full machine ranking by daily average usage with zone filters</div>
+                    </div>
+                    <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}>
+                      <input
+                        value={analyticsSearchTerm}
+                        onChange={(e) => setAnalyticsSearchTerm(e.target.value)}
+                        placeholder="Search machine name or ID"
+                        style={{
+                          height: 32,
+                          minWidth: 220,
+                          padding: '0 10px',
+                          borderRadius: 8,
+                          border: '1px solid #262633',
+                          background: '#13131a',
+                          color: '#e5e7eb',
+                          fontSize: 12,
+                          outline: 'none'
+                        }}
+                      />
+                      <NxDropdown
+                        value={usageRankSort}
+                        onChange={setUsageRankSort}
+                        options={[
+                          { value: 'most', label: 'Most Used' },
+                          { value: 'least', label: 'Least Used' },
+                        ]}
+                        minWidth={110}
+                      />
+                      <NxDropdown
+                        value={selectedSearchRange}
+                        onChange={setSelectedSearchRange}
+                        options={[
+                          { value: 'all', label: 'All Time' },
+                          { value: '6', label: 'Past 6 Hours' },
+                          { value: '8', label: 'Past 8 Hours' },
+                          { value: '12', label: 'Past 12 Hours' },
+                          { value: '24', label: 'Past 24 Hours' },
+                          { value: '168', label: 'Past Week' },
+                          { value: '720', label: 'Past Month' },
+                        ]}
+                        minWidth={140}
+                      />
+                      <div ref={analyticsZoneFilterRef} style={{ position:'relative' }}>
+                        <button
+                          className="nx-btn"
+                          onClick={() => setAnalyticsZoneFilterOpen(v => !v)}
+                          style={{ minWidth: 145, height: 32, padding: '0 10px' }}
+                        >
+                          {selectedAnalyticsZones.length
+                            ? `Zones: ${selectedAnalyticsZones.join(', ')}`
+                            : 'All Zones'}
+                        </button>
+                        {analyticsZoneFilterOpen && (
+                          <div className="nx-dd-menu" style={{ right: 0, left: 'auto', minWidth: 220 }}>
+                            <div
+                              className="nx-dd-item"
+                              onClick={() => setSelectedAnalyticsZones([])}
+                              style={{ fontWeight: selectedAnalyticsZones.length === 0 ? 700 : 500 }}
+                            >
+                              All Zones
+                            </div>
+                            {analyticsZoneOptions.length === 0 ? (
+                              <div className="nx-subtle" style={{ padding:'8px 10px' }}>No zone data</div>
+                            ) : (
+                              analyticsZoneOptions.map(opt => (
+                                <label
+                                  key={opt.value}
+                                  style={{
+                                    display:'flex',
+                                    alignItems:'center',
+                                    gap:8,
+                                    padding:'8px 10px',
+                                    borderRadius:8,
+                                    cursor:'pointer',
+                                    color:'#e5e7eb',
+                                    fontSize:13
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedAnalyticsZones.includes(opt.value)}
+                                    onChange={() => toggleAnalyticsZoneSelection(opt.value)}
+                                  />
+                                  <span>{opt.label}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div style={{overflow:'auto', height:'calc(100% - 60px)'}}>
-                    <div className="nx-thead" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', padding:'12px 0'}}>
-                      <div>Equipment</div>
-                      <div>Usage Hours</div>
-                      <div>Last Maintenance</div>
-                      <div>Priority</div>
-                      <div style={{textAlign:'right'}}>Schedule</div>
+                  <div style={{display:'flex', flexDirection:'column', height:'calc(100% - 60px)'}}>
+                    <div style={{overflow:'auto', flex:1}}>
+                      <div className="nx-thead" style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}>
+                        <div>Rank</div>
+                        <div>Machine</div>
+                        <div>Zone</div>
+                        <div>Avg Usage</div>
+                      </div>
+                      {analyticsLoading ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading machine ranking…</div>
+                      ) : analyticsRankRows.length === 0 ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No machines match the current search/filter.</div>
+                      ) : (
+                        analyticsRankPageRows.map(row => (
+                          <div
+                            key={`rank_${row.machineId}`}
+                            className="nx-trow"
+                            style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}
+                          >
+                            <div style={{fontWeight:700, color:'#cbd5e1'}}>#{row.rank}</div>
+                            <div>
+                              <div style={{color:'#e5e7eb', fontWeight:600}}>{row.machineName || row.machineId}</div>
+                            </div>
+                            <div className="nx-subtle">
+                              {row.zone === 'unknown'
+                                ? 'Unknown'
+                                : (/^\d+$/.test(String(row.zone)) ? `Zone ${row.zone}` : row.zone)}
+                            </div>
+                            <div style={{fontWeight:600, color:'#e5e7eb'}}>{Math.round(row.avgUsageMinutes)} min</div>
+                          </div>
+                        ))
+                      )}
                     </div>
-                    {/* Placeholder maintenance data - can be connected to backend later */}
-                    <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Maintenance data coming soon</div>
+                    <div style={{
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent:'space-between',
+                      gap:10,
+                      paddingTop:10,
+                      borderTop:'1px solid #1f2430'
+                    }}>
+                      <div className="nx-subtle">
+                        {analyticsRankRows.length === 0
+                          ? '0 results'
+                          : `Showing ${safeAnalyticsPage * ANALYTICS_RANK_PAGE_SIZE + 1}-${Math.min((safeAnalyticsPage + 1) * ANALYTICS_RANK_PAGE_SIZE, analyticsRankRows.length)} of ${analyticsRankRows.length}`}
+                      </div>
+                      <div style={{display:'flex', alignItems:'center', gap:8}}>
+                        <button
+                          className="nx-btn"
+                          onClick={() => setAnalyticsPage(p => Math.max(0, p - 1))}
+                          disabled={safeAnalyticsPage <= 0}
+                          style={{height:30, minWidth:36, padding:'0 8px'}}
+                          title="Previous page"
+                        >
+                          ◀
+                        </button>
+                        <div className="nx-subtle">{analyticsRankRows.length ? `Page ${safeAnalyticsPage + 1} / ${analyticsRankTotalPages}` : 'Page 0 / 0'}</div>
+                        <button
+                          className="nx-btn"
+                          onClick={() => setAnalyticsPage(p => Math.min(analyticsRankTotalPages - 1, p + 1))}
+                          disabled={safeAnalyticsPage >= analyticsRankTotalPages - 1 || analyticsRankRows.length === 0}
+                          style={{height:30, minWidth:36, padding:'0 8px'}}
+                          title="Next page"
+                        >
+                          ▶
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
