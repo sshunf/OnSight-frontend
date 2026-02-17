@@ -177,6 +177,30 @@ function getConfiguredZones(mapCfg) {
     : [];
 }
 
+const HEATMAP_COLOR_STOPS = Object.freeze([
+  { t: 0, rgb: [34, 197, 94] },   // green
+  { t: 0.35, rgb: [250, 204, 21] }, // yellow
+  { t: 0.7, rgb: [249, 115, 22] },  // orange
+  { t: 1, rgb: [239, 68, 68] },   // red
+]);
+
+function interpolateHeatmapColor(t) {
+  const clamped = Math.max(0, Math.min(1, Number(t) || 0));
+  for (let i = 0; i < HEATMAP_COLOR_STOPS.length - 1; i++) {
+    const a = HEATMAP_COLOR_STOPS[i];
+    const b = HEATMAP_COLOR_STOPS[i + 1];
+    if (clamped >= a.t && clamped <= b.t) {
+      const span = Math.max(0.0001, b.t - a.t);
+      const p = (clamped - a.t) / span;
+      const r = Math.round(a.rgb[0] + (b.rgb[0] - a.rgb[0]) * p);
+      const g = Math.round(a.rgb[1] + (b.rgb[1] - a.rgb[1]) * p);
+      const bCh = Math.round(a.rgb[2] + (b.rgb[2] - a.rgb[2]) * p);
+      return [r, g, bCh];
+    }
+  }
+  return HEATMAP_COLOR_STOPS[HEATMAP_COLOR_STOPS.length - 1].rgb;
+}
+
 function TempDashboard() {
   const displayName = localStorage.getItem('displayName') || 'Guest User';
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -836,7 +860,8 @@ function TempDashboard() {
   const getZoneColor = (minutes, maxMinutes) => {
     const denom = Math.max(1, maxMinutes);
     const t = Math.min(1, minutes / denom);
-    return `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+    const [r, g, b] = interpolateHeatmapColor(t);
+    return `rgba(${r}, ${g}, ${b}, 0.78)`;
   };
 
   const applySvgZoneStyles = () => {
@@ -2053,7 +2078,7 @@ const handleResolveNo = () => {
                           flex:1,
                           height:10,
                           borderRadius:999,
-                          background:'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(239,68,68,0.8) 100%)',
+                          background:'linear-gradient(90deg, rgba(34,197,94,0.82) 0%, rgba(250,204,21,0.82) 35%, rgba(249,115,22,0.82) 70%, rgba(239,68,68,0.82) 100%)',
                           boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset'
                         }} />
                         <span style={{ fontSize:12, color:'#cbd5e1' }}>High</span>
