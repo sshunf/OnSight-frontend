@@ -1795,69 +1795,6 @@ const handleResolveNo = () => {
     </>
   );
 
-  const renderEquipmentAndSuggestions = () => (
-    <>
-      <div className="nx-grid" style={{marginTop:'8px'}}>
-        <div className="nx-card" style={{gridColumn:'span 12'}}>
-          <div className="nx-card-header">
-            <div className="nx-card-title">Equipment Status</div>
-          </div>
-          <div className="nx-table-wrap" style={{maxHeight:'280px', overflowY:'auto'}}>
-            <div className="nx-thead">
-              <div>Equipment</div>
-              <div>Status</div>
-              <div>Last Seen</div>
-            </div>
-            {equipmentRows.length === 0 ? (
-              <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No equipment data</div>
-            ) : (
-              equipmentRows.map((row) => (
-                <div className="nx-trow" key={row.name}>
-                  <div>{row.name}</div>
-                  <div>
-                    <span className={`nx-badge ${row.status === 'active' ? 'active' : row.status === 'inactive' ? 'inactive' : 'maintenance'}`}>
-                      {statusLabel(row.status)}
-                    </span>
-                  </div>
-                  <div className="nx-subtle">{row.lastSeen}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="nx-grid" style={{marginTop:'8px'}}>
-        <div className="nx-card" style={{gridColumn:'span 12', height:'245px', display:'flex', flexDirection:'column'}}>
-          <div className="nx-card-header">
-            <div>
-              <div className="nx-card-title">Space Allocation Suggestions</div>
-              <div className="nx-subtle">Based on recent usage/occupancy patterns</div>
-            </div>
-          </div>
-          <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto'}}>
-            {/* Suggestions display commented out - keeping 245px height for layout */}
-            {/* {(suggestions || []).filter(s => s.status !== 'dismissed').length === 0 ? (
-              <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No suggestions at this time</div>
-            ) : (
-              <div style={{width:'100%'}}>
-                {(suggestions || []).filter(s => s.status !== 'dismissed').map(s => (
-                  <div key={s.id} className="nx-alert-row" style={{gridTemplateColumns:'1fr auto'}}>
-                    <div style={{color:'#e5e7eb'}}>{s.text}</div>
-                    <div style={{display:'flex', gap:8}}>
-                      {s.status !== 'accepted' && <button className="nx-pill primary" onClick={()=>acceptSuggestion(s.id)} aria-label="Accept suggestion">Accept</button>}
-                      <button className="nx-pill" onClick={()=>dismissSuggestion(s.id)} aria-label="Dismiss suggestion">Dismiss</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )} */}
-          </div>
-        </div>
-      </div>
-    </>
-  );
-
   const back = async() => {
     try {
       navigate('/login');
@@ -2055,7 +1992,6 @@ const handleResolveNo = () => {
                 </div>
               </div>
 
-                {renderEquipmentAndSuggestions()}
               </div>
             ) : activeTab === 'tickets' ? (
               <div className="nx-dashboard-content">
