@@ -46,6 +46,10 @@ function isExcludedZone(value) {
 }
 
 function normalizeMachineIdValue(value) {
+  if (value && typeof value === 'object') {
+    if (typeof value.$oid === 'string') return value.$oid.trim();
+    if (typeof value.toHexString === 'function') return String(value.toHexString()).trim();
+  }
   const raw = String(value || '').trim();
   const match = raw.match(/^ObjectId\(["']?([0-9a-fA-F]{24})["']?\)$/i);
   return match ? match[1] : raw;
@@ -177,6 +181,54 @@ function getConfiguredZones(mapCfg) {
     : [];
 }
 
+function formatZoneLabel(zoneId) {
+  const zone = String(zoneId || '').trim();
+  if (!zone) return 'Unknown';
+  return /^\d+$/.test(zone) ? `Zone ${zone}` : zone;
+}
+
+function toUsageGroup(machineType) {
+  const raw = String(machineType || '').trim().toLowerCase();
+  if (!raw) return 'strength';
+  if (raw.includes('treadmill') || raw.includes('elliptical') || raw.includes('cardio')) {
+    return 'cardio';
+  }
+  return 'strength';
+}
+
+const HEATMAP_COLOR_STOPS = Object.freeze([
+  { t: 0, rgb: [34, 197, 94] },   // green
+  { t: 0.35, rgb: [250, 204, 21] }, // yellow
+  { t: 0.7, rgb: [249, 115, 22] },  // orange
+  { t: 1, rgb: [239, 68, 68] },   // red
+]);
+const SEARCH_RANGE_OPTIONS = Object.freeze([
+  { value: 'all', label: 'All Time' },
+  { value: '6', label: 'Past 6 Hours' },
+  { value: '8', label: 'Past 8 Hours' },
+  { value: '12', label: 'Past 12 Hours' },
+  { value: '24', label: 'Past 24 Hours' },
+  { value: '168', label: 'Past Week' },
+  { value: '720', label: 'Past Month' },
+]);
+
+function interpolateHeatmapColor(t) {
+  const clamped = Math.max(0, Math.min(1, Number(t) || 0));
+  for (let i = 0; i < HEATMAP_COLOR_STOPS.length - 1; i++) {
+    const a = HEATMAP_COLOR_STOPS[i];
+    const b = HEATMAP_COLOR_STOPS[i + 1];
+    if (clamped >= a.t && clamped <= b.t) {
+      const span = Math.max(0.0001, b.t - a.t);
+      const p = (clamped - a.t) / span;
+      const r = Math.round(a.rgb[0] + (b.rgb[0] - a.rgb[0]) * p);
+      const g = Math.round(a.rgb[1] + (b.rgb[1] - a.rgb[1]) * p);
+      const bCh = Math.round(a.rgb[2] + (b.rgb[2] - a.rgb[2]) * p);
+      return [r, g, bCh];
+    }
+  }
+  return HEATMAP_COLOR_STOPS[HEATMAP_COLOR_STOPS.length - 1].rgb;
+}
+
 function TempDashboard() {
   const displayName = localStorage.getItem('displayName') || 'Guest User';
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -195,7 +247,6 @@ function TempDashboard() {
   // Chart data state
   const [selectedMachine, setSelectedMachine] = useState('');
   const [selectedRange, setSelectedRange] = useState(12);
-  const [selectedAvgRange, setSelectedAvgRange] = useState(12);
   const [selectedCumRange, setSelectedCumRange] = useState(12);
   const [machineOptions, setMachineOptions] = useState([]);
   const [equipmentRows, setEquipmentRows] = useState([]);
@@ -203,8 +254,21 @@ function TempDashboard() {
   // Analytics data
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [selectedTopN, setSelectedTopN] = useState('all');
+  const [avgUsageRows, setAvgUsageRows] = useState([]);
+  const [selectedSearchRange, setSelectedSearchRange] = useState('all');
+  const [selectedTopN, setSelectedTopN] = useState('5');
   const [selectedZone, setSelectedZone] = useState('');
+  const [usageRankSort, setUsageRankSort] = useState('most');
+  const [analyticsSearchTerm, setAnalyticsSearchTerm] = useState('');
+  const [selectedAnalyticsZones, setSelectedAnalyticsZones] = useState([]);
+  const [analyticsPage, setAnalyticsPage] = useState(0);
+  const [analyticsZoneFilterOpen, setAnalyticsZoneFilterOpen] = useState(false);
+  const [machineZoneMap, setMachineZoneMap] = useState({});
+  const [machineTypeMap, setMachineTypeMap] = useState({});
+  const [gymMachines, setGymMachines] = useState([]);
+  const [topZonesToday, setTopZonesToday] = useState([]);
+  const [remainingZonesToday, setRemainingZonesToday] = useState([]);
+  const [topZonesTodayLoading, setTopZonesTodayLoading] = useState(false);
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -240,6 +304,7 @@ function TempDashboard() {
   const [mapConfig, setMapConfig] = useState(null);
   const [svgDiscoveredZones, setSvgDiscoveredZones] = useState([]);
   const svgObjectRef = useRef(null);
+  const analyticsZoneFilterRef = useRef(null);
 
   const mapFloors = useMemo(() => {
     if (!mapConfig || !Array.isArray(mapConfig.floors)) return [];
@@ -310,6 +375,7 @@ function TempDashboard() {
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
+  const ANALYTICS_RANK_PAGE_SIZE = 8;
 
   const filteredMachineOptions = useMemo(() => {
     if (!selectedZone) return machineOptions;
@@ -438,12 +504,45 @@ function TempDashboard() {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
     try {
-      const res = await fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`);
-      const data = await res.json();
-      if (Array.isArray(data.machineIds)) {
-        setMachineOptions(data.machineIds);
-        if (!selectedMachine && data.machineIds.length > 0) {
-          setSelectedMachine(data.machineIds[0].machineId);
+      const [optionsResult, machinesResult] = await Promise.allSettled([
+        fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`),
+        fetch(`${backendURL}/api/machines?gymId=${gymId}`),
+      ]);
+
+      if (optionsResult.status === 'fulfilled') {
+        const res = optionsResult.value;
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.machineIds)) {
+          setMachineOptions(data.machineIds);
+          if (!selectedMachine && data.machineIds.length > 0) {
+            setSelectedMachine(data.machineIds[0].machineId);
+          }
+        }
+      }
+
+      if (machinesResult.status === 'fulfilled') {
+        const res = machinesResult.value;
+        const data = await res.json();
+        if (!res.ok) {
+          setMachineZoneMap({});
+          setMachineTypeMap({});
+          setGymMachines([]);
+        } else if (Array.isArray(data)) {
+          const nextZoneMap = {};
+          const nextTypeMap = {};
+          data.forEach(machine => {
+            const machineId = normalizeMachineIdValue(machine?._id || machine?.machineId);
+            if (!machineId) return;
+            const normalizedZone = normalizeZoneId(machine?.zone) || normalizeZoneId(deriveZoneFromMachineId(machineId));
+            if (normalizedZone && !isExcludedZone(normalizedZone)) {
+              nextZoneMap[machineId] = normalizedZone;
+            }
+            // Source of truth for type grouping: Machine.type from Mongo machines collection.
+            nextTypeMap[machineId] = toUsageGroup(machine?.type);
+          });
+          setMachineZoneMap(nextZoneMap);
+          setMachineTypeMap(nextTypeMap);
+          setGymMachines(data);
         }
       }
     } catch (err) {
@@ -528,55 +627,79 @@ function TempDashboard() {
     }
   };
 
-  // Build average usage chart with backend data
-  const buildWeeklyChart = async () => {
-    const gymId = localStorage.getItem('gymId');
-    if (!gymId) return;
-    
-    try {
-      const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}&hours=${selectedAvgRange}`);
-      const data = await res.json();
-      if (!Array.isArray(data.result)) return;
-      
-      const sortedResult = [...data.result].sort((a, b) => {
-        const aName = String(a.machineName || a.machineId || '');
-        const bName = String(b.machineName || b.machineId || '');
-        return aName.localeCompare(bName);
-      });
-      const labels = sortedResult.map(d => d.machineName || (d.machineId ? d.machineId : 'Unknown'));
-      const values = sortedResult.map(d => d.avgMinutes);
-      const maxValue = Math.max(...values, 0);
-      const yMax = Math.ceil(maxValue + 10);
-      
-      if (avgUsageChartRef.current) {
-        const ctx = avgUsageChartRef.current.getContext('2d');
-        if (chartInstancesRef.current.avg) chartInstancesRef.current.avg.destroy();
-        
-        chartInstancesRef.current.avg = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Avg Daily Usage (min)',
-              data: values,
-              backgroundColor: '#7C3AED',
-              borderRadius: 8,
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true, labels: { color: '#e5e7eb' } } },
-            scales: {
-              x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } },
-              y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: yMax },
-            },
-            interaction: { mode: 'nearest', intersect: false },
-          }
-        });
+  // Build average usage chart from the same filtered rows as Machine Usage Search.
+  const buildWeeklyChart = () => {
+    if (!avgUsageChartRef.current) return;
+    const canvas = avgUsageChartRef.current;
+    const ctx = canvas.getContext('2d');
+    // Defensive destroy in case a stale Chart.js instance still owns this canvas.
+    const existingCanvasChart = Chart.getChart(canvas);
+    if (existingCanvasChart) existingCanvasChart.destroy();
+    if (chartInstancesRef.current.avg) {
+      chartInstancesRef.current.avg.destroy();
+      chartInstancesRef.current.avg = null;
+    }
+
+    const rows = Array.isArray(analyticsRankRows) ? analyticsRankRows : [];
+    if (!rows.length) return;
+
+    const labels = rows.map(r => r.machineName || r.machineId || 'Unknown');
+    const values = rows.map(r => Number(r.avgUsageMinutes) || 0);
+    const maxValue = Math.max(...values, 0);
+    const yMax = Math.ceil(maxValue + 10);
+
+    chartInstancesRef.current.avg = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Avg Usage (min)',
+          data: values,
+          backgroundColor: '#7C3AED',
+          borderRadius: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: true, labels: { color: '#e5e7eb' } } },
+        scales: {
+          x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+          y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: yMax },
+        },
+        interaction: { mode: 'nearest', intersect: false },
       }
+    });
+  };
+
+  const fetchUsageSearchRows = async () => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) {
+      setAvgUsageRows([]);
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({ gymId: String(gymId) });
+      if (selectedSearchRange !== 'all') {
+        params.set('hours', String(selectedSearchRange));
+      }
+      const res = await fetch(`${backendURL}/api/weekly/usage?${params.toString()}`);
+      const data = await res.json();
+      if (!Array.isArray(data.result)) {
+        setAvgUsageRows([]);
+        return;
+      }
+      const normalizedRows = data.result.map((d) => ({
+        machineId: String(d.machineId || '').trim(),
+        machineName: String(d.machineName || d.machineId || 'Unknown').trim(),
+        type: String(d.type || '').trim(),
+        avgMinutes: Number.isFinite(Number(d.avgMinutes)) ? Number(d.avgMinutes) : 0,
+      }));
+      setAvgUsageRows(normalizedRows);
     } catch (err) {
-      console.error('Failed to build weekly average chart:', err);
+      console.error('Failed to fetch usage search rows:', err);
+      setAvgUsageRows([]);
     }
   };
 
@@ -692,6 +815,69 @@ function TempDashboard() {
     }
   };
 
+  const fetchTopZonesToday = async () => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) {
+      setTopZonesToday([]);
+      setRemainingZonesToday([]);
+      return;
+    }
+
+    setTopZonesTodayLoading(true);
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const hoursSinceStart = Math.max(1, (now.getTime() - startOfDay.getTime()) / (60 * 60 * 1000));
+
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${hoursSinceStart.toFixed(3)}`);
+      const data = await res.json();
+      if (!res.ok || !data) {
+        setTopZonesToday([]);
+        setRemainingZonesToday([]);
+        return;
+      }
+
+      const aggregated = {};
+      (data.machines || []).forEach((m) => {
+        const derivedZone = deriveZoneFromMachineId(m.machineId);
+        const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
+        if (!zoneId || zoneId === 'unknown' || isExcludedZone(zoneId)) return;
+        const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
+        const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        aggregated[zoneId] = (aggregated[zoneId] || 0) + minutes;
+      });
+
+      (data.zones || []).forEach((z) => {
+        const zoneId = normalizeZoneId(z.zone) || 'unknown';
+        if (!zoneId || zoneId === 'unknown' || isExcludedZone(zoneId)) return;
+        const minutes = Number(z.minutes || 0);
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        aggregated[zoneId] = (aggregated[zoneId] || 0) + minutes;
+      });
+
+      const ranked = Object.entries(aggregated)
+        .map(([zone, minutes]) => ({ zone, minutes }))
+        .sort((a, b) => b.minutes - a.minutes);
+
+      const top3 = ranked.slice(0, 3);
+      const remaining = ranked.slice(3);
+
+      const padded = [...top3];
+      while (padded.length < 3) {
+        padded.push({ zone: `--${padded.length + 1}`, minutes: 0, empty: true });
+      }
+      setTopZonesToday(padded);
+      setRemainingZonesToday(remaining);
+    } catch (e) {
+      console.error('Failed to fetch top zones today:', e);
+      setTopZonesToday([]);
+      setRemainingZonesToday([]);
+    } finally {
+      setTopZonesTodayLoading(false);
+    }
+  };
+
   const fetchFacilityHeatmap = async (rangeHours = 12) => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
@@ -773,7 +959,8 @@ function TempDashboard() {
   const getZoneColor = (minutes, maxMinutes) => {
     const denom = Math.max(1, maxMinutes);
     const t = Math.min(1, minutes / denom);
-    return `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+    const [r, g, b] = interpolateHeatmapColor(t);
+    return `rgba(${r}, ${g}, ${b}, 0.78)`;
   };
 
   const applySvgZoneStyles = () => {
@@ -909,14 +1096,218 @@ function TempDashboard() {
     return options;
   }, [processedAnalyticsData.length]);
 
+  const analyticsZoneLookup = useMemo(() => {
+    const lookup = {};
+
+    Object.entries(machineZoneMap || {}).forEach(([machineId, zoneId]) => {
+      const normalized = normalizeZoneId(zoneId);
+      if (machineId && normalized && !isExcludedZone(normalized)) {
+        lookup[String(machineId)] = normalized;
+      }
+    });
+
+    (facilityMachines || []).forEach(m => {
+      const machineId = String(m?.machineId || '').trim();
+      const normalized = normalizeZoneId(m?.zone);
+      if (machineId && normalized && !isExcludedZone(normalized)) {
+        lookup[machineId] = normalized;
+      }
+    });
+
+    return lookup;
+  }, [machineZoneMap, facilityMachines]);
+
+  const analyticsRankRows = useMemo(() => {
+    const selectedZonesSet = new Set((selectedAnalyticsZones || []).map(String));
+    const q = String(analyticsSearchTerm || '').trim().toLowerCase();
+
+    const rows = (avgUsageRows || [])
+      .map((m) => {
+        const machineId = String(m?.machineId || '').trim();
+        const machineName = String(m?.machineName || machineId || 'Unknown').trim();
+        const derivedZone = normalizeZoneId(deriveZoneFromMachineId(machineId));
+        const zone = analyticsZoneLookup[machineId] || derivedZone || 'unknown';
+        const avgUsageMinutes = Number.isFinite(Number(m?.avgMinutes)) ? Number(m.avgMinutes) : 0;
+        return {
+          machineId,
+          machineName,
+          zone,
+          avgUsageMinutes,
+        };
+      })
+      .filter(row => row.machineId && !isExcludedZone(row.zone));
+
+    const filteredRows = rows.filter(row => {
+      const inZoneFilter = selectedZonesSet.size === 0 || selectedZonesSet.has(String(row.zone));
+      if (!inZoneFilter) return false;
+      if (!q) return true;
+      const name = row.machineName.toLowerCase();
+      const id = row.machineId.toLowerCase();
+      return name.includes(q) || id.includes(q);
+    });
+
+    filteredRows.sort((a, b) => {
+      const diff = usageRankSort === 'least'
+        ? a.avgUsageMinutes - b.avgUsageMinutes
+        : b.avgUsageMinutes - a.avgUsageMinutes;
+      if (Math.abs(diff) > 0.0001) return diff;
+      return a.machineName.localeCompare(b.machineName);
+    });
+
+    return filteredRows.map((row, idx) => ({ ...row, rank: idx + 1 }));
+  }, [avgUsageRows, analyticsZoneLookup, selectedAnalyticsZones, analyticsSearchTerm, usageRankSort]);
+
+  const analyticsZoneOptions = useMemo(() => {
+    const zoneSet = new Set();
+    Object.values(analyticsZoneLookup || {}).forEach(zone => {
+      const normalized = normalizeZoneId(zone);
+      if (normalized && normalized !== 'unknown' && !isExcludedZone(normalized)) {
+        zoneSet.add(String(normalized));
+      }
+    });
+
+    return Array.from(zoneSet)
+      .sort((a, b) => {
+        if (/^\d+$/.test(a) && /^\d+$/.test(b)) return Number(a) - Number(b);
+        return a.localeCompare(b);
+      })
+      .map(zone => ({ value: zone, label: /^\d+$/.test(zone) ? `Zone ${zone}` : zone }));
+  }, [analyticsZoneLookup]);
+
+  const equipmentTypeMix = useMemo(() => {
+    let cardio = 0;
+    let strength = 0;
+    if (Array.isArray(gymMachines) && gymMachines.length) {
+      gymMachines.forEach((machine) => {
+        const typeGroup = toUsageGroup(machine?.type);
+        if (typeGroup === 'cardio') cardio += 1;
+        else strength += 1;
+      });
+      return { cardio, strength };
+    }
+    Object.values(machineTypeMap || {}).forEach(typeGroup => {
+      if (typeGroup === 'cardio') cardio += 1;
+      else strength += 1;
+    });
+    return { cardio, strength };
+  }, [gymMachines, machineTypeMap]);
+
+  const usageTypeMix = useMemo(() => {
+    let cardio = 0;
+    let strength = 0;
+
+    if (Array.isArray(analyticsData) && analyticsData.length) {
+      analyticsData.forEach((m) => {
+        const machineId = normalizeMachineIdValue(m?.machineId);
+        const usage = (m?.days || []).reduce((acc, d) => acc + (Number(d?.avgMinutes) || 0), 0);
+        if (!Number.isFinite(usage) || usage <= 0) return;
+        const group = machineTypeMap[machineId] || toUsageGroup(m?.type);
+        if (group === 'cardio') cardio += usage;
+        else strength += usage;
+      });
+      return { cardio, strength };
+    }
+
+    // Fallback if DOW analytics has not loaded yet.
+    (avgUsageRows || []).forEach((m) => {
+      const machineId = normalizeMachineIdValue(m?.machineId);
+      const usage = Number(m?.avgMinutes) || 0;
+      if (usage <= 0) return;
+      const group = machineTypeMap[machineId] || toUsageGroup(m?.type);
+      if (group === 'cardio') cardio += usage;
+      else strength += usage;
+    });
+    return { cardio, strength };
+  }, [analyticsData, avgUsageRows, machineTypeMap]);
+
+  const renderTypePieCard = (title, subtitle, mix, valueSuffix = '') => {
+    const cardio = Number(mix?.cardio) || 0;
+    const strength = Number(mix?.strength) || 0;
+    const total = cardio + strength;
+    const cardioPct = total > 0 ? (cardio / total) * 100 : 0;
+    const strengthPct = total > 0 ? (strength / total) * 100 : 0;
+    const pieBackground = `conic-gradient(#22c55e 0deg ${(cardioPct / 100) * 360}deg, #f97316 ${(cardioPct / 100) * 360}deg 360deg)`;
+
+    return (
+      <div className="nx-card" style={{gridColumn:'span 6'}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">{title}</div>
+            <div className="nx-subtle">{subtitle}</div>
+          </div>
+        </div>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap'}}>
+          <div style={{
+            width: 150,
+            height: 150,
+            borderRadius: '50%',
+            background: pieBackground,
+            position:'relative',
+            boxShadow:'0 0 0 1px rgba(255,255,255,0.1) inset'
+          }}>
+            <div style={{
+              position:'absolute',
+              inset:24,
+              borderRadius:'50%',
+              background:'#111119',
+              border:'1px solid #1d1d29',
+              display:'flex',
+              alignItems:'center',
+              justifyContent:'center',
+              color:'#e5e7eb',
+              fontSize:13,
+              fontWeight:700
+            }}>
+              {Math.round(cardioPct)} / {Math.round(strengthPct)}
+            </div>
+          </div>
+          <div style={{display:'grid', gap:10, minWidth:220}}>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <span style={{width:10, height:10, borderRadius:'50%', background:'#22c55e', display:'inline-block'}} />
+                <span style={{color:'#e5e7eb'}}>Cardio</span>
+              </div>
+              <div className="nx-subtle">{cardio.toFixed(valueSuffix ? 1 : 0)}{valueSuffix} ({cardioPct.toFixed(1)}%)</div>
+            </div>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <span style={{width:10, height:10, borderRadius:'50%', background:'#f97316', display:'inline-block'}} />
+                <span style={{color:'#e5e7eb'}}>Strength</span>
+              </div>
+              <div className="nx-subtle">{strength.toFixed(valueSuffix ? 1 : 0)}{valueSuffix} ({strengthPct.toFixed(1)}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const analyticsRankTotalPages = useMemo(() => (
+    Math.max(1, Math.ceil((analyticsRankRows.length || 0) / ANALYTICS_RANK_PAGE_SIZE))
+  ), [analyticsRankRows.length, ANALYTICS_RANK_PAGE_SIZE]);
+
+  const safeAnalyticsPage = useMemo(() => (
+    Math.min(analyticsPage, analyticsRankTotalPages - 1)
+  ), [analyticsPage, analyticsRankTotalPages]);
+
+  const analyticsRankPageRows = useMemo(() => {
+    const start = safeAnalyticsPage * ANALYTICS_RANK_PAGE_SIZE;
+    return analyticsRankRows.slice(start, start + ANALYTICS_RANK_PAGE_SIZE);
+  }, [safeAnalyticsPage, analyticsRankRows, ANALYTICS_RANK_PAGE_SIZE]);
+
   // Build analytics chart
   useEffect(() => {
     if (activeTab !== 'analytics') return;
     if (!analyticsChartRef.current || processedAnalyticsData.length === 0) return;
     
-    const ctx = analyticsChartRef.current.getContext('2d');
+    const canvas = analyticsChartRef.current;
+    const ctx = canvas.getContext('2d');
+    // Defensive destroy in case Chart.js still has this canvas registered.
+    const existingCanvasChart = Chart.getChart(canvas);
+    if (existingCanvasChart) existingCanvasChart.destroy();
     if (chartInstancesRef.current.analytics) {
       chartInstancesRef.current.analytics.destroy();
+      chartInstancesRef.current.analytics = null;
     }
 
     const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -988,7 +1379,12 @@ function TempDashboard() {
       },
     });
 
-    return () => { chartInstancesRef.current.analytics?.destroy(); };
+    return () => {
+      chartInstancesRef.current.analytics?.destroy();
+      chartInstancesRef.current.analytics = null;
+      const lingering = Chart.getChart(canvas);
+      if (lingering) lingering.destroy();
+    };
   }, [activeTab, processedAnalyticsData, selectedTopN]);
 
   // Initialize data on mount and user load
@@ -1008,10 +1404,25 @@ function TempDashboard() {
       buildCumulativeChart();
       fetchFacilityHeatmap(facilityRange);
     }
-    if (activeTab === 'analytics') {
-      buildWeeklyChart();
-    }
-  }, [user, selectedAvgRange, selectedCumRange, activeTab, facilityRange]);
+  }, [user, selectedCumRange, activeTab, facilityRange]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'dashboard') return;
+    fetchUsageSearchRows();
+  }, [user, activeTab, selectedSearchRange]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'analytics') return;
+    fetchMachineOptions();
+    fetchTopZonesToday();
+    const id = setInterval(fetchTopZonesToday, 60000);
+    return () => clearInterval(id);
+  }, [user, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+    buildWeeklyChart();
+  }, [activeTab, analyticsRankRows]);
 
   useEffect(() => {
     if (selectedMachine && activeTab === 'dashboard') {
@@ -1047,6 +1458,45 @@ function TempDashboard() {
       setSelectedMachine(machineOptions[0].machineId);
     }
   }, [selectedZone, filteredMachineOptions, machineOptions, selectedMachine, activeTab, user]);
+
+  useEffect(() => {
+    const normalizedZone = normalizeZoneId(selectedZone);
+    if (!normalizedZone || isExcludedZone(normalizedZone)) return;
+    setSelectedAnalyticsZones(prev => (
+      prev.length === 1 && String(prev[0]) === String(normalizedZone)
+        ? prev
+        : [String(normalizedZone)]
+    ));
+  }, [selectedZone]);
+
+  useEffect(() => {
+    setAnalyticsPage(0);
+  }, [analyticsSearchTerm, usageRankSort, selectedAnalyticsZones, selectedSearchRange]);
+
+  useEffect(() => {
+    if (analyticsPage > safeAnalyticsPage) {
+      setAnalyticsPage(safeAnalyticsPage);
+    }
+  }, [analyticsPage, safeAnalyticsPage]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!analyticsZoneFilterRef.current) return;
+      if (!analyticsZoneFilterRef.current.contains(e.target)) {
+        setAnalyticsZoneFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggleAnalyticsZoneSelection = (zoneId) => {
+    setSelectedAnalyticsZones(prev => (
+      prev.includes(zoneId)
+        ? prev.filter(z => z !== zoneId)
+        : [...prev, zoneId]
+    ));
+  };
 
   // Tab change handler
   const handleTabChange = (tab) => {
@@ -1382,6 +1832,197 @@ const handleResolveNo = () => {
     persistSuggestions(next);
   }
 
+  const renderMachineUsageSearchAndAverage = () => (
+    <>
+      <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">Machine Usage Search</div>
+            <div className="nx-subtle">Full machine ranking by daily average usage with zone filters</div>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}>
+            <input
+              value={analyticsSearchTerm}
+              onChange={(e) => setAnalyticsSearchTerm(e.target.value)}
+              placeholder="Search machine name or ID"
+              style={{
+                height: 32,
+                minWidth: 220,
+                padding: '0 10px',
+                borderRadius: 8,
+                border: '1px solid #262633',
+                background: '#13131a',
+                color: '#e5e7eb',
+                fontSize: 12,
+                outline: 'none'
+              }}
+            />
+            <NxDropdown
+              value={usageRankSort}
+              onChange={setUsageRankSort}
+              options={[
+                { value: 'most', label: 'Most Used' },
+                { value: 'least', label: 'Least Used' },
+              ]}
+              minWidth={110}
+            />
+            <NxDropdown
+              value={selectedSearchRange}
+              onChange={setSelectedSearchRange}
+              options={SEARCH_RANGE_OPTIONS}
+              minWidth={140}
+            />
+            <div ref={analyticsZoneFilterRef} style={{ position:'relative' }}>
+              <button
+                className="nx-btn"
+                onClick={() => setAnalyticsZoneFilterOpen(v => !v)}
+                style={{ minWidth: 145, height: 32, padding: '0 10px' }}
+              >
+                {selectedAnalyticsZones.length
+                  ? `Zones: ${selectedAnalyticsZones.join(', ')}`
+                  : 'All Zones'}
+              </button>
+              {analyticsZoneFilterOpen && (
+                <div className="nx-dd-menu" style={{ right: 0, left: 'auto', minWidth: 220 }}>
+                  <div
+                    className="nx-dd-item"
+                    onClick={() => setSelectedAnalyticsZones([])}
+                    style={{ fontWeight: selectedAnalyticsZones.length === 0 ? 700 : 500 }}
+                  >
+                    All Zones
+                  </div>
+                  {analyticsZoneOptions.length === 0 ? (
+                    <div className="nx-subtle" style={{ padding:'8px 10px' }}>No zone data</div>
+                  ) : (
+                    analyticsZoneOptions.map(opt => (
+                      <label
+                        key={opt.value}
+                        style={{
+                          display:'flex',
+                          alignItems:'center',
+                          gap:8,
+                          padding:'8px 10px',
+                          borderRadius:8,
+                          cursor:'pointer',
+                          color:'#e5e7eb',
+                          fontSize:13
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAnalyticsZones.includes(opt.value)}
+                          onChange={() => toggleAnalyticsZoneSelection(opt.value)}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex', flexDirection:'column', height:'calc(100% - 60px)'}}>
+          <div style={{overflow:'auto', flex:1}}>
+            <div className="nx-thead" style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}>
+              <div>Rank</div>
+              <div>Machine</div>
+              <div>Zone</div>
+              <div>Avg Usage</div>
+            </div>
+            {analyticsLoading ? (
+              <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading machine ranking...</div>
+            ) : analyticsRankRows.length === 0 ? (
+              <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No machines match the current search/filter.</div>
+            ) : (
+              analyticsRankPageRows.map(row => (
+                <div
+                  key={`rank_${row.machineId}`}
+                  className="nx-trow"
+                  style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}
+                >
+                  <div style={{fontWeight:700, color:'#cbd5e1'}}>#{row.rank}</div>
+                  <div>
+                    <div style={{color:'#e5e7eb', fontWeight:600}}>{row.machineName || row.machineId}</div>
+                  </div>
+                  <div className="nx-subtle">
+                    {row.zone === 'unknown'
+                      ? 'Unknown'
+                      : (/^\d+$/.test(String(row.zone)) ? `Zone ${row.zone}` : row.zone)}
+                  </div>
+                  <div style={{fontWeight:600, color:'#e5e7eb'}}>{Math.round(row.avgUsageMinutes)} min</div>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'space-between',
+            gap:10,
+            paddingTop:10,
+            borderTop:'1px solid #1f2430'
+          }}>
+            <div className="nx-subtle">
+              {analyticsRankRows.length === 0
+                ? '0 results'
+                : `Showing ${safeAnalyticsPage * ANALYTICS_RANK_PAGE_SIZE + 1}-${Math.min((safeAnalyticsPage + 1) * ANALYTICS_RANK_PAGE_SIZE, analyticsRankRows.length)} of ${analyticsRankRows.length}`}
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:8}}>
+              <button
+                className="nx-btn"
+                onClick={() => setAnalyticsPage(p => Math.max(0, p - 1))}
+                disabled={safeAnalyticsPage <= 0}
+                style={{height:30, minWidth:36, padding:'0 8px'}}
+                title="Previous page"
+              >
+                ◀
+              </button>
+              <div className="nx-subtle">{analyticsRankRows.length ? `Page ${safeAnalyticsPage + 1} / ${analyticsRankTotalPages}` : 'Page 0 / 0'}</div>
+              <button
+                className="nx-btn"
+                onClick={() => setAnalyticsPage(p => Math.min(analyticsRankTotalPages - 1, p + 1))}
+                disabled={safeAnalyticsPage >= analyticsRankTotalPages - 1 || analyticsRankRows.length === 0}
+                style={{height:30, minWidth:36, padding:'0 8px'}}
+                title="Next page"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="nx-card" style={{marginTop:8}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">Average Machine Usage</div>
+            <div className="nx-subtle">Matches current Machine Usage Search filters</div>
+          </div>
+          <NxDropdown
+            value={selectedSearchRange}
+            onChange={setSelectedSearchRange}
+            options={SEARCH_RANGE_OPTIONS}
+            minWidth={140}
+          />
+        </div>
+        <div className="nx-chart" style={{position:'relative'}}>
+          <canvas ref={avgUsageChartRef}></canvas>
+          {analyticsLoading && (
+            <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af', background:'rgba(0,0,0,0.2)'}}>
+              Loading usage data...
+            </div>
+          )}
+          {!analyticsLoading && analyticsRankRows.length === 0 && (
+            <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af'}}>
+              No machines match the current search/filter.
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
   const back = async() => {
     try {
       navigate('/login');
@@ -1418,8 +2059,6 @@ const handleResolveNo = () => {
         .nx-card-title { font-size:13px; font-weight:600; color:#a3a3b2; }
         .nx-metric { font-size:28px; font-weight:700; color:#ffffff; letter-spacing:0.2px; }
         .nx-subtle { font-size:12px; color:#9ca3af; }
-        .nx-chip { background:rgba(124,58,237,0.15); color:#c4b5fd; font-size:11px; padding:2px 6px; border-radius:999px; margin-left:8px; border:1px solid rgba(124,58,237,0.35); }
-        .nx-chip.red { background:rgba(239,68,68,0.12); color:#fecaca; border-color:rgba(239,68,68,0.35); }
         .nx-chart { height:260px; }
         .nx-select { padding:6px 10px; border-radius:8px; border:1px solid #262633; background:#13131a; color:#e5e7eb; font-size:12px; }
         .nx-mobile-tabs { display:none; }
@@ -1528,6 +2167,77 @@ const handleResolveNo = () => {
               </div>
             ) : activeTab === 'analytics' ? (
               <div className="nx-dashboard-content">
+                <div className="nx-card" style={{marginBottom:'8px'}}>
+                  <div className="nx-card-header" style={{alignItems:'baseline'}}>
+                    <div style={{fontSize:'26px', fontWeight:800, color:'#ffffff', lineHeight:1.1}}>Top 3 Zones Today</div>
+                    <div className="nx-subtle">Usage from midnight to now</div>
+                  </div>
+                  <div style={{minHeight:220, display:'flex', alignItems:'flex-end', justifyContent:'space-around', gap:20, padding:'10px 8px 4px'}}>
+                    {topZonesTodayLoading ? (
+                      <div className="nx-subtle" style={{padding:'20px'}}>Loading zone usage...</div>
+                    ) : topZonesToday.length === 0 ? (
+                      <div className="nx-subtle" style={{padding:'20px'}}>No zone usage data available for today.</div>
+                    ) : (
+                      (() => {
+                        const maxMinutes = Math.max(1, ...topZonesToday.map(z => Number(z.minutes) || 0));
+                        const barColors = ['rgba(34,197,94,0.9)', 'rgba(249,115,22,0.9)', 'rgba(239,68,68,0.9)'];
+                        return topZonesToday.map((zone, idx) => {
+                          const ratio = (Number(zone.minutes) || 0) / maxMinutes;
+                          const barHeight = Math.max(18, Math.round(170 * ratio));
+                          const label = zone.empty ? '--' : formatZoneLabel(zone.zone);
+                          return (
+                            <div key={`top_zone_${idx}_${zone.zone}`} style={{display:'flex', flexDirection:'column', alignItems:'center', minWidth:180}}>
+                              <div style={{fontSize:14, fontWeight:700, color:'#e5e7eb', marginBottom:8}}>{label}</div>
+                              <div style={{display:'flex', alignItems:'flex-end', gap:10, minHeight:190}}>
+                                <div style={{
+                                  width:58,
+                                  height: `${barHeight}px`,
+                                  borderRadius:'10px 10px 4px 4px',
+                                  background: barColors[idx % barColors.length],
+                                  boxShadow:'0 0 0 1px rgba(255,255,255,0.12) inset'
+                                }} />
+                                <div className="nx-subtle" style={{fontWeight:600, color:'#cbd5e1'}}>{Math.round(zone.minutes || 0)} min</div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
+                    )}
+                  </div>
+                </div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  {topZonesTodayLoading ? (
+                    <div className="nx-card" style={{gridColumn:'span 12'}}>
+                      <div className="nx-subtle" style={{padding:'8px 4px'}}>Loading remaining zones...</div>
+                    </div>
+                  ) : remainingZonesToday.length === 0 ? (
+                    <div className="nx-card" style={{gridColumn:'span 12'}}>
+                      <div className="nx-subtle" style={{padding:'8px 4px'}}>No additional zones to show for today.</div>
+                    </div>
+                  ) : (
+                    remainingZonesToday.map((zone) => (
+                      <div key={`remaining_zone_${zone.zone}`} className="nx-card" style={{gridColumn:'span 3', padding:'12px 14px'}}>
+                        <div className="nx-card-title" style={{fontSize:15, color:'#e5e7eb', marginBottom:6}}>
+                          {formatZoneLabel(zone.zone)}
+                        </div>
+                        <div className="nx-subtle">Time used: {Math.round(zone.minutes || 0)} min</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  {renderTypePieCard(
+                    'Equipment Type Mix',
+                    'Percent of equipment by type',
+                    equipmentTypeMix
+                  )}
+                  {renderTypePieCard(
+                    'Usage Type Mix',
+                    'Percent of usage by type',
+                    usageTypeMix,
+                    ' min'
+                  )}
+                </div>
                 <div className="nx-analytics-grid" style={{marginBottom:'8px'}}>
                   <div className="nx-card" style={{height:`${DASHBOARD_CONTENT_HEIGHT * 0.65}px`}}>
                     <div className="nx-card-header">
@@ -1570,7 +2280,7 @@ const handleResolveNo = () => {
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{machineOptions.length}</div>
                       </div>
                       <div style={{marginBottom:'12px'}}>
-                        <div className="nx-subtle">Active Today</div>
+                        <div className="nx-subtle">Connected Machines</div>
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#22c55e'}}>{stats.currentOccupancy}</div>
                       </div>
                       <div style={{marginBottom:'12px'}}>
@@ -1581,49 +2291,6 @@ const handleResolveNo = () => {
                 </div>
               </div>
 
-                <div className="nx-card" style={{marginTop:8}}>
-                  <div className="nx-card-header">
-                    <div>
-                      <div className="nx-card-title">Average Machine Usage</div>
-                      <div className="nx-subtle">Per machine</div>
-                    </div>
-                    <NxDropdown
-                      value={selectedAvgRange}
-                      onChange={(v) => setSelectedAvgRange(parseInt(v))}
-                      options={[
-                        { value: 6, label: 'Past 6 Hours' },
-                        { value: 8, label: 'Past 8 Hours' },
-                        { value: 12, label: 'Past 12 Hours' },
-                        { value: 24, label: 'Past 24 Hours' },
-                        { value: 168, label: 'Past Week' },
-                        { value: 720, label: 'Past Month' },
-                        { value: 1000, label: 'All Time' }
-                      ]}
-                      minWidth={150}
-                    />
-                  </div>
-                  <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
-                </div>
-
-                <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
-                  <div className="nx-card-header">
-                    <div>
-                      <div className="nx-card-title">Maintenance Prioritization</div>
-                      <div className="nx-subtle">Equipment ranked by maintenance urgency based on usage patterns</div>
-                    </div>
-                  </div>
-                  <div style={{overflow:'auto', height:'calc(100% - 60px)'}}>
-                    <div className="nx-thead" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', padding:'12px 0'}}>
-                      <div>Equipment</div>
-                      <div>Usage Hours</div>
-                      <div>Last Maintenance</div>
-                      <div>Priority</div>
-                      <div style={{textAlign:'right'}}>Schedule</div>
-                    </div>
-                    {/* Placeholder maintenance data - can be connected to backend later */}
-                    <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Maintenance data coming soon</div>
-                  </div>
-                </div>
               </div>
             ) : activeTab === 'tickets' ? (
               <div className="nx-dashboard-content">
@@ -1647,35 +2314,23 @@ const handleResolveNo = () => {
                 <div className="nx-grid" style={{marginBottom:'0px'}}>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Daily Favorite</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.dailyFav?.machineName || '--'}
-                      <span className="nx-chip">New</span>
-                    </div>
+                    <div className="nx-metric">{stats.dailyFav?.machineName || '--'}</div>
                     <div className="nx-subtle">Today's most used machine</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Peak Hours</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.peakHours}
-                      <span className="nx-chip">+15.8%</span>
-                    </div>
+                    <div className="nx-metric">{stats.peakHours}</div>
                     <div className="nx-subtle">Most active time today</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
-                    <div className="nx-card-header"><span className="nx-card-title">Current Occupancy</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.currentOccupancy}
-                      <span className="nx-chip">Live</span>
-                    </div>
-                    <div className="nx-subtle">Machines in use</div>
+                    <div className="nx-card-header"><span className="nx-card-title">Connected Machines</span></div>
+                    <div className="nx-metric">{stats.currentOccupancy}</div>
+                    <div className="nx-subtle">Machines being tracked</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
-                    <div className="nx-card-header"><span className="nx-card-title">Machine Sensors</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.numDevices}
-                      <span className="nx-chip">Stable</span>
-                    </div>
-                    <div className="nx-subtle">Connected sensors</div>
+                    <div className="nx-card-header"><span className="nx-card-title">Connected Sensors</span></div>
+                    <div className="nx-metric">{stats.numDevices}</div>
+                    <div className="nx-subtle">Sensors online</div>
                   </div>
                 </div>
 
@@ -1732,7 +2387,7 @@ const handleResolveNo = () => {
                           flex:1,
                           height:10,
                           borderRadius:999,
-                          background:'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(239,68,68,0.8) 100%)',
+                          background:'linear-gradient(90deg, rgba(34,197,94,0.82) 0%, rgba(250,204,21,0.82) 35%, rgba(249,115,22,0.82) 70%, rgba(239,68,68,0.82) 100%)',
                           boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset'
                         }} />
                         <span style={{ fontSize:12, color:'#cbd5e1' }}>High</span>
@@ -1809,66 +2464,7 @@ const handleResolveNo = () => {
                   </div>
                 </div>
 
-                {/* Bottom row */}
-                <div className="nx-grid" style={{marginTop:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 12'}}>
-                    <div className="nx-card-header">
-                      <div className="nx-card-title">Equipment Status</div>
-                    </div>
-                    <div className="nx-table-wrap" style={{maxHeight:'280px', overflowY:'auto'}}>
-                      <div className="nx-thead">
-                        <div>Equipment</div>
-                        <div>Status</div>
-                        <div>Last Seen</div>
-                      </div>
-                      {equipmentRows.length === 0 ? (
-                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No equipment data</div>
-                      ) : (
-                        equipmentRows.map((row) => (
-                          <div className="nx-trow" key={row.name}>
-                            <div>{row.name}</div>
-                            <div>
-                              <span className={`nx-badge ${row.status === 'active' ? 'active' : row.status === 'inactive' ? 'inactive' : 'maintenance'}`}>
-                                {statusLabel(row.status)}
-                              </span>
-                            </div>
-                            <div className="nx-subtle">{row.lastSeen}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Space Allocation Suggestions - DISABLED FOR PILOT PROGRAM */}
-                <div className="nx-grid" style={{marginTop:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 12', height:'245px', display:'flex', flexDirection:'column'}}>
-                    <div className="nx-card-header">
-                      <div>
-                        <div className="nx-card-title">Space Allocation Suggestions</div>
-                        <div className="nx-subtle">Based on recent usage/occupancy patterns</div>
-                      </div>
-                    </div>
-                    <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto'}}>
-                      {/* Suggestions display commented out - keeping 245px height for layout */}
-                      {/* {(suggestions || []).filter(s => s.status !== 'dismissed').length === 0 ? (
-                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No suggestions at this time</div>
-                      ) : (
-                        <div style={{width:'100%'}}>
-                          {(suggestions || []).filter(s => s.status !== 'dismissed').map(s => (
-                            <div key={s.id} className="nx-alert-row" style={{gridTemplateColumns:'1fr auto'}}>
-                              <div style={{color:'#e5e7eb'}}>{s.text}</div>
-                              <div style={{display:'flex', gap:8}}>
-                                {s.status !== 'accepted' && <button className="nx-pill primary" onClick={()=>acceptSuggestion(s.id)} aria-label="Accept suggestion">Accept</button>}
-                                <button className="nx-pill" onClick={()=>dismissSuggestion(s.id)} aria-label="Dismiss suggestion">Dismiss</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )} */}
-                    </div>
-                  </div>
-                </div>
+                {renderMachineUsageSearchAndAverage()}
               </div>
             )}
           </div>
