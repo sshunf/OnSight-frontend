@@ -46,6 +46,10 @@ function isExcludedZone(value) {
 }
 
 function normalizeMachineIdValue(value) {
+  if (value && typeof value === 'object') {
+    if (typeof value.$oid === 'string') return value.$oid.trim();
+    if (typeof value.toHexString === 'function') return String(value.toHexString()).trim();
+  }
   const raw = String(value || '').trim();
   const match = raw.match(/^ObjectId\(["']?([0-9a-fA-F]{24})["']?\)$/i);
   return match ? match[1] : raw;
@@ -177,6 +181,21 @@ function getConfiguredZones(mapCfg) {
     : [];
 }
 
+function formatZoneLabel(zoneId) {
+  const zone = String(zoneId || '').trim();
+  if (!zone) return 'Unknown';
+  return /^\d+$/.test(zone) ? `Zone ${zone}` : zone;
+}
+
+function toUsageGroup(machineType) {
+  const raw = String(machineType || '').trim().toLowerCase();
+  if (!raw) return 'strength';
+  if (raw.includes('treadmill') || raw.includes('elliptical') || raw.includes('cardio')) {
+    return 'cardio';
+  }
+  return 'strength';
+}
+
 const HEATMAP_COLOR_STOPS = Object.freeze([
   { t: 0, rgb: [34, 197, 94] },   // green
   { t: 0.35, rgb: [250, 204, 21] }, // yellow
@@ -245,6 +264,11 @@ function TempDashboard() {
   const [analyticsPage, setAnalyticsPage] = useState(0);
   const [analyticsZoneFilterOpen, setAnalyticsZoneFilterOpen] = useState(false);
   const [machineZoneMap, setMachineZoneMap] = useState({});
+  const [machineTypeMap, setMachineTypeMap] = useState({});
+  const [gymMachines, setGymMachines] = useState([]);
+  const [topZonesToday, setTopZonesToday] = useState([]);
+  const [remainingZonesToday, setRemainingZonesToday] = useState([]);
+  const [topZonesTodayLoading, setTopZonesTodayLoading] = useState(false);
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -488,7 +512,7 @@ function TempDashboard() {
       if (optionsResult.status === 'fulfilled') {
         const res = optionsResult.value;
         const data = await res.json();
-        if (Array.isArray(data.machineIds)) {
+        if (res.ok && Array.isArray(data.machineIds)) {
           setMachineOptions(data.machineIds);
           if (!selectedMachine && data.machineIds.length > 0) {
             setSelectedMachine(data.machineIds[0].machineId);
@@ -499,16 +523,26 @@ function TempDashboard() {
       if (machinesResult.status === 'fulfilled') {
         const res = machinesResult.value;
         const data = await res.json();
-        if (Array.isArray(data)) {
+        if (!res.ok) {
+          setMachineZoneMap({});
+          setMachineTypeMap({});
+          setGymMachines([]);
+        } else if (Array.isArray(data)) {
           const nextZoneMap = {};
+          const nextTypeMap = {};
           data.forEach(machine => {
-            const machineId = String(machine?._id || machine?.machineId || '').trim();
+            const machineId = normalizeMachineIdValue(machine?._id || machine?.machineId);
             if (!machineId) return;
             const normalizedZone = normalizeZoneId(machine?.zone) || normalizeZoneId(deriveZoneFromMachineId(machineId));
-            if (!normalizedZone || isExcludedZone(normalizedZone)) return;
-            nextZoneMap[machineId] = normalizedZone;
+            if (normalizedZone && !isExcludedZone(normalizedZone)) {
+              nextZoneMap[machineId] = normalizedZone;
+            }
+            // Source of truth for type grouping: Machine.type from Mongo machines collection.
+            nextTypeMap[machineId] = toUsageGroup(machine?.type);
           });
           setMachineZoneMap(nextZoneMap);
+          setMachineTypeMap(nextTypeMap);
+          setGymMachines(data);
         }
       }
     } catch (err) {
@@ -596,7 +630,11 @@ function TempDashboard() {
   // Build average usage chart from the same filtered rows as Machine Usage Search.
   const buildWeeklyChart = () => {
     if (!avgUsageChartRef.current) return;
-    const ctx = avgUsageChartRef.current.getContext('2d');
+    const canvas = avgUsageChartRef.current;
+    const ctx = canvas.getContext('2d');
+    // Defensive destroy in case a stale Chart.js instance still owns this canvas.
+    const existingCanvasChart = Chart.getChart(canvas);
+    if (existingCanvasChart) existingCanvasChart.destroy();
     if (chartInstancesRef.current.avg) {
       chartInstancesRef.current.avg.destroy();
       chartInstancesRef.current.avg = null;
@@ -655,6 +693,7 @@ function TempDashboard() {
       const normalizedRows = data.result.map((d) => ({
         machineId: String(d.machineId || '').trim(),
         machineName: String(d.machineName || d.machineId || 'Unknown').trim(),
+        type: String(d.type || '').trim(),
         avgMinutes: Number.isFinite(Number(d.avgMinutes)) ? Number(d.avgMinutes) : 0,
       }));
       setAvgUsageRows(normalizedRows);
@@ -773,6 +812,69 @@ function TempDashboard() {
       setAnalyticsData([]);
     } finally {
       setAnalyticsLoading(false);
+    }
+  };
+
+  const fetchTopZonesToday = async () => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) {
+      setTopZonesToday([]);
+      setRemainingZonesToday([]);
+      return;
+    }
+
+    setTopZonesTodayLoading(true);
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const hoursSinceStart = Math.max(1, (now.getTime() - startOfDay.getTime()) / (60 * 60 * 1000));
+
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${hoursSinceStart.toFixed(3)}`);
+      const data = await res.json();
+      if (!res.ok || !data) {
+        setTopZonesToday([]);
+        setRemainingZonesToday([]);
+        return;
+      }
+
+      const aggregated = {};
+      (data.machines || []).forEach((m) => {
+        const derivedZone = deriveZoneFromMachineId(m.machineId);
+        const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
+        if (!zoneId || zoneId === 'unknown' || isExcludedZone(zoneId)) return;
+        const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
+        const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        aggregated[zoneId] = (aggregated[zoneId] || 0) + minutes;
+      });
+
+      (data.zones || []).forEach((z) => {
+        const zoneId = normalizeZoneId(z.zone) || 'unknown';
+        if (!zoneId || zoneId === 'unknown' || isExcludedZone(zoneId)) return;
+        const minutes = Number(z.minutes || 0);
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        aggregated[zoneId] = (aggregated[zoneId] || 0) + minutes;
+      });
+
+      const ranked = Object.entries(aggregated)
+        .map(([zone, minutes]) => ({ zone, minutes }))
+        .sort((a, b) => b.minutes - a.minutes);
+
+      const top3 = ranked.slice(0, 3);
+      const remaining = ranked.slice(3);
+
+      const padded = [...top3];
+      while (padded.length < 3) {
+        padded.push({ zone: `--${padded.length + 1}`, minutes: 0, empty: true });
+      }
+      setTopZonesToday(padded);
+      setRemainingZonesToday(remaining);
+    } catch (e) {
+      console.error('Failed to fetch top zones today:', e);
+      setTopZonesToday([]);
+      setRemainingZonesToday([]);
+    } finally {
+      setTopZonesTodayLoading(false);
     }
   };
 
@@ -1072,6 +1174,114 @@ function TempDashboard() {
       .map(zone => ({ value: zone, label: /^\d+$/.test(zone) ? `Zone ${zone}` : zone }));
   }, [analyticsZoneLookup]);
 
+  const equipmentTypeMix = useMemo(() => {
+    let cardio = 0;
+    let strength = 0;
+    if (Array.isArray(gymMachines) && gymMachines.length) {
+      gymMachines.forEach((machine) => {
+        const typeGroup = toUsageGroup(machine?.type);
+        if (typeGroup === 'cardio') cardio += 1;
+        else strength += 1;
+      });
+      return { cardio, strength };
+    }
+    Object.values(machineTypeMap || {}).forEach(typeGroup => {
+      if (typeGroup === 'cardio') cardio += 1;
+      else strength += 1;
+    });
+    return { cardio, strength };
+  }, [gymMachines, machineTypeMap]);
+
+  const usageTypeMix = useMemo(() => {
+    let cardio = 0;
+    let strength = 0;
+
+    if (Array.isArray(analyticsData) && analyticsData.length) {
+      analyticsData.forEach((m) => {
+        const machineId = normalizeMachineIdValue(m?.machineId);
+        const usage = (m?.days || []).reduce((acc, d) => acc + (Number(d?.avgMinutes) || 0), 0);
+        if (!Number.isFinite(usage) || usage <= 0) return;
+        const group = machineTypeMap[machineId] || toUsageGroup(m?.type);
+        if (group === 'cardio') cardio += usage;
+        else strength += usage;
+      });
+      return { cardio, strength };
+    }
+
+    // Fallback if DOW analytics has not loaded yet.
+    (avgUsageRows || []).forEach((m) => {
+      const machineId = normalizeMachineIdValue(m?.machineId);
+      const usage = Number(m?.avgMinutes) || 0;
+      if (usage <= 0) return;
+      const group = machineTypeMap[machineId] || toUsageGroup(m?.type);
+      if (group === 'cardio') cardio += usage;
+      else strength += usage;
+    });
+    return { cardio, strength };
+  }, [analyticsData, avgUsageRows, machineTypeMap]);
+
+  const renderTypePieCard = (title, subtitle, mix, valueSuffix = '') => {
+    const cardio = Number(mix?.cardio) || 0;
+    const strength = Number(mix?.strength) || 0;
+    const total = cardio + strength;
+    const cardioPct = total > 0 ? (cardio / total) * 100 : 0;
+    const strengthPct = total > 0 ? (strength / total) * 100 : 0;
+    const pieBackground = `conic-gradient(#22c55e 0deg ${(cardioPct / 100) * 360}deg, #f97316 ${(cardioPct / 100) * 360}deg 360deg)`;
+
+    return (
+      <div className="nx-card" style={{gridColumn:'span 6'}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">{title}</div>
+            <div className="nx-subtle">{subtitle}</div>
+          </div>
+        </div>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap'}}>
+          <div style={{
+            width: 150,
+            height: 150,
+            borderRadius: '50%',
+            background: pieBackground,
+            position:'relative',
+            boxShadow:'0 0 0 1px rgba(255,255,255,0.1) inset'
+          }}>
+            <div style={{
+              position:'absolute',
+              inset:24,
+              borderRadius:'50%',
+              background:'#111119',
+              border:'1px solid #1d1d29',
+              display:'flex',
+              alignItems:'center',
+              justifyContent:'center',
+              color:'#e5e7eb',
+              fontSize:13,
+              fontWeight:700
+            }}>
+              {Math.round(cardioPct)} / {Math.round(strengthPct)}
+            </div>
+          </div>
+          <div style={{display:'grid', gap:10, minWidth:220}}>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <span style={{width:10, height:10, borderRadius:'50%', background:'#22c55e', display:'inline-block'}} />
+                <span style={{color:'#e5e7eb'}}>Cardio</span>
+              </div>
+              <div className="nx-subtle">{cardio.toFixed(valueSuffix ? 1 : 0)}{valueSuffix} ({cardioPct.toFixed(1)}%)</div>
+            </div>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <span style={{width:10, height:10, borderRadius:'50%', background:'#f97316', display:'inline-block'}} />
+                <span style={{color:'#e5e7eb'}}>Strength</span>
+              </div>
+              <div className="nx-subtle">{strength.toFixed(valueSuffix ? 1 : 0)}{valueSuffix} ({strengthPct.toFixed(1)}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const analyticsRankTotalPages = useMemo(() => (
     Math.max(1, Math.ceil((analyticsRankRows.length || 0) / ANALYTICS_RANK_PAGE_SIZE))
   ), [analyticsRankRows.length, ANALYTICS_RANK_PAGE_SIZE]);
@@ -1090,9 +1300,14 @@ function TempDashboard() {
     if (activeTab !== 'analytics') return;
     if (!analyticsChartRef.current || processedAnalyticsData.length === 0) return;
     
-    const ctx = analyticsChartRef.current.getContext('2d');
+    const canvas = analyticsChartRef.current;
+    const ctx = canvas.getContext('2d');
+    // Defensive destroy in case Chart.js still has this canvas registered.
+    const existingCanvasChart = Chart.getChart(canvas);
+    if (existingCanvasChart) existingCanvasChart.destroy();
     if (chartInstancesRef.current.analytics) {
       chartInstancesRef.current.analytics.destroy();
+      chartInstancesRef.current.analytics = null;
     }
 
     const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -1164,7 +1379,12 @@ function TempDashboard() {
       },
     });
 
-    return () => { chartInstancesRef.current.analytics?.destroy(); };
+    return () => {
+      chartInstancesRef.current.analytics?.destroy();
+      chartInstancesRef.current.analytics = null;
+      const lingering = Chart.getChart(canvas);
+      if (lingering) lingering.destroy();
+    };
   }, [activeTab, processedAnalyticsData, selectedTopN]);
 
   // Initialize data on mount and user load
@@ -1190,6 +1410,14 @@ function TempDashboard() {
     if (!user || activeTab !== 'dashboard') return;
     fetchUsageSearchRows();
   }, [user, activeTab, selectedSearchRange]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'analytics') return;
+    fetchMachineOptions();
+    fetchTopZonesToday();
+    const id = setInterval(fetchTopZonesToday, 60000);
+    return () => clearInterval(id);
+  }, [user, activeTab]);
 
   useEffect(() => {
     if (activeTab !== 'dashboard') return;
@@ -1939,6 +2167,77 @@ const handleResolveNo = () => {
               </div>
             ) : activeTab === 'analytics' ? (
               <div className="nx-dashboard-content">
+                <div className="nx-card" style={{marginBottom:'8px'}}>
+                  <div className="nx-card-header" style={{alignItems:'baseline'}}>
+                    <div style={{fontSize:'26px', fontWeight:800, color:'#ffffff', lineHeight:1.1}}>Top 3 Zones Today</div>
+                    <div className="nx-subtle">Usage from midnight to now</div>
+                  </div>
+                  <div style={{minHeight:220, display:'flex', alignItems:'flex-end', justifyContent:'space-around', gap:20, padding:'10px 8px 4px'}}>
+                    {topZonesTodayLoading ? (
+                      <div className="nx-subtle" style={{padding:'20px'}}>Loading zone usage...</div>
+                    ) : topZonesToday.length === 0 ? (
+                      <div className="nx-subtle" style={{padding:'20px'}}>No zone usage data available for today.</div>
+                    ) : (
+                      (() => {
+                        const maxMinutes = Math.max(1, ...topZonesToday.map(z => Number(z.minutes) || 0));
+                        const barColors = ['rgba(34,197,94,0.9)', 'rgba(249,115,22,0.9)', 'rgba(239,68,68,0.9)'];
+                        return topZonesToday.map((zone, idx) => {
+                          const ratio = (Number(zone.minutes) || 0) / maxMinutes;
+                          const barHeight = Math.max(18, Math.round(170 * ratio));
+                          const label = zone.empty ? '--' : formatZoneLabel(zone.zone);
+                          return (
+                            <div key={`top_zone_${idx}_${zone.zone}`} style={{display:'flex', flexDirection:'column', alignItems:'center', minWidth:180}}>
+                              <div style={{fontSize:14, fontWeight:700, color:'#e5e7eb', marginBottom:8}}>{label}</div>
+                              <div style={{display:'flex', alignItems:'flex-end', gap:10, minHeight:190}}>
+                                <div style={{
+                                  width:58,
+                                  height: `${barHeight}px`,
+                                  borderRadius:'10px 10px 4px 4px',
+                                  background: barColors[idx % barColors.length],
+                                  boxShadow:'0 0 0 1px rgba(255,255,255,0.12) inset'
+                                }} />
+                                <div className="nx-subtle" style={{fontWeight:600, color:'#cbd5e1'}}>{Math.round(zone.minutes || 0)} min</div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
+                    )}
+                  </div>
+                </div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  {topZonesTodayLoading ? (
+                    <div className="nx-card" style={{gridColumn:'span 12'}}>
+                      <div className="nx-subtle" style={{padding:'8px 4px'}}>Loading remaining zones...</div>
+                    </div>
+                  ) : remainingZonesToday.length === 0 ? (
+                    <div className="nx-card" style={{gridColumn:'span 12'}}>
+                      <div className="nx-subtle" style={{padding:'8px 4px'}}>No additional zones to show for today.</div>
+                    </div>
+                  ) : (
+                    remainingZonesToday.map((zone) => (
+                      <div key={`remaining_zone_${zone.zone}`} className="nx-card" style={{gridColumn:'span 3', padding:'12px 14px'}}>
+                        <div className="nx-card-title" style={{fontSize:15, color:'#e5e7eb', marginBottom:6}}>
+                          {formatZoneLabel(zone.zone)}
+                        </div>
+                        <div className="nx-subtle">Time used: {Math.round(zone.minutes || 0)} min</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  {renderTypePieCard(
+                    'Equipment Type Mix',
+                    'Percent of equipment by type',
+                    equipmentTypeMix
+                  )}
+                  {renderTypePieCard(
+                    'Usage Type Mix',
+                    'Percent of usage by type',
+                    usageTypeMix,
+                    ' min'
+                  )}
+                </div>
                 <div className="nx-analytics-grid" style={{marginBottom:'8px'}}>
                   <div className="nx-card" style={{height:`${DASHBOARD_CONTENT_HEIGHT * 0.65}px`}}>
                     <div className="nx-card-header">
