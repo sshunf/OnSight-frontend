@@ -145,12 +145,16 @@
       const sameOriginBase = String(window.location.origin || '').replace(/\/$/, '');
       const host = String(window.location.hostname || '').toLowerCase();
       const isLocalDevHost = host === 'localhost' || host === '127.0.0.1';
+      const primaryBackendBase = 'https://onsight-backend-b3e2hdbgcsfudyfx.eastus2-01.azurewebsites.net';
+      const legacyBackendBase = 'https://onsight-backend.azurewebsites.net';
       const guessedBackendBase = host.includes('stage')
         ? 'https://onsight-backend-stage.azurewebsites.net'
-        : 'https://onsight-backend.azurewebsites.net';
+        : primaryBackendBase;
       const candidateBases = [
         normalizedApiBaseParam,
         guessedBackendBase,
+        primaryBackendBase,
+        legacyBackendBase,
         ...(isLocalDevHost ? [sameOriginBase] : []),
       ].filter(Boolean);
       const submitEndpoints = Array.from(new Set(candidateBases)).map(base => `${base}/api/maintenance/member-report`);
