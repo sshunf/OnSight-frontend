@@ -144,13 +144,14 @@
       const normalizedApiBaseParam = String(apiBaseParam || '').replace(/\/$/, '');
       const sameOriginBase = String(window.location.origin || '').replace(/\/$/, '');
       const host = String(window.location.hostname || '').toLowerCase();
+      const isLocalDevHost = host === 'localhost' || host === '127.0.0.1';
       const guessedBackendBase = host.includes('stage')
         ? 'https://onsight-backend-stage.azurewebsites.net'
         : 'https://onsight-backend.azurewebsites.net';
       const candidateBases = [
         normalizedApiBaseParam,
-        sameOriginBase,
         guessedBackendBase,
+        ...(isLocalDevHost ? [sameOriginBase] : []),
       ].filter(Boolean);
       const submitEndpoints = Array.from(new Set(candidateBases)).map(base => `${base}/api/maintenance/member-report`);
       if (!gymId) {
