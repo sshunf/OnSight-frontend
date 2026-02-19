@@ -140,6 +140,19 @@
       const form = document.getElementById('report-form');
       const intro = document.getElementById('intro');
       const zone = params.get('zone');
+      const apiBaseParam = params.get('apiBase') || params.get('backendUrl') || '';
+      const normalizedApiBaseParam = String(apiBaseParam || '').replace(/\/$/, '');
+      const sameOriginBase = String(window.location.origin || '').replace(/\/$/, '');
+      const host = String(window.location.hostname || '').toLowerCase();
+      const guessedBackendBase = host.includes('stage')
+        ? 'https://onsight-backend-stage.azurewebsites.net'
+        : 'https://onsight-backend.azurewebsites.net';
+      const candidateBases = [
+        normalizedApiBaseParam,
+        sameOriginBase,
+        guessedBackendBase,
+      ].filter(Boolean);
+      const submitEndpoints = Array.from(new Set(candidateBases)).map(base => `${base}/api/maintenance/member-report`);
       if (!gymId) {
         statusEl.textContent = 'Missing gymId. Ask staff for a new QR code.';
         statusEl.classList.remove('hidden');
@@ -178,14 +191,28 @@
           zone: zone || undefined
         };
         try {
-          const res = await fetch('/api/maintenance/member-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok || data.error) {
-            throw new Error(data.error || `Request failed (${res.status})`);
+          let success = false;
+          let lastError = null;
+          for (const endpoint of submitEndpoints) {
+            try {
+              const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || data.error) {
+                lastError = new Error(data.error || `Request failed (${res.status})`);
+                continue;
+              }
+              success = true;
+              break;
+            } catch (requestErr) {
+              lastError = requestErr;
+            }
+          }
+          if (!success) {
+            throw lastError || new Error('Could not submit report.');
           }
           statusEl.textContent = 'Thank you. Your report was submitted.';
           statusEl.classList.remove('hidden');

@@ -369,9 +369,11 @@ function TempDashboard() {
   const shouldShowNoFacilityData = useMemo(() => {
     if (facilityLoading) return false;
     if (!activeZoneMinutes.length) return false;
+    // If the API returned explicit connectivity state, prefer zone-level rendering over empty-state text.
+    if ((facilityZones || []).some(z => typeof z?.isDisconnected === 'boolean')) return false;
     const hasAnyMachineRows = Array.isArray(facilityMachines) && facilityMachines.length > 0;
     return !hasAnyMachineRows && activeZoneMinutes.every(z => (z.minutes || 0) === 0);
-  }, [facilityLoading, activeZoneMinutes, facilityMachines]);
+  }, [facilityLoading, activeZoneMinutes, facilityMachines, facilityZones]);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
@@ -901,9 +903,16 @@ function TempDashboard() {
         });
         setMapConfig(fallbackMapCfg);
         const configuredZones = getConfiguredZones(fallbackMapCfg);
-        const zonesFromConfig = configuredZones.map(z => ({ zone: z.id, minutes: 0 }));
+        const zonesFromConfig = configuredZones.map(z => ({
+          zone: z.id,
+          label: z.label || z.id,
+          minutes: 0,
+          lastSeenAt: null,
+          isDisconnected: false,
+        }));
         const aggregated = {};
-        // Aggregate by zone directly from backend
+        const zoneInfoMap = new Map();
+        // Aggregate by zone directly from backend (usage for selected range)
         (data.machines || []).forEach(m => {
           const derivedZone = deriveZoneFromMachineId(m.machineId);
           const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
@@ -913,21 +922,33 @@ function TempDashboard() {
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
           aggregated[zoneId] += minutes;
         });
-        // Merge with any zone-level minutes provided directly
+        // Prefer zone-level values from API when present (includes connectivity state)
         (data.zones || []).forEach(z => {
           const zoneId = normalizeZoneId(z.zone) || 'unknown';
           if (isExcludedZone(zoneId)) return;
-          const minutes = z.minutes || 0;
+          zoneInfoMap.set(zoneId, {
+            zone: zoneId,
+            label: z.label || formatZoneLabel(zoneId),
+            minutes: Number(z.minutes || 0),
+            lastSeenAt: z.lastSeenAt || null,
+            isDisconnected: typeof z.isDisconnected === 'boolean' ? z.isDisconnected : !z.lastSeenAt,
+          });
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
-          aggregated[zoneId] += minutes;
+          aggregated[zoneId] += Number(z.minutes || 0);
         });
         const mergedZones = configuredZones.map(z => ({
           zone: z.id,
-          minutes: aggregated[z.id] || 0,
+          label: z.label || z.id,
+          minutes: zoneInfoMap.get(String(z.id))?.minutes ?? aggregated[z.id] ?? 0,
+          lastSeenAt: zoneInfoMap.get(String(z.id))?.lastSeenAt || null,
+          isDisconnected: zoneInfoMap.get(String(z.id))?.isDisconnected ?? false,
         }));
         const fallbackZones = (data.zones || []).map(z => ({
           zone: normalizeZoneId(z.zone) || 'unknown',
-          minutes: z.minutes || 0,
+          label: z.label || formatZoneLabel(z.zone),
+          minutes: Number(z.minutes || 0),
+          lastSeenAt: z.lastSeenAt || null,
+          isDisconnected: typeof z.isDisconnected === 'boolean' ? z.isDisconnected : !z.lastSeenAt,
         })).filter(z => !isExcludedZone(z.zone));
         const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
         setFacilityZones(zonesToSet);
@@ -942,13 +963,25 @@ function TempDashboard() {
         }).filter(m => !isExcludedZone(m.zone));
         setFacilityMachines(normalizedMachines);
       } else {
-        const zeroZones = getConfiguredZones(mapConfig).map(z => ({ zone: z.id, minutes: 0 }));
+        const zeroZones = getConfiguredZones(mapConfig).map(z => ({
+          zone: z.id,
+          label: z.label || z.id,
+          minutes: 0,
+          lastSeenAt: null,
+          isDisconnected: false,
+        }));
         setFacilityZones(zeroZones);
         setFacilityMachines([]);
       }
     } catch (e) {
       console.error('Failed to fetch facility heatmap:', e);
-      const zeroZones = getConfiguredZones(mapConfig).map(z => ({ zone: z.id, minutes: 0 }));
+      const zeroZones = getConfiguredZones(mapConfig).map(z => ({
+        zone: z.id,
+        label: z.label || z.id,
+        minutes: 0,
+        lastSeenAt: null,
+        isDisconnected: false,
+      }));
       setFacilityZones(zeroZones);
       setFacilityMachines([]);
     } finally {
@@ -956,7 +989,10 @@ function TempDashboard() {
     }
   };
 
-  const getZoneColor = (minutes, maxMinutes) => {
+  const getZoneColor = (minutes, maxMinutes, disconnected = false) => {
+    if (disconnected) {
+      return 'rgba(148, 163, 184, 0.72)';
+    }
     const denom = Math.max(1, maxMinutes);
     const t = Math.min(1, minutes / denom);
     const [r, g, b] = interpolateHeatmapColor(t);
@@ -993,7 +1029,7 @@ function TempDashboard() {
     svgDoc.querySelectorAll('*').forEach(node => {
       node.style.pointerEvents = 'none';
     });
-    svgDoc.querySelectorAll('[id^="onsight-label-"]').forEach(el => el.remove());
+    svgDoc.querySelectorAll('[id^="onsight-label-"], [id^="onsight-status-"]').forEach(el => el.remove());
 
     zoneElements.forEach(el => {
       const rawId = String(el?.id || '').trim();
@@ -1005,11 +1041,12 @@ function TempDashboard() {
         String(normalizeZoneId(fz?.zone)) === String(resolvedZoneId)
       )) || {};
       const minutes = Number(entry?.minutes) || 0;
-      const color = getZoneColor(minutes, maxMinutes);
+      const disconnected = Boolean(entry?.isDisconnected);
+      const color = getZoneColor(minutes, maxMinutes, disconnected);
       const selected = String(selectedZone) === String(resolvedZoneId);
 
       el.style.fill = color;
-      el.style.stroke = selected ? '#facc15' : '#000000';
+      el.style.stroke = selected ? '#facc15' : (disconnected ? '#64748b' : '#000000');
       el.style.strokeWidth = selected ? '3' : '1';
       el.style.cursor = 'pointer';
       el.style.pointerEvents = 'all';
@@ -1021,7 +1058,46 @@ function TempDashboard() {
         titleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'title');
         el.prepend(titleEl);
       }
-      titleEl.textContent = `${mappedZone?.label || resolvedZoneId}: ${minutes.toFixed(1)} min`;
+      const statusText = disconnected ? 'Disconnected (no data in past 2h)' : 'Connected';
+      const lastSeenText = entry?.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString() : 'N/A';
+      titleEl.textContent = `${mappedZone?.label || resolvedZoneId}: ${minutes.toFixed(1)} min • ${statusText} • Last seen: ${lastSeenText}`;
+
+      if (disconnected) {
+        try {
+          const bbox = el.getBBox();
+          const radius = Math.max(8, Math.min(14, Math.min(bbox.width, bbox.height) * 0.12));
+          const cx = bbox.x + bbox.width - radius - 4;
+          const cy = bbox.y + radius + 4;
+
+          const marker = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+          marker.setAttribute('id', `onsight-status-${resolvedZoneId}`);
+          marker.style.pointerEvents = 'none';
+
+          const bubble = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          bubble.setAttribute('cx', String(cx));
+          bubble.setAttribute('cy', String(cy));
+          bubble.setAttribute('r', String(radius));
+          bubble.setAttribute('fill', '#334155');
+          bubble.setAttribute('stroke', '#cbd5e1');
+          bubble.setAttribute('stroke-width', '1.5');
+
+          const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', String(cx));
+          text.setAttribute('y', String(cy + 0.5));
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
+          text.setAttribute('font-size', String(Math.max(10, radius * 1.2)));
+          text.setAttribute('font-weight', '700');
+          text.setAttribute('fill', '#f8fafc');
+          text.textContent = '!';
+
+          marker.appendChild(bubble);
+          marker.appendChild(text);
+          svgRoot.appendChild(marker);
+        } catch (e) {
+          // Ignore SVG marker drawing issues for malformed paths; zone remains styled.
+        }
+      }
     });
   };
 
@@ -2391,6 +2467,23 @@ const handleResolveNo = () => {
                           boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset'
                         }} />
                         <span style={{ fontSize:12, color:'#cbd5e1' }}>High</span>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+                        <span style={{ width:10, height:10, borderRadius:'50%', background:'rgba(148, 163, 184, 0.82)', display:'inline-block' }} />
+                        <span style={{ fontSize:12, color:'#cbd5e1' }}>Disconnected</span>
+                        <span style={{
+                          width:16,
+                          height:16,
+                          borderRadius:'50%',
+                          display:'inline-flex',
+                          alignItems:'center',
+                          justifyContent:'center',
+                          fontSize:11,
+                          fontWeight:700,
+                          color:'#f8fafc',
+                          background:'#334155',
+                          border:'1px solid #cbd5e1'
+                        }}>!</span>
                       </div>
                     </div>
                     {facilityLoading && (
