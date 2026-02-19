@@ -107,6 +107,26 @@
       margin-bottom: 8px;
     }
     .hidden { display: none; }
+    .sticker-note {
+      margin: 6px 0 2px;
+      font-size: 14px;
+      color: #e5e7eb;
+      font-weight: 400;
+      line-height: 1.35;
+      text-align: center;
+    }
+    .sticker-example-wrap {
+      display: flex;
+      justify-content: center;
+    }
+    .sticker-example {
+      width: min(100%, 170px);
+      height: auto;
+      display: block;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+    }
   </style>
 </head>
 <body>
@@ -116,9 +136,13 @@
     <h1>Report an Equipment Issue</h1>
     <p id="intro">Scan and submit a quick report. This will be routed directly to the gym's maintenance queue.</p>
     <form id="report-form">
+      <div class="sticker-note"><strong>Before you submit:</strong> Look for the small OnSight sticker on the machine (example: Machine 1).</div>
+      <div class="sticker-example-wrap">
+        <img class="sticker-example" src="/machine-sticker-example.png" alt="Example sticker showing OnSight and Machine 1" />
+      </div>
       <div>
-        <label for="machineName">Equipment name or location (optional)</label>
-        <input id="machineName" name="machineName" type="text" placeholder="e.g., Treadmill #4 by the windows">
+        <label for="machineName">Machine name from sticker</label>
+        <input id="machineName" name="machineName" type="text" placeholder="e.g., Machine 1">
       </div>
       <div>
         <label for="description">What’s wrong? *</label>
