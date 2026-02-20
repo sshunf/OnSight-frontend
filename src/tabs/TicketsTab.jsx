@@ -657,6 +657,62 @@ function extractZones(mapCfg) {
     }
   }
 
+  async function reopenTicket(ticketId) {
+    setErrorMsg('');
+
+    const gymId = localStorage.getItem('gymId');
+    const isLocalTicket = String(ticketId || '').startsWith('local_');
+
+    if (isLocalTicket) {
+      const localStorageKey = `tickets_${gymId}`;
+      try {
+        const localTicketsRaw = localStorage.getItem(localStorageKey);
+        const localTickets = localTicketsRaw ? JSON.parse(localTicketsRaw) : [];
+        const updatedTickets = localTickets.map(t => {
+          if (t._id === ticketId) {
+            return { ...t, status: 'open', closedAt: null };
+          }
+          return t;
+        });
+        localStorage.setItem(localStorageKey, JSON.stringify(updatedTickets));
+        setTickets(prev => prev.map(t => (t._id === ticketId ? { ...t, status: 'open', closedAt: null } : t)));
+        return;
+      } catch (e) {
+        console.error('Failed to reopen local ticket:', e);
+        setErrorMsg('Failed to reopen ticket');
+        return;
+      }
+    }
+
+    if (!backendURL) {
+      const updatedTickets = tickets.map(t => {
+        if (t._id === ticketId) {
+          return { ...t, status: 'open', closedAt: null };
+        }
+        return t;
+      });
+      setTickets(updatedTickets);
+      writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
+      return;
+    }
+
+    try {
+      const res = await fetch(`${backendURL}/api/maintenance/tickets/${ticketId}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gymId })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Reopen HTTP ${res.status}`);
+      }
+      await fetchStatus();
+    } catch (e) {
+      console.error('Reopen failed', e);
+      setErrorMsg(e.message);
+    }
+  }
+
   function toggleChecklistItem(ticketId, idx) {
     const updatedTickets = tickets.map(t => {
       if (t._id !== ticketId) return t;
@@ -1387,6 +1443,15 @@ function extractZones(mapCfg) {
                 {t.status === 'open' && (
                   <button className="nx-pill primary" onClick={() => setResolveConfirmTicket(t)} style={{ whiteSpace: 'nowrap' }}>Resolve</button>
                 )}
+                {t.status === 'closed' && (
+                  <button
+                    className="nx-pill"
+                    onClick={() => reopenTicket(t._id)}
+                    style={{ whiteSpace: 'nowrap', borderColor: 'rgba(34,197,94,0.45)', color: '#86efac' }}
+                  >
+                    Undo
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -1578,6 +1643,19 @@ function extractZones(mapCfg) {
                   }}
                 >
                   Resolve Ticket
+                </button>
+              )}
+              {active.status === 'closed' && (
+                <button
+                  className="tk-btn"
+                  onClick={() => {
+                    const ticketId = active._id;
+                    setActive(null);
+                    reopenTicket(ticketId);
+                  }}
+                  style={{ borderColor: 'rgba(34,197,94,0.45)', color: '#86efac' }}
+                >
+                  Undo Resolve
                 </button>
               )}
             </div>
