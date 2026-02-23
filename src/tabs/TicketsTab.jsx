@@ -201,6 +201,7 @@ export default function TicketsTab() {
   const [editingTech, setEditingTech] = useState(null);
   const [techForm, setTechForm] = useState({ name: '', email: '', isPreventativeDefault: false, active: true });
   const [resolveConfirmTicket, setResolveConfirmTicket] = useState(null);
+  const [resolveNote, setResolveNote] = useState('');
   const [memberReportUrl, setMemberReportUrl] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [qrError, setQrError] = useState('');
@@ -563,12 +564,14 @@ function extractZones(mapCfg) {
     }
   }
 
-  async function resolveTicket(ticketId) {
+  async function resolveTicket(ticketId, resolutionNote = '') {
     setErrorMsg('');
     setResolveConfirmTicket(null);
+    setResolveNote('');
     
     const ticket = tickets.find(t => t._id === ticketId);
     const gymId = localStorage.getItem('gymId');
+    const normalizedResolutionNote = String(resolutionNote || '').trim();
     
     // Check if this is a localStorage-only ticket (created from alert)
     const isLocalTicket = ticketId.startsWith('local_');
@@ -583,7 +586,12 @@ function extractZones(mapCfg) {
         // Update the ticket status to closed
         const updatedTickets = localTickets.map(t => {
           if (t._id === ticketId) {
-            return { ...t, status: 'closed', closedAt: new Date().toISOString() };
+            return {
+              ...t,
+              status: 'closed',
+              closedAt: new Date().toISOString(),
+              resolutionNote: normalizedResolutionNote || undefined
+            };
           }
           return t;
         });
@@ -594,7 +602,12 @@ function extractZones(mapCfg) {
         // Update state to reflect the change
         setTickets(tickets.map(t => {
           if (t._id === ticketId) {
-            return { ...t, status: 'closed', closedAt: new Date().toISOString() };
+            return {
+              ...t,
+              status: 'closed',
+              closedAt: new Date().toISOString(),
+              resolutionNote: normalizedResolutionNote || undefined
+            };
           }
           return t;
         }));
@@ -612,7 +625,12 @@ function extractZones(mapCfg) {
     if (!backendURL) {
       const updatedTickets = tickets.map(t => {
         if (t._id === ticketId) {
-          return { ...t, status: 'closed', closedAt: new Date().toISOString() };
+          return {
+            ...t,
+            status: 'closed',
+            closedAt: new Date().toISOString(),
+            resolutionNote: normalizedResolutionNote || undefined
+          };
         }
         return t;
       });
@@ -634,12 +652,25 @@ function extractZones(mapCfg) {
           .filter(Boolean);
       }
       
-      console.log('Closing ticket:', ticketId, 'for gym:', gymId, 'with checklist updates:', checklistUpdates);
+      console.log(
+        'Closing ticket:',
+        ticketId,
+        'for gym:',
+        gymId,
+        'with checklist updates:',
+        checklistUpdates,
+        'resolutionNote:',
+        normalizedResolutionNote ? 'provided' : 'empty'
+      );
       
       const res = await fetch(`${backendURL}/api/maintenance/tickets/${ticketId}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checklistUpdates, gymId })
+        body: JSON.stringify({
+          checklistUpdates,
+          gymId,
+          resolutionNote: normalizedResolutionNote || undefined
+        })
       });
       
       if (!res.ok) {
@@ -670,12 +701,14 @@ function extractZones(mapCfg) {
         const localTickets = localTicketsRaw ? JSON.parse(localTicketsRaw) : [];
         const updatedTickets = localTickets.map(t => {
           if (t._id === ticketId) {
-            return { ...t, status: 'open', closedAt: null };
+            return { ...t, status: 'open', closedAt: null, resolutionNote: undefined };
           }
           return t;
         });
         localStorage.setItem(localStorageKey, JSON.stringify(updatedTickets));
-        setTickets(prev => prev.map(t => (t._id === ticketId ? { ...t, status: 'open', closedAt: null } : t)));
+        setTickets(prev => prev.map(t => (
+          t._id === ticketId ? { ...t, status: 'open', closedAt: null, resolutionNote: undefined } : t
+        )));
         return;
       } catch (e) {
         console.error('Failed to reopen local ticket:', e);
@@ -687,7 +720,7 @@ function extractZones(mapCfg) {
     if (!backendURL) {
       const updatedTickets = tickets.map(t => {
         if (t._id === ticketId) {
-          return { ...t, status: 'open', closedAt: null };
+          return { ...t, status: 'open', closedAt: null, resolutionNote: undefined };
         }
         return t;
       });
@@ -858,6 +891,12 @@ function extractZones(mapCfg) {
     };
     document.addEventListener('keydown', trap);
     return () => document.removeEventListener('keydown', trap);
+  }, [resolveConfirmTicket]);
+
+  useEffect(() => {
+    if (!resolveConfirmTicket) {
+      setResolveNote('');
+    }
   }, [resolveConfirmTicket]);
 
   // Lock body scroll when any modal is open
@@ -1273,7 +1312,35 @@ function extractZones(mapCfg) {
           word-break: break-word;
         }
         .resolve-body {
-          padding: 0 24px;
+          padding: 0 24px 12px;
+        }
+        .resolve-note-label {
+          display: block;
+          color: #cbd5e1;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .resolve-note-input {
+          width: 100%;
+          min-height: 92px;
+          border-radius: 10px;
+          border: 1px solid #2a2a38;
+          background: #161624;
+          color: #e5e7eb;
+          padding: 10px 12px;
+          resize: vertical;
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .resolve-note-input:focus {
+          outline: 2px solid rgba(124, 58, 237, 0.5);
+          outline-offset: 1px;
+        }
+        .resolve-note-helper {
+          color: #6b7280;
+          font-size: 12px;
+          margin-top: 6px;
         }
         .resolve-footer {
           padding: 16px 24px;
@@ -1441,7 +1508,16 @@ function extractZones(mapCfg) {
               <div className="tk-ticket-actions">
                 <button className="nx-pill" onClick={() => setActive(t)} style={{ whiteSpace: 'nowrap' }}>Details</button>
                 {t.status === 'open' && (
-                  <button className="nx-pill primary" onClick={() => setResolveConfirmTicket(t)} style={{ whiteSpace: 'nowrap' }}>Resolve</button>
+                  <button
+                    className="nx-pill primary"
+                    onClick={() => {
+                      setResolveNote('');
+                      setResolveConfirmTicket(t);
+                    }}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Resolve
+                  </button>
                 )}
                 {t.status === 'closed' && (
                   <button
@@ -1588,6 +1664,11 @@ function extractZones(mapCfg) {
                       <strong style={{ color: '#e5e7eb' }}>Maintenance Interval:</strong> {active.ruleInterval} {active.ruleUnit || ''}
                     </div>
                   )}
+                  {active.status === 'closed' && active.resolutionNote && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong style={{ color: '#e5e7eb' }}>Resolution Note:</strong> {active.resolutionNote}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1639,6 +1720,7 @@ function extractZones(mapCfg) {
                   className="tk-btn primary" 
                   onClick={() => {
                     setActive(null);
+                    setResolveNote('');
                     setResolveConfirmTicket(active);
                   }}
                 >
@@ -1866,9 +1948,22 @@ function extractZones(mapCfg) {
 
       {/* Resolve Confirmation Modal */}
       {resolveConfirmTicket && (
-        <div className="nx-overlay" onClick={() => setResolveConfirmTicket(null)}>
+        <div
+          className="nx-overlay"
+          onClick={() => {
+            setResolveConfirmTicket(null);
+            setResolveNote('');
+          }}
+        >
           <div ref={resolveModalRef} className="resolve-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="resolve-close" onClick={() => setResolveConfirmTicket(null)} aria-label="Close">
+            <button
+              className="resolve-close"
+              onClick={() => {
+                setResolveConfirmTicket(null);
+                setResolveNote('');
+              }}
+              aria-label="Close"
+            >
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
               </svg>
@@ -1915,19 +2010,34 @@ function extractZones(mapCfg) {
               </div>
             </div>
             <div className="resolve-body">
-              {/* Additional confirmation message could go here */}
+              <label className="resolve-note-label" htmlFor="resolve-note-input">
+                Resolution Note (optional)
+              </label>
+              <textarea
+                id="resolve-note-input"
+                className="resolve-note-input"
+                placeholder="Add what was fixed, checked, or any follow-up details."
+                value={resolveNote}
+                onChange={(e) => setResolveNote(e.target.value)}
+              />
+              <div className="resolve-note-helper">
+                This note will be visible when reviewing past tickets.
+              </div>
             </div>
             <div className="resolve-footer">
               <button 
                 className="resolve-btn" 
-                onClick={() => setResolveConfirmTicket(null)}
+                onClick={() => {
+                  setResolveConfirmTicket(null);
+                  setResolveNote('');
+                }}
               >
                 Cancel
 
               </button>
               <button 
                 className="resolve-btn primary" 
-                onClick={() => resolveTicket(resolveConfirmTicket._id)}
+                onClick={() => resolveTicket(resolveConfirmTicket._id, resolveNote)}
               >
                 Close Ticket
               </button>
