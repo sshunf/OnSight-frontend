@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /analytics
+Disallow: /dashboard
+Disallow: /dashboard-old
+Disallow: /chatbot
+Disallow: /schedule
+
+Sitemap: https://onsight-tech.com/sitemap.xml
