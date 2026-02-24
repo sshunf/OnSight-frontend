@@ -32,6 +32,7 @@ jobs:
           echo "Building Docker image with commit SHA $COMMIT_SHA"
           docker build \
             --no-cache \
+            --build-arg SKIP_PRERENDER=true \
             --build-arg VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL_STAGE }} \
             -t onsight.azurecr.io/onsight-frontend:stage \
             -t onsight.azurecr.io/onsight-frontend:$COMMIT_SHA-stage .
