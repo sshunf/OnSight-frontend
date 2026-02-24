@@ -4,6 +4,10 @@ FROM node:20-alpine AS build
 ARG VITE_BACKEND_URL
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
+# Skip prerender in container builds unless explicitly enabled.
+ARG SKIP_PRERENDER=true
+ENV SKIP_PRERENDER=$SKIP_PRERENDER
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
