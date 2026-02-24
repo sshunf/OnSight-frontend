@@ -23,7 +23,7 @@ function Footer() {
         {/* Border line moved above columns */}
         <div className="border-t border-gray-800 pt-8 mb-8"></div>
         
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-12 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-12 mb-16">
           {/* Column 1: Connect */}
           <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Connect</div>
@@ -38,24 +38,6 @@ function Footer() {
               >
                 <FaYoutube size={24} />
               </a>
-              <button
-                type="button"
-                aria-disabled="true"
-                title="Coming soon"
-                onClick={() => handleSocialClick('X / Twitter')}
-                className="text-gray-500 hover:text-gray-400 transition-colors cursor-pointer"
-              >
-                <FaXTwitter size={24} />
-              </button>
-              <button
-                type="button"
-                aria-disabled="true"
-                title="Coming soon"
-                onClick={() => handleSocialClick('Facebook')}
-                className="text-gray-500 hover:text-gray-400 transition-colors cursor-pointer"
-              >
-                <FaFacebookF size={24} />
-              </button>
               <a
                 href="https://www.instagram.com/onsight.tech/"
                 aria-label="OnSight Instagram"
@@ -79,25 +61,13 @@ function Footer() {
           <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Explore</div>
             <ul className="space-y-2">
-              <li><Link to="/features" className="text-gray-400 hover:text-white">Features</Link></li>
               <li><Link to="/dashboard" className="text-gray-400 hover:text-white">Dashboard</Link></li>
               <li><Link to="/foundersNote" className="text-gray-400 hover:text-white">Founders' Note</Link></li>
               <li><Link to="/waitlist" className="text-gray-400 hover:text-white">Join Waitlist</Link></li>
             </ul>
           </div>
 
-          {/* Column 3: Resources */}
-          <div className="space-y-4 odd:px-4 md:odd:px-0">
-            <div className="font-semibold text-white">Resources</div>
-            <ul className="space-y-2">
-              <li><Link to="/documentation" className="text-gray-400 hover:text-white">Documentation</Link></li>
-              <li><Link to="/faq" className="text-gray-400 hover:text-white">FAQ</Link></li>
-              <li><Link to="/case-studies" className="text-gray-400 hover:text-white">Case Studies</Link></li>
-              <li><Link to="/blog" className="text-gray-400 hover:text-white">Blog</Link></li>
-            </ul>
-          </div>
-
-          {/* Column 4: Contact */}
+          {/* Column 3: Contact */}
           <div className="space-y-4 odd:px-4 md:odd:px-0">
             <div className="font-semibold text-white">Contact</div>
             <div className="text-gray-400 space-y-2">

@@ -7,9 +7,9 @@ function Header() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
+  const isActive = (path) => location.pathname === path;
+  const activeClass = 'text-white font-semibold drop-shadow-[0_0_6px_rgba(255,255,255,0.35)]';
+  const baseClass = 'text-gray-300 hover:text-white';
 
   // Lock body scroll when mobile menu is open and handle Escape to close
   useEffect(() => {
@@ -51,10 +51,10 @@ function Header() {
         </div>
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-6">
-          {/* <Link to="/dashboard" className={isActive('/dashboard') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Dashboard</Link> */}
-          <Link to="/roi" className={isActive('/roi') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>The Numbers</Link>
-          <Link to="/foundersNote" className={isActive('/foundersNote') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Founders' Note</Link>
-          <Link to="/waitlist" className={isActive('/waitlist') ? "text-white hover:text-white" : "text-gray-300 hover:text-white"}>Book A Demo</Link>
+          {/* <Link to="/dashboard" className={isActive('/dashboard') ? activeClass : baseClass}>Dashboard</Link> */}
+          <Link to="/roi" className={isActive('/roi') ? activeClass : baseClass}>The Numbers</Link>
+          <Link to="/foundersNote" className={isActive('/foundersNote') ? activeClass : baseClass}>Founders' Note</Link>
+          <Link to="/waitlist" className={isActive('/waitlist') ? activeClass : baseClass}>Book A Demo</Link>
           <Link to="/login" className="bg-transparent hover:bg-white/10 text-gray-300 hover:text-white px-4 py-2 rounded">Login</Link>
         </nav>
 
@@ -75,15 +75,13 @@ function Header() {
       {/* Mobile expanding header content */}
           <div className="mobile-menu-content">
             <div className="px-6 pt-6 pb-10 flex flex-col gap-6">
-              <button className="menu-item mi-0 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/roi'); }}>The Numbers</button>
-              <button className="menu-item mi-1 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/features'); }}>Features</button>
-              {/* <button className="menu-item mi-2 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/dashboard'); }}>Dashboard</button> */}
-              <button className="menu-item mi-3 text-left text-2xl text-white/90" onClick={() => { setMobileOpen(false); navigate('/foundersNote'); }}>Founders' Note</button>
+              <button className={`menu-item mi-0 text-left text-2xl ${isActive('/roi') ? 'text-white font-semibold' : 'text-white/90'}`} onClick={() => { setMobileOpen(false); navigate('/roi'); }}>The Numbers</button>
+              <button className={`menu-item mi-1 text-left text-2xl ${isActive('/foundersNote') ? 'text-white font-semibold' : 'text-white/90'}`} onClick={() => { setMobileOpen(false); navigate('/foundersNote'); }}>Founders' Note</button>
               <div className="h-2" />
               <div className="menu-item mi-4 flex items-center gap-3">
                 <button
                   onClick={() => { setMobileOpen(false); navigate('/waitlist'); }}
-                  className="px-5 py-2 rounded-full border border-white/20 bg-white/10 text-white text-sm"
+                  className={`px-5 py-2 rounded-full border border-white/20 bg-white/10 text-sm ${isActive('/waitlist') ? 'text-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.35)]' : 'text-white'}`}
                 >
                   WAITLIST
                 </button>
