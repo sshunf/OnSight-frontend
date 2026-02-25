@@ -67,7 +67,7 @@ function StatsShowcase() {
       charts.push(new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: ['Reactive', 'Preventive', 'Predictive'],
+          labels: ['Reactive', 'Predictive', 'Preventative'],
           datasets: [
             {
               label: 'Relative cost',
