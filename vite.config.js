@@ -9,14 +9,9 @@ const skipPrerender = process.env.SKIP_PRERENDER === 'true';
 
 const prerenderRoutes = [
   '/',
-  '/features',
   '/foundersNote',
   '/dashboard-demo',
   '/waitlist',
-  '/documentation',
-  '/faq',
-  '/case-studies',
-  '/blog',
   '/garage',
   '/gym-select',
   '/roi',

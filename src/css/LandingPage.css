@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700&display=swap');
+
+/* Landing page specific utility styles */
+.landing-page {
+  background: #09040d;
+  color: #e2e8f0;
+}
+
+.glass {
+  background: rgba(38, 28, 48, 0.78); /* slightly lighter for better contrast */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #ffffff, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.landing-page .material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 600,
+    'GRAD' 0,
+    'opsz' 48;
+}
+
+/* Ensure content sits above the NightBackground layer */
+.landing-page section {
+  position: relative;
+  z-index: 1;
+}
