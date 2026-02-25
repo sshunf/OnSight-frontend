@@ -1,12 +1,38 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import dotenv from 'dotenv';
+import prerender from '@prerenderer/rollup-plugin';
 
 dotenv.config();
 const backendTarget = process.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const skipPrerender = process.env.SKIP_PRERENDER === 'true';
+
+const prerenderRoutes = [
+  '/',
+  '/foundersNote',
+  '/dashboard-demo',
+  '/waitlist',
+  '/garage',
+  '/gym-select',
+  '/roi',
+  '/roi-calculator',
+];
+
+const plugins = [react()];
+if (!skipPrerender) {
+  plugins.push(
+    prerender({
+      routes: prerenderRoutes,
+      renderer: '@prerenderer/renderer-puppeteer',
+      rendererOptions: {
+        renderAfterTime: 1000,
+      },
+    }),
+  );
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins,
   server: {
     proxy: {
       '/api': {

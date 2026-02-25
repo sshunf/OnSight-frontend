@@ -1,6 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
+const LEGACY_ZONE_ID_MAP = Object.freeze({
+  '10': '22',
+  '20': '23',
+});
+
+function canonicalZoneKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function stripZonePrefix(value) {
+  const key = canonicalZoneKey(value);
+  if (!key) return '';
+  if (key.startsWith('zone-')) return key.slice(5);
+  if (key.startsWith('zone')) return key.slice(4).replace(/^-+/, '');
+  return key;
+}
+
+function normalizeZoneId(value) {
+  const stripped = stripZonePrefix(value);
+  if (!stripped) return '';
+  const remapped = LEGACY_ZONE_ID_MAP[stripped] || stripped;
+  return /^\d+$/.test(remapped) ? String(Number(remapped)) : remapped;
+}
 
 // Local storage for tickets when backend is not available
 const DASHBOARD_STATE_KEY = 'dashboard:state';
@@ -10,6 +33,27 @@ function writeState(updater) {
   const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
   localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(next));
   return next;
+}
+
+function buildMemberReportUrl(gymId, zoneId) {
+  if (!gymId || typeof window === 'undefined') return '';
+  const base = `${window.location.origin}/member-report.html?gymId=${encodeURIComponent(gymId)}`;
+  if (!zoneId) return base;
+  return `${base}&zone=${encodeURIComponent(zoneId)}`;
+}
+
+function buildQrImageUrl(targetUrl) {
+  if (!targetUrl) return '';
+  return `https://quickchart.io/qr?text=${encodeURIComponent(targetUrl)}&size=220&margin=1&dark=111827&light=ffffff`;
+}
+
+function formatZoneLabel(value) {
+  if (!value) return 'Zone';
+  const trimmed = String(value).trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('zone')) return trimmed;
+  if (/^\d+$/.test(trimmed)) return `Zone ${trimmed}`;
+  return trimmed;
 }
 
 function generateTimes() {
@@ -157,9 +201,12 @@ export default function TicketsTab() {
   const [editingTech, setEditingTech] = useState(null);
   const [techForm, setTechForm] = useState({ name: '', email: '', isPreventativeDefault: false, active: true });
   const [resolveConfirmTicket, setResolveConfirmTicket] = useState(null);
+  const [resolveNote, setResolveNote] = useState('');
   const [memberReportUrl, setMemberReportUrl] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [qrError, setQrError] = useState('');
+  const [zoneQrList, setZoneQrList] = useState([]);
+  const [zoneQrError, setZoneQrError] = useState('');
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
   const detailsModalRef = useRef(null);
@@ -169,17 +216,81 @@ export default function TicketsTab() {
     const gymId = localStorage.getItem('gymId');
     if (gymId) {
       buildMemberQr(gymId);
+      buildZoneQrs(gymId);
     }
   }, []);
 
   async function buildMemberQr(gymId) {
     if (!gymId || typeof window === 'undefined') return;
-    const memberUrl = `${window.location.origin}/member-report.html?gymId=${encodeURIComponent(gymId)}`;
+    const memberUrl = buildMemberReportUrl(gymId);
     setMemberReportUrl(memberUrl);
     // Use a hosted QR endpoint to avoid bundler deps
-    const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(memberUrl)}&size=220&margin=1&dark=111827&light=ffffff`;
+    const qrUrl = buildQrImageUrl(memberUrl);
     setQrDataUrl(qrUrl);
     setQrError('');
+  }
+
+function extractZones(mapCfg) {
+  if (!mapCfg) return [];
+  const normalizeZoneEntry = (zone, floor = {}) => {
+    const zoneId = normalizeZoneId(zone?.id);
+    if (!zoneId) return null;
+    return {
+      ...zone,
+      id: zoneId,
+      floorId: floor.id,
+      floorLabel: floor.label
+    };
+  };
+  if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
+    return mapCfg.floors.flatMap(f => (
+      (Array.isArray(f.zones) ? f.zones : [])
+        .map(z => normalizeZoneEntry(z, f))
+        .filter(Boolean)
+    ));
+  }
+  return Array.isArray(mapCfg.zones)
+    ? mapCfg.zones.map(z => normalizeZoneEntry(z)).filter(Boolean)
+    : [];
+}
+
+  async function buildZoneQrs(gymId) {
+    if (!backendURL || !gymId || typeof window === 'undefined') return;
+    try {
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${encodeURIComponent(gymId)}&hours=12`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || `Zones HTTP ${res.status}`);
+      }
+      const zoneList = extractZones(data?.map || {});
+      const sorted = zoneList.slice().sort((a, b) => {
+        const aNum = Number(a.id);
+        const bNum = Number(b.id);
+        if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
+        return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
+      });
+      const seen = new Set();
+      const qrs = sorted.reduce((acc, z) => {
+        const zoneId = z?.id ? String(z.id) : '';
+        if (!zoneId || seen.has(zoneId)) return acc;
+        seen.add(zoneId);
+        const reportUrl = buildMemberReportUrl(gymId, zoneId);
+        acc.push({
+          id: zoneId,
+          label: formatZoneLabel(z.label || zoneId),
+          floorLabel: z.floorLabel,
+          reportUrl,
+          qrUrl: buildQrImageUrl(reportUrl)
+        });
+        return acc;
+      }, []);
+      setZoneQrList(qrs);
+      setZoneQrError('');
+    } catch (err) {
+      console.error('Failed to build zone QRs', err);
+      setZoneQrList([]);
+      setZoneQrError('Zone QR codes unavailable. Configure floorplan zones first.');
+    }
   }
 
   async function copyMemberLink() {
@@ -196,7 +307,6 @@ export default function TicketsTab() {
 
   // Backend routing - use backend when available, fallback to local storage
   async function fetchStatus() {
-    if (!backendURL) return;
     setLoading(true);
     setErrorMsg('');
     try {
@@ -208,11 +318,29 @@ export default function TicketsTab() {
       }
       await buildMemberQr(gymId);
       
-      // Fetch gym-specific tickets directly (this is the main source of truth)
-      console.log('Fetching tickets for gym:', gymId);
-      const ticketsRes = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
-      if (ticketsRes.ok) {
-        const tData = await ticketsRes.json();
+      let allTickets = [];
+      
+      // First, load tickets from localStorage (tickets created from alerts)
+      const localStorageKey = `tickets_${gymId}`;
+      try {
+        const localTicketsRaw = localStorage.getItem(localStorageKey);
+        if (localTicketsRaw) {
+          const localTickets = JSON.parse(localTicketsRaw);
+          if (Array.isArray(localTickets)) {
+            console.log('Loaded tickets from localStorage:', localTickets.length);
+            allTickets = localTickets;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse localStorage tickets:', e);
+      }
+      
+      // Then, fetch from backend if available and merge
+      if (backendURL) {
+        console.log('Fetching tickets from backend for gym:', gymId);
+        const ticketsRes = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+        if (ticketsRes.ok) {
+          const tData = await ticketsRes.json();
         console.log('Tickets response:', tData); // Debug log
         console.log('Number of tickets fetched:', Array.isArray(tData) ? tData.length : 0);
         
@@ -254,42 +382,27 @@ export default function TicketsTab() {
           console.log('=== END TICKETS DEBUG ===');
         }
         
-        // The endpoint returns an array directly
+        // Merge backend tickets with localStorage tickets (avoid duplicates)
         if (Array.isArray(tData)) {
-          setTickets(tData);
-        } else {
-          console.warn('Unexpected tickets response format:', tData);
-          setTickets([]);
+          const backendTicketIds = new Set(tData.map(t => t._id));
+          const localOnlyTickets = allTickets.filter(t => !backendTicketIds.has(t._id));
+          allTickets = [...tData, ...localOnlyTickets];
+          console.log('Merged tickets: backend=' + tData.length + ', local=' + localOnlyTickets.length + ', total=' + allTickets.length);
         }
       } else {
-        console.error(`Tickets HTTP ${ticketsRes.status}`);
         const errorText = await ticketsRes.text();
-        console.error('Tickets error response:', errorText);
-        setTickets([]);
+        console.error('Failed to fetch tickets:', ticketsRes.status, errorText);
       }
-      
-      // Fetch maintenance statuses (for intervals) - optional
-      try {
-        const statusRes = await fetch(`${backendURL}/api/maintenance/status?gymId=${gymId}`);
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          setStatuses(Array.isArray(statusData.statuses) ? statusData.statuses : []);
-        } else {
-          console.warn(`Status HTTP ${statusRes.status}`);
-          setStatuses([]);
-        }
-      } catch (statusError) {
-        console.warn('Status fetch failed (non-critical):', statusError);
-        setStatuses([]);
-      }
-    } catch (e) {
-      console.error('Fetch status failed', e);
-      setErrorMsg(e.message || 'Failed to load');
-      setTickets([]);
-      setStatuses([]);
-    } finally {
-      setLoading(false);
     }
+    
+    // Set the merged tickets
+    setTickets(allTickets);
+  } catch (e) {
+    console.error('Error fetching tickets:', e);
+    setErrorMsg(e.message);
+  } finally {
+    setLoading(false);
+  }
   }
 
   async function fetchGymMachines() {
@@ -451,15 +564,73 @@ export default function TicketsTab() {
     }
   }
 
-  async function resolveTicket(ticketId) {
+  async function resolveTicket(ticketId, resolutionNote = '') {
     setErrorMsg('');
     setResolveConfirmTicket(null);
+    setResolveNote('');
     
-    // If no backend URL, use local storage
+    const ticket = tickets.find(t => t._id === ticketId);
+    const gymId = localStorage.getItem('gymId');
+    const normalizedResolutionNote = String(resolutionNote || '').trim();
+    
+    // Check if this is a localStorage-only ticket (created from alert)
+    const isLocalTicket = ticketId.startsWith('local_');
+    
+    if (isLocalTicket) {
+      // Handle localStorage ticket - update in localStorage only
+      const localStorageKey = `tickets_${gymId}`;
+      try {
+        const localTicketsRaw = localStorage.getItem(localStorageKey);
+        const localTickets = localTicketsRaw ? JSON.parse(localTicketsRaw) : [];
+        
+        // Update the ticket status to closed
+        const updatedTickets = localTickets.map(t => {
+          if (t._id === ticketId) {
+            return {
+              ...t,
+              status: 'closed',
+              closedAt: new Date().toISOString(),
+              resolutionNote: normalizedResolutionNote || undefined
+            };
+          }
+          return t;
+        });
+        
+        // Save back to localStorage
+        localStorage.setItem(localStorageKey, JSON.stringify(updatedTickets));
+        
+        // Update state to reflect the change
+        setTickets(tickets.map(t => {
+          if (t._id === ticketId) {
+            return {
+              ...t,
+              status: 'closed',
+              closedAt: new Date().toISOString(),
+              resolutionNote: normalizedResolutionNote || undefined
+            };
+          }
+          return t;
+        }));
+        
+        console.log('Local ticket closed successfully:', ticketId);
+        return;
+      } catch (e) {
+        console.error('Failed to close local ticket:', e);
+        setErrorMsg('Failed to close ticket');
+        return;
+      }
+    }
+    
+    // Handle backend ticket - send to API
     if (!backendURL) {
       const updatedTickets = tickets.map(t => {
         if (t._id === ticketId) {
-          return { ...t, status: 'closed', closedAt: new Date().toISOString() };
+          return {
+            ...t,
+            status: 'closed',
+            closedAt: new Date().toISOString(),
+            resolutionNote: normalizedResolutionNote || undefined
+          };
         }
         return t;
       });
@@ -470,7 +641,6 @@ export default function TicketsTab() {
     
     // Backend API call
     try {
-      const ticket = tickets.find(t => t._id === ticketId);
       let checklistUpdates = [];
       if (ticket && Array.isArray(ticket.checklist)) {
         checklistUpdates = ticket.checklist
@@ -481,13 +651,26 @@ export default function TicketsTab() {
           })
           .filter(Boolean);
       }
-      const gymId = localStorage.getItem('gymId');
-      console.log('Closing ticket:', ticketId, 'for gym:', gymId, 'with checklist updates:', checklistUpdates);
+      
+      console.log(
+        'Closing ticket:',
+        ticketId,
+        'for gym:',
+        gymId,
+        'with checklist updates:',
+        checklistUpdates,
+        'resolutionNote:',
+        normalizedResolutionNote ? 'provided' : 'empty'
+      );
       
       const res = await fetch(`${backendURL}/api/maintenance/tickets/${ticketId}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checklistUpdates, gymId })
+        body: JSON.stringify({
+          checklistUpdates,
+          gymId,
+          resolutionNote: normalizedResolutionNote || undefined
+        })
       });
       
       if (!res.ok) {
@@ -501,6 +684,64 @@ export default function TicketsTab() {
       await fetchStatus();
     } catch (e) {
       console.error('Close failed', e);
+      setErrorMsg(e.message);
+    }
+  }
+
+  async function reopenTicket(ticketId) {
+    setErrorMsg('');
+
+    const gymId = localStorage.getItem('gymId');
+    const isLocalTicket = String(ticketId || '').startsWith('local_');
+
+    if (isLocalTicket) {
+      const localStorageKey = `tickets_${gymId}`;
+      try {
+        const localTicketsRaw = localStorage.getItem(localStorageKey);
+        const localTickets = localTicketsRaw ? JSON.parse(localTicketsRaw) : [];
+        const updatedTickets = localTickets.map(t => {
+          if (t._id === ticketId) {
+            return { ...t, status: 'open', closedAt: null, resolutionNote: undefined };
+          }
+          return t;
+        });
+        localStorage.setItem(localStorageKey, JSON.stringify(updatedTickets));
+        setTickets(prev => prev.map(t => (
+          t._id === ticketId ? { ...t, status: 'open', closedAt: null, resolutionNote: undefined } : t
+        )));
+        return;
+      } catch (e) {
+        console.error('Failed to reopen local ticket:', e);
+        setErrorMsg('Failed to reopen ticket');
+        return;
+      }
+    }
+
+    if (!backendURL) {
+      const updatedTickets = tickets.map(t => {
+        if (t._id === ticketId) {
+          return { ...t, status: 'open', closedAt: null, resolutionNote: undefined };
+        }
+        return t;
+      });
+      setTickets(updatedTickets);
+      writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
+      return;
+    }
+
+    try {
+      const res = await fetch(`${backendURL}/api/maintenance/tickets/${ticketId}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gymId })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Reopen HTTP ${res.status}`);
+      }
+      await fetchStatus();
+    } catch (e) {
+      console.error('Reopen failed', e);
       setErrorMsg(e.message);
     }
   }
@@ -652,6 +893,12 @@ export default function TicketsTab() {
     return () => document.removeEventListener('keydown', trap);
   }, [resolveConfirmTicket]);
 
+  useEffect(() => {
+    if (!resolveConfirmTicket) {
+      setResolveNote('');
+    }
+  }, [resolveConfirmTicket]);
+
   // Lock body scroll when any modal is open
   useEffect(() => {
     const hasModal = active || isCreateOpen || resolveConfirmTicket || isTechModalOpen;
@@ -688,18 +935,21 @@ export default function TicketsTab() {
 
   const sortedTickets = useMemo(() => {
     const arr = [...tickets];
-    // Sort by priority first (High > Medium > Low), then by status
     const priorityOrder = { High: 3, Medium: 2, Low: 1 };
+    
     arr.sort((a, b) => {
+      // First: Open tickets first
       if ((a.status === 'open') !== (b.status === 'open')) return a.status === 'open' ? -1 : 1;
+      
+      // Second: Sort by priority (High > Medium > Low)
       const aPriority = priorityOrder[a.priority] || 2;
       const bPriority = priorityOrder[b.priority] || 2;
-      if (aPriority !== bPriority) return bPriority - aPriority; // Higher priority first
-      const aAuto = !!a.ruleKey, bAuto = !!b.ruleKey;
-      if (aAuto !== bAuto) return aAuto ? -1 : 1;
-      if ((a.ruleUnit || '') !== (b.ruleUnit || '')) return (a.ruleUnit || '').localeCompare(b.ruleUnit || '');
-      if ((a.ruleInterval || 0) !== (b.ruleInterval || 0)) return (a.ruleInterval || 0) - (b.ruleInterval || 0);
-      return (a.dueAtUsage || 0) - (b.dueAtUsage || 0);
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      
+      // Third: Within same priority, sort by created date (newest first)
+      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bDate - aDate;
     });
     return arr;
   }, [tickets]);
@@ -1062,7 +1312,35 @@ export default function TicketsTab() {
           word-break: break-word;
         }
         .resolve-body {
-          padding: 0 24px;
+          padding: 0 24px 12px;
+        }
+        .resolve-note-label {
+          display: block;
+          color: #cbd5e1;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .resolve-note-input {
+          width: 100%;
+          min-height: 92px;
+          border-radius: 10px;
+          border: 1px solid #2a2a38;
+          background: #161624;
+          color: #e5e7eb;
+          padding: 10px 12px;
+          resize: vertical;
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .resolve-note-input:focus {
+          outline: 2px solid rgba(124, 58, 237, 0.5);
+          outline-offset: 1px;
+        }
+        .resolve-note-helper {
+          color: #6b7280;
+          font-size: 12px;
+          margin-top: 6px;
         }
         .resolve-footer {
           padding: 16px 24px;
@@ -1186,6 +1464,12 @@ export default function TicketsTab() {
                       <span className="tk-ticket-meta-value">{t.machineName}</span>
                     </div>
                   )}
+                  {t.zone && (
+                    <div className="tk-ticket-meta-item">
+                      <span className="tk-ticket-meta-label">Zone:</span>
+                      <span className="tk-ticket-meta-value">{formatZoneLabel(t.zone)}</span>
+                    </div>
+                  )}
                   {t.worker && t.worker !== 'Unassigned' && (
                     <div className="tk-ticket-meta-item">
                       <span className="tk-ticket-meta-label">Assigned:</span>
@@ -1224,7 +1508,25 @@ export default function TicketsTab() {
               <div className="tk-ticket-actions">
                 <button className="nx-pill" onClick={() => setActive(t)} style={{ whiteSpace: 'nowrap' }}>Details</button>
                 {t.status === 'open' && (
-                  <button className="nx-pill primary" onClick={() => setResolveConfirmTicket(t)} style={{ whiteSpace: 'nowrap' }}>Resolve</button>
+                  <button
+                    className="nx-pill primary"
+                    onClick={() => {
+                      setResolveNote('');
+                      setResolveConfirmTicket(t);
+                    }}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Resolve
+                  </button>
+                )}
+                {t.status === 'closed' && (
+                  <button
+                    className="nx-pill"
+                    onClick={() => reopenTicket(t._id)}
+                    style={{ whiteSpace: 'nowrap', borderColor: 'rgba(34,197,94,0.45)', color: '#86efac' }}
+                  >
+                    Undo
+                  </button>
                 )}
               </div>
             </div>
@@ -1253,6 +1555,34 @@ export default function TicketsTab() {
           <div style={{ width:132, height:132, borderRadius:12, border:'1px solid #1f2937', background:'#0f172a', display:'flex', alignItems:'center', justifyContent:'center', padding:10 }}>
             {qrDataUrl ? <img src={qrDataUrl} alt="QR code for member report" style={{ width:'100%', height:'100%' }} /> : <div className="nx-subtle">QR unavailable</div>}
           </div>
+        </div>
+      )}
+
+      {memberReportUrl && (
+        <div className="nx-card" style={{ marginBottom:12 }}>
+          <div className="nx-card-title" style={{ marginBottom:4 }}>Zone Report QRs</div>
+          <div className="nx-subtle" style={{ marginBottom:8 }}>Print and post a QR in each zone so reports include the zone automatically.</div>
+          {zoneQrError && (
+            <div className="nx-subtle" style={{ color:'#f87171', marginBottom:8 }}>
+              {zoneQrError}
+            </div>
+          )}
+          {zoneQrList.length > 0 ? (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))', gap:12 }}>
+              {zoneQrList.map(zone => (
+                <div key={zone.id} style={{ border:'1px solid #1f2937', borderRadius:12, background:'#0f172a', padding:10, display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+                  <div style={{ fontSize:12, color:'#cbd5e1', textAlign:'center' }}>
+                    {zone.floorLabel ? `${zone.floorLabel} - ${zone.label}` : zone.label}
+                  </div>
+                  <div style={{ width:120, height:120, borderRadius:10, border:'1px solid #1f2937', background:'#0b1221', display:'flex', alignItems:'center', justifyContent:'center', padding:8 }}>
+                    {zone.qrUrl ? <img src={zone.qrUrl} alt={`QR code for ${zone.label}`} style={{ width:'100%', height:'100%' }} /> : <div className="nx-subtle">QR unavailable</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            !zoneQrError && <div className="nx-subtle">No zones configured yet.</div>
+          )}
         </div>
       )}
 
@@ -1314,6 +1644,11 @@ export default function TicketsTab() {
                   <div style={{ marginBottom: '12px' }}>
                     <strong style={{ color: '#e5e7eb' }}>Machine:</strong> {active.machineName || 'Not specified'}
                   </div>
+                  {active.zone && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong style={{ color: '#e5e7eb' }}>Zone:</strong> {formatZoneLabel(active.zone)}
+                    </div>
+                  )}
                   {active.worker && active.worker !== 'Unassigned' && (
                     <div style={{ marginBottom: '12px' }}>
                       <strong style={{ color: '#e5e7eb' }}>Assigned to:</strong> {active.worker}
@@ -1327,6 +1662,11 @@ export default function TicketsTab() {
                   {active.ruleInterval && (
                     <div style={{ marginBottom: '12px' }}>
                       <strong style={{ color: '#e5e7eb' }}>Maintenance Interval:</strong> {active.ruleInterval} {active.ruleUnit || ''}
+                    </div>
+                  )}
+                  {active.status === 'closed' && active.resolutionNote && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong style={{ color: '#e5e7eb' }}>Resolution Note:</strong> {active.resolutionNote}
                     </div>
                   )}
                 </div>
@@ -1380,10 +1720,24 @@ export default function TicketsTab() {
                   className="tk-btn primary" 
                   onClick={() => {
                     setActive(null);
+                    setResolveNote('');
                     setResolveConfirmTicket(active);
                   }}
                 >
                   Resolve Ticket
+                </button>
+              )}
+              {active.status === 'closed' && (
+                <button
+                  className="tk-btn"
+                  onClick={() => {
+                    const ticketId = active._id;
+                    setActive(null);
+                    reopenTicket(ticketId);
+                  }}
+                  style={{ borderColor: 'rgba(34,197,94,0.45)', color: '#86efac' }}
+                >
+                  Undo Resolve
                 </button>
               )}
             </div>
@@ -1594,9 +1948,22 @@ export default function TicketsTab() {
 
       {/* Resolve Confirmation Modal */}
       {resolveConfirmTicket && (
-        <div className="nx-overlay" onClick={() => setResolveConfirmTicket(null)}>
+        <div
+          className="nx-overlay"
+          onClick={() => {
+            setResolveConfirmTicket(null);
+            setResolveNote('');
+          }}
+        >
           <div ref={resolveModalRef} className="resolve-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="resolve-close" onClick={() => setResolveConfirmTicket(null)} aria-label="Close">
+            <button
+              className="resolve-close"
+              onClick={() => {
+                setResolveConfirmTicket(null);
+                setResolveNote('');
+              }}
+              aria-label="Close"
+            >
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
               </svg>
@@ -1643,18 +2010,34 @@ export default function TicketsTab() {
               </div>
             </div>
             <div className="resolve-body">
-              {/* Additional confirmation message could go here */}
+              <label className="resolve-note-label" htmlFor="resolve-note-input">
+                Resolution Note (optional)
+              </label>
+              <textarea
+                id="resolve-note-input"
+                className="resolve-note-input"
+                placeholder="Add what was fixed, checked, or any follow-up details."
+                value={resolveNote}
+                onChange={(e) => setResolveNote(e.target.value)}
+              />
+              <div className="resolve-note-helper">
+                This note will be visible when reviewing past tickets.
+              </div>
             </div>
             <div className="resolve-footer">
               <button 
                 className="resolve-btn" 
-                onClick={() => setResolveConfirmTicket(null)}
+                onClick={() => {
+                  setResolveConfirmTicket(null);
+                  setResolveNote('');
+                }}
               >
                 Cancel
+
               </button>
               <button 
                 className="resolve-btn primary" 
-                onClick={() => resolveTicket(resolveConfirmTicket._id)}
+                onClick={() => resolveTicket(resolveConfirmTicket._id, resolveNote)}
               >
                 Close Ticket
               </button>

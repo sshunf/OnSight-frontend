@@ -91,7 +91,7 @@ function WaitlistSection() {
               Want this at your gym?
             </h1>
             <p className="text-lg md:text-xl text-gray-300 max-w-prose">
-              Let us manage your gym equipment so you don{"'"}t have to.
+              Manage your gym with real usage data.
             </p>
           </div>
           {/* form */}
