@@ -107,17 +107,42 @@
       margin-bottom: 8px;
     }
     .hidden { display: none; }
+    .sticker-note {
+      margin: 6px 0 2px;
+      font-size: 14px;
+      color: #e5e7eb;
+      font-weight: 400;
+      line-height: 1.35;
+      text-align: center;
+    }
+    .sticker-example-wrap {
+      display: flex;
+      justify-content: center;
+    }
+    .sticker-example {
+      width: min(100%, 170px);
+      height: auto;
+      display: block;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="gym-pill hidden" id="gym-pill"></div>
+    <div class="gym-pill hidden" id="zone-pill"></div>
     <h1>Report an Equipment Issue</h1>
     <p id="intro">Scan and submit a quick report. This will be routed directly to the gym's maintenance queue.</p>
     <form id="report-form">
+      <div class="sticker-note"><strong>Before you submit:</strong> Look for the small OnSight sticker on the machine (example: Machine 1).</div>
+      <div class="sticker-example-wrap">
+        <img class="sticker-example" src="/machine-sticker-example.png" alt="Example sticker showing OnSight and Machine 1" />
+      </div>
       <div>
-        <label for="machineName">Equipment name or location (optional)</label>
-        <input id="machineName" name="machineName" type="text" placeholder="e.g., Treadmill #4 by the windows">
+        <label for="machineName">Machine name from sticker</label>
+        <input id="machineName" name="machineName" type="text" placeholder="e.g., Machine 1">
       </div>
       <div>
         <label for="description">What’s wrong? *</label>
@@ -134,9 +159,29 @@
       const gymId = params.get('gymId');
       const machineId = params.get('machineId');
       const gymPill = document.getElementById('gym-pill');
+      const zonePill = document.getElementById('zone-pill');
       const statusEl = document.getElementById('status');
       const form = document.getElementById('report-form');
       const intro = document.getElementById('intro');
+      const zone = params.get('zone');
+      const apiBaseParam = params.get('apiBase') || params.get('backendUrl') || '';
+      const normalizedApiBaseParam = String(apiBaseParam || '').replace(/\/$/, '');
+      const sameOriginBase = String(window.location.origin || '').replace(/\/$/, '');
+      const host = String(window.location.hostname || '').toLowerCase();
+      const isLocalDevHost = host === 'localhost' || host === '127.0.0.1';
+      const primaryBackendBase = 'https://onsight-backend-b3e2hdbgcsfudyfx.eastus2-01.azurewebsites.net';
+      const legacyBackendBase = 'https://onsight-backend.azurewebsites.net';
+      const guessedBackendBase = host.includes('stage')
+        ? 'https://onsight-backend-stage.azurewebsites.net'
+        : primaryBackendBase;
+      const candidateBases = [
+        normalizedApiBaseParam,
+        guessedBackendBase,
+        primaryBackendBase,
+        legacyBackendBase,
+        ...(isLocalDevHost ? [sameOriginBase] : []),
+      ].filter(Boolean);
+      const submitEndpoints = Array.from(new Set(candidateBases)).map(base => `${base}/api/maintenance/member-report`);
       if (!gymId) {
         statusEl.textContent = 'Missing gymId. Ask staff for a new QR code.';
         statusEl.classList.remove('hidden');
@@ -146,6 +191,11 @@
       }
       gymPill.textContent = `Gym ID: ${gymId}`;
       gymPill.classList.remove('hidden');
+      if (zone) {
+        zonePill.textContent = `Zone: ${zone}`;
+        zonePill.classList.remove('hidden');
+        intro.textContent = 'Zone-specific QR scanned. Submit the issue below.';
+      }
       if (machineId) {
         intro.textContent = 'Machine-specific QR scanned. Submit the issue below.';
       }
@@ -166,17 +216,32 @@
           gymId,
           description,
           machineName: machineName || undefined,
-          machineId: machineId || undefined
+          machineId: machineId || undefined,
+          zone: zone || undefined
         };
         try {
-          const res = await fetch('/api/maintenance/member-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok || data.error) {
-            throw new Error(data.error || `Request failed (${res.status})`);
+          let success = false;
+          let lastError = null;
+          for (const endpoint of submitEndpoints) {
+            try {
+              const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || data.error) {
+                lastError = new Error(data.error || `Request failed (${res.status})`);
+                continue;
+              }
+              success = true;
+              break;
+            } catch (requestErr) {
+              lastError = requestErr;
+            }
+          }
+          if (!success) {
+            throw lastError || new Error('Could not submit report.');
           }
           statusEl.textContent = 'Thank you. Your report was submitted.';
           statusEl.classList.remove('hidden');

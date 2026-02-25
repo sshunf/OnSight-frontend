@@ -9,6 +9,124 @@ import TicketsTab from '../tabs/TicketsTab.jsx';
 import { buildEquipmentRows } from '../utils/occupancyTable';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
+const LEGACY_ZONE_ID_MAP = Object.freeze({
+  '10': '22',
+  '20': '23',
+});
+const LEGACY_ZONE_ID_REVERSE_MAP = Object.freeze(
+  Object.entries(LEGACY_ZONE_ID_MAP).reduce((acc, [legacy, canonical]) => {
+    acc[canonical] = legacy;
+    return acc;
+  }, {})
+);
+const EXCLUDED_ZONE_IDS = new Set(['21']);
+
+function canonicalZoneKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function stripZonePrefix(value) {
+  const key = canonicalZoneKey(value);
+  if (!key) return '';
+  if (key.startsWith('zone-')) return key.slice(5);
+  if (key.startsWith('zone')) return key.slice(4).replace(/^-+/, '');
+  return key;
+}
+
+function normalizeZoneId(value) {
+  const stripped = stripZonePrefix(value);
+  if (!stripped) return '';
+  const remapped = LEGACY_ZONE_ID_MAP[stripped] || stripped;
+  return /^\d+$/.test(remapped) ? String(Number(remapped)) : remapped;
+}
+
+function isExcludedZone(value) {
+  const zoneId = normalizeZoneId(value);
+  return Boolean(zoneId) && EXCLUDED_ZONE_IDS.has(String(zoneId));
+}
+
+function normalizeMachineIdValue(value) {
+  if (value && typeof value === 'object') {
+    if (typeof value.$oid === 'string') return value.$oid.trim();
+    if (typeof value.toHexString === 'function') return String(value.toHexString()).trim();
+  }
+  const raw = String(value || '').trim();
+  const match = raw.match(/^ObjectId\(["']?([0-9a-fA-F]{24})["']?\)$/i);
+  return match ? match[1] : raw;
+}
+
+function deriveZoneFromMachineId(value) {
+  const machineId = normalizeMachineIdValue(value);
+  const match = machineId.match(/^([1-9]\d*?)0+/);
+  if (!match) return '';
+  return String(Number(match[1]));
+}
+
+function normalizeZoneSvgId(value, zoneId = '') {
+  const raw = String(value || '').trim();
+  if (raw) {
+    if (canonicalZoneKey(raw).startsWith('zone')) {
+      const normalized = normalizeZoneId(raw);
+      return normalized ? `zone-${normalized}` : raw;
+    }
+    return raw;
+  }
+  const normalizedZone = normalizeZoneId(zoneId);
+  return normalizedZone ? `zone-${normalizedZone}` : '';
+}
+
+function normalizeZoneConfig(zone) {
+  const zoneId = normalizeZoneId(zone?.id);
+  if (!zoneId || isExcludedZone(zoneId)) return null;
+  return {
+    ...zone,
+    id: zoneId,
+    svgId: normalizeZoneSvgId(zone?.svgId, zoneId),
+  };
+}
+
+function normalizeMapConfig(mapCfg) {
+  if (!mapCfg || typeof mapCfg !== 'object') return null;
+  const zones = Array.isArray(mapCfg.zones)
+    ? mapCfg.zones.map(normalizeZoneConfig).filter(Boolean)
+    : [];
+  const floors = Array.isArray(mapCfg.floors)
+    ? mapCfg.floors
+        .filter(f => f && f.id)
+        .map(f => ({
+          ...f,
+          zones: Array.isArray(f.zones)
+            ? f.zones.map(normalizeZoneConfig).filter(Boolean)
+            : [],
+        }))
+    : [];
+  return {
+    ...mapCfg,
+    zones,
+    floors,
+  };
+}
+
+function getZoneSvgCandidates(zone) {
+  const ids = new Set();
+  const add = (value) => {
+    const id = String(value || '').trim();
+    if (id) ids.add(id);
+  };
+
+  const zoneId = normalizeZoneId(zone?.id);
+  add(zone?.svgId);
+  add(zoneId ? `zone-${zoneId}` : '');
+
+  const legacyZoneId = LEGACY_ZONE_ID_REVERSE_MAP[zoneId];
+  add(legacyZoneId ? `zone-${legacyZoneId}` : '');
+
+  const normalizedSvgZone = normalizeZoneId(zone?.svgId);
+  const legacyFromSvg = LEGACY_ZONE_ID_REVERSE_MAP[normalizedSvgZone];
+  add(legacyFromSvg ? `zone-${legacyFromSvg}` : '');
+
+  return Array.from(ids);
+}
 
 // In-house dropdown styled like our dark buttons
 function NxDropdown({ options, value, onChange, minWidth = 160 }) {
@@ -50,6 +168,67 @@ function NxDropdown({ options, value, onChange, minWidth = 160 }) {
   );
 }
 
+function getConfiguredZones(mapCfg) {
+  if (!mapCfg) return [];
+  if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
+    return mapCfg.floors
+      .flatMap(f => (Array.isArray(f.zones) ? f.zones : []))
+      .map(normalizeZoneConfig)
+      .filter(Boolean);
+  }
+  return Array.isArray(mapCfg.zones)
+    ? mapCfg.zones.map(normalizeZoneConfig).filter(Boolean)
+    : [];
+}
+
+function formatZoneLabel(zoneId) {
+  const zone = String(zoneId || '').trim();
+  if (!zone) return 'Unknown';
+  return /^\d+$/.test(zone) ? `Zone ${zone}` : zone;
+}
+
+function toUsageGroup(machineType) {
+  const raw = String(machineType || '').trim().toLowerCase();
+  if (!raw) return 'strength';
+  if (raw.includes('treadmill') || raw.includes('elliptical') || raw.includes('cardio')) {
+    return 'cardio';
+  }
+  return 'strength';
+}
+
+const HEATMAP_COLOR_STOPS = Object.freeze([
+  { t: 0, rgb: [34, 197, 94] },   // green
+  { t: 0.35, rgb: [250, 204, 21] }, // yellow
+  { t: 0.7, rgb: [249, 115, 22] },  // orange
+  { t: 1, rgb: [239, 68, 68] },   // red
+]);
+const SEARCH_RANGE_OPTIONS = Object.freeze([
+  { value: 'all', label: 'All Time' },
+  { value: '6', label: 'Past 6 Hours' },
+  { value: '8', label: 'Past 8 Hours' },
+  { value: '12', label: 'Past 12 Hours' },
+  { value: '24', label: 'Past 24 Hours' },
+  { value: '168', label: 'Past Week' },
+  { value: '720', label: 'Past Month' },
+]);
+
+function interpolateHeatmapColor(t) {
+  const clamped = Math.max(0, Math.min(1, Number(t) || 0));
+  for (let i = 0; i < HEATMAP_COLOR_STOPS.length - 1; i++) {
+    const a = HEATMAP_COLOR_STOPS[i];
+    const b = HEATMAP_COLOR_STOPS[i + 1];
+    if (clamped >= a.t && clamped <= b.t) {
+      const span = Math.max(0.0001, b.t - a.t);
+      const p = (clamped - a.t) / span;
+      const r = Math.round(a.rgb[0] + (b.rgb[0] - a.rgb[0]) * p);
+      const g = Math.round(a.rgb[1] + (b.rgb[1] - a.rgb[1]) * p);
+      const bCh = Math.round(a.rgb[2] + (b.rgb[2] - a.rgb[2]) * p);
+      return [r, g, bCh];
+    }
+  }
+  return HEATMAP_COLOR_STOPS[HEATMAP_COLOR_STOPS.length - 1].rgb;
+}
+
 function TempDashboard() {
   const displayName = localStorage.getItem('displayName') || 'Guest User';
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -68,7 +247,6 @@ function TempDashboard() {
   // Chart data state
   const [selectedMachine, setSelectedMachine] = useState('');
   const [selectedRange, setSelectedRange] = useState(12);
-  const [selectedAvgRange, setSelectedAvgRange] = useState(12);
   const [selectedCumRange, setSelectedCumRange] = useState(12);
   const [machineOptions, setMachineOptions] = useState([]);
   const [equipmentRows, setEquipmentRows] = useState([]);
@@ -76,11 +254,26 @@ function TempDashboard() {
   // Analytics data
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [selectedTopN, setSelectedTopN] = useState('all');
+  const [avgUsageRows, setAvgUsageRows] = useState([]);
+  const [selectedSearchRange, setSelectedSearchRange] = useState('all');
+  const [selectedTopN, setSelectedTopN] = useState('5');
   const [selectedZone, setSelectedZone] = useState('');
+  const [usageRankSort, setUsageRankSort] = useState('most');
+  const [analyticsSearchTerm, setAnalyticsSearchTerm] = useState('');
+  const [selectedAnalyticsZones, setSelectedAnalyticsZones] = useState([]);
+  const [analyticsPage, setAnalyticsPage] = useState(0);
+  const [analyticsZoneFilterOpen, setAnalyticsZoneFilterOpen] = useState(false);
+  const [machineZoneMap, setMachineZoneMap] = useState({});
+  const [machineTypeMap, setMachineTypeMap] = useState({});
+  const [gymMachines, setGymMachines] = useState([]);
+  const [topZonesToday, setTopZonesToday] = useState([]);
+  const [remainingZonesToday, setRemainingZonesToday] = useState([]);
+  const [topZonesTodayLoading, setTopZonesTodayLoading] = useState(false);
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState('');
   const [maintOpen, setMaintOpen] = useState(false);
   const [formStep, setFormStep] = useState(0);
   const [activeAlert, setActiveAlert] = useState(null);
@@ -92,6 +285,11 @@ function TempDashboard() {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  
+  // Resolve modal state
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [alertToResolve, setAlertToResolve] = useState(null);
+
 
   const chartInstancesRef = useRef({});
   const hourlyUsageChartRef = useRef(null);
@@ -101,12 +299,85 @@ function TempDashboard() {
   const [facilityZones, setFacilityZones] = useState([]);
   const [facilityLoading, setFacilityLoading] = useState(false);
   const [facilityRange, setFacilityRange] = useState(12);
+  const [selectedFloorId, setSelectedFloorId] = useState('');
   const [facilityMachines, setFacilityMachines] = useState([]);
   const [mapConfig, setMapConfig] = useState(null);
+  const [svgDiscoveredZones, setSvgDiscoveredZones] = useState([]);
   const svgObjectRef = useRef(null);
+  const analyticsZoneFilterRef = useRef(null);
+
+  const mapFloors = useMemo(() => {
+    if (!mapConfig || !Array.isArray(mapConfig.floors)) return [];
+    return mapConfig.floors.filter(f => f && f.id);
+  }, [mapConfig]);
+
+  const floorOptions = useMemo(() => (
+    mapFloors.map(f => ({ value: f.id, label: f.label || f.id }))
+  ), [mapFloors]);
+
+  const defaultFloorId = useMemo(() => (
+    mapConfig?.defaultFloorId || mapFloors[0]?.id || ''
+  ), [mapConfig, mapFloors]);
+
+  const activeFloorId = useMemo(() => {
+    if (!mapFloors.length) return '';
+    const match = mapFloors.find(f => String(f.id) === String(selectedFloorId));
+    return match ? match.id : defaultFloorId;
+  }, [mapFloors, selectedFloorId, defaultFloorId]);
+
+  const activeFloor = useMemo(() => {
+    if (!mapFloors.length) return null;
+    return mapFloors.find(f => String(f.id) === String(activeFloorId)) || mapFloors[0];
+  }, [mapFloors, activeFloorId]);
+
+  const activeZones = useMemo(() => {
+    const discoveredZoneSet = new Set(
+      (svgDiscoveredZones || [])
+        .map(z => normalizeZoneId(z?.id))
+        .filter(Boolean)
+        .map(String)
+    );
+
+    if (activeFloor && Array.isArray(activeFloor.zones) && activeFloor.zones.length) {
+      if (!discoveredZoneSet.size) return activeFloor.zones;
+      const hasOverlap = activeFloor.zones.some(z => discoveredZoneSet.has(String(normalizeZoneId(z?.id))));
+      return hasOverlap ? activeFloor.zones : svgDiscoveredZones;
+    }
+
+    if (activeFloor && svgDiscoveredZones.length) return svgDiscoveredZones;
+
+    if (Array.isArray(mapConfig?.zones) && mapConfig.zones.length) {
+      if (!discoveredZoneSet.size) return mapConfig.zones;
+      const hasOverlap = mapConfig.zones.some(z => discoveredZoneSet.has(String(normalizeZoneId(z?.id))));
+      return hasOverlap ? mapConfig.zones : svgDiscoveredZones;
+    }
+
+    if (svgDiscoveredZones.length) return svgDiscoveredZones;
+    return [];
+  }, [activeFloor, mapConfig, svgDiscoveredZones]);
+
+  const activeFloorplanUrl = activeFloor?.svgUrl || mapConfig?.floorplanUrl || '';
+
+  const activeZoneMinutes = useMemo(() => {
+    if (!activeZones.length) return [];
+    return activeZones.map(z => {
+      const match = (facilityZones || []).find(fz => String(fz.zone) === String(z.id));
+      return { zone: z.id, minutes: match?.minutes || 0 };
+    });
+  }, [activeZones, facilityZones]);
+
+  const shouldShowNoFacilityData = useMemo(() => {
+    if (facilityLoading) return false;
+    if (!activeZoneMinutes.length) return false;
+    // If the API returned explicit connectivity state, prefer zone-level rendering over empty-state text.
+    if ((facilityZones || []).some(z => typeof z?.isDisconnected === 'boolean')) return false;
+    const hasAnyMachineRows = Array.isArray(facilityMachines) && facilityMachines.length > 0;
+    return !hasAnyMachineRows && activeZoneMinutes.every(z => (z.minutes || 0) === 0);
+  }, [facilityLoading, activeZoneMinutes, facilityMachines, facilityZones]);
 
   const SIDEBAR_HEIGHT = 1080;
   const DASHBOARD_CONTENT_HEIGHT = SIDEBAR_HEIGHT;
+  const ANALYTICS_RANK_PAGE_SIZE = 8;
 
   const filteredMachineOptions = useMemo(() => {
     if (!selectedZone) return machineOptions;
@@ -119,6 +390,21 @@ function TempDashboard() {
     return machineOptions.filter(m => zoneSet.has(String(m.machineId)));
   }, [selectedZone, machineOptions, facilityMachines]);
 
+  useEffect(() => {
+    if (!mapFloors.length) return;
+    const hasSelection = mapFloors.some(f => String(f.id) === String(selectedFloorId));
+    const next = hasSelection ? selectedFloorId : defaultFloorId;
+    if (next && next !== selectedFloorId) {
+      setSelectedFloorId(next);
+    }
+  }, [mapFloors, defaultFloorId, selectedFloorId]);
+
+  useEffect(() => {
+    if (!selectedZone || !activeZones.length) return;
+    const inActiveFloor = activeZones.some(z => String(z.id) === String(selectedZone));
+    if (!inActiveFloor) setSelectedZone('');
+  }, [activeZones, selectedZone]);
+
   // User authentication check
   useEffect(() => {
     const userEmail = localStorage.getItem('userEmail');
@@ -129,6 +415,18 @@ function TempDashboard() {
       setUser({ email: userEmail });
     }
   }, [navigate]);
+
+  // Clear alerts when gymId changes (user switches gyms)
+  useEffect(() => {
+    const gymId = localStorage.getItem('gymId');
+    if (gymId && user) {
+      // Clear current alerts when switching to a different gym
+      setAlerts([]);
+      setUndoStack([]);
+      setRedoStack([]);
+      // Alerts will be refetched by the main useEffect when user changes
+    }
+  }, [localStorage.getItem('gymId'), user]);
 
   // Fetch dashboard stats from backend
   const fetchDashboardData = async () => {
@@ -162,6 +460,42 @@ function TempDashboard() {
 
       const rows = buildEquipmentRows(occData);
       setEquipmentRows(rows);
+
+      // Auto-remove alerts for machines that are now active
+      // Check if any machines with "active" status have corresponding alerts
+      if (Array.isArray(occData.machines)) {
+        const activeMachineNames = new Set(
+          occData.machines
+            .filter(m => m.status === 'active')
+            .map(m => m.machineName || m.name || m.id)
+        );
+        
+        // Filter out alerts for machines that are now active
+        setAlerts(prevAlerts => {
+          const filteredAlerts = prevAlerts.filter(alert => {
+            const alertMachine = alert.machineId || alert.machineName;
+            const shouldKeep = !activeMachineNames.has(alertMachine);
+            
+            if (!shouldKeep) {
+              console.log(`Auto-removing alert for ${alertMachine} - machine is now active`);
+            }
+            
+            return shouldKeep;
+          });
+          
+          // Only update localStorage if alerts were removed
+          if (filteredAlerts.length !== prevAlerts.length) {
+            try {
+              localStorage.setItem(`alerts_${gymId}`, JSON.stringify(filteredAlerts));
+              console.log(`Auto-removed ${prevAlerts.length - filteredAlerts.length} alerts due to machine activity`);
+            } catch (e) {
+              console.warn('Failed to persist alert auto-removal', e);
+            }
+          }
+          
+          return filteredAlerts;
+        });
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
@@ -172,12 +506,45 @@ function TempDashboard() {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
     try {
-      const res = await fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`);
-      const data = await res.json();
-      if (Array.isArray(data.machineIds)) {
-        setMachineOptions(data.machineIds);
-        if (!selectedMachine && data.machineIds.length > 0) {
-          setSelectedMachine(data.machineIds[0].machineId);
+      const [optionsResult, machinesResult] = await Promise.allSettled([
+        fetch(`${backendURL}/api/hourly/options?gymId=${gymId}`),
+        fetch(`${backendURL}/api/machines?gymId=${gymId}`),
+      ]);
+
+      if (optionsResult.status === 'fulfilled') {
+        const res = optionsResult.value;
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.machineIds)) {
+          setMachineOptions(data.machineIds);
+          if (!selectedMachine && data.machineIds.length > 0) {
+            setSelectedMachine(data.machineIds[0].machineId);
+          }
+        }
+      }
+
+      if (machinesResult.status === 'fulfilled') {
+        const res = machinesResult.value;
+        const data = await res.json();
+        if (!res.ok) {
+          setMachineZoneMap({});
+          setMachineTypeMap({});
+          setGymMachines([]);
+        } else if (Array.isArray(data)) {
+          const nextZoneMap = {};
+          const nextTypeMap = {};
+          data.forEach(machine => {
+            const machineId = normalizeMachineIdValue(machine?._id || machine?.machineId);
+            if (!machineId) return;
+            const normalizedZone = normalizeZoneId(machine?.zone) || normalizeZoneId(deriveZoneFromMachineId(machineId));
+            if (normalizedZone && !isExcludedZone(normalizedZone)) {
+              nextZoneMap[machineId] = normalizedZone;
+            }
+            // Source of truth for type grouping: Machine.type from Mongo machines collection.
+            nextTypeMap[machineId] = toUsageGroup(machine?.type);
+          });
+          setMachineZoneMap(nextZoneMap);
+          setMachineTypeMap(nextTypeMap);
+          setGymMachines(data);
         }
       }
     } catch (err) {
@@ -262,55 +629,79 @@ function TempDashboard() {
     }
   };
 
-  // Build average usage chart with backend data
-  const buildWeeklyChart = async () => {
-    const gymId = localStorage.getItem('gymId');
-    if (!gymId) return;
-    
-    try {
-      const res = await fetch(`${backendURL}/api/weekly/usage?gymId=${gymId}&hours=${selectedAvgRange}`);
-      const data = await res.json();
-      if (!Array.isArray(data.result)) return;
-      
-      const sortedResult = [...data.result].sort((a, b) => {
-        const aName = String(a.machineName || a.machineId || '');
-        const bName = String(b.machineName || b.machineId || '');
-        return aName.localeCompare(bName);
-      });
-      const labels = sortedResult.map(d => d.machineName || (d.machineId ? d.machineId : 'Unknown'));
-      const values = sortedResult.map(d => d.avgMinutes);
-      const maxValue = Math.max(...values, 0);
-      const yMax = Math.ceil(maxValue + 10);
-      
-      if (avgUsageChartRef.current) {
-        const ctx = avgUsageChartRef.current.getContext('2d');
-        if (chartInstancesRef.current.avg) chartInstancesRef.current.avg.destroy();
-        
-        chartInstancesRef.current.avg = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Avg Daily Usage (min)',
-              data: values,
-              backgroundColor: '#7C3AED',
-              borderRadius: 8,
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true, labels: { color: '#e5e7eb' } } },
-            scales: {
-              x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } },
-              y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: yMax },
-            },
-            interaction: { mode: 'nearest', intersect: false },
-          }
-        });
+  // Build average usage chart from the same filtered rows as Machine Usage Search.
+  const buildWeeklyChart = () => {
+    if (!avgUsageChartRef.current) return;
+    const canvas = avgUsageChartRef.current;
+    const ctx = canvas.getContext('2d');
+    // Defensive destroy in case a stale Chart.js instance still owns this canvas.
+    const existingCanvasChart = Chart.getChart(canvas);
+    if (existingCanvasChart) existingCanvasChart.destroy();
+    if (chartInstancesRef.current.avg) {
+      chartInstancesRef.current.avg.destroy();
+      chartInstancesRef.current.avg = null;
+    }
+
+    const rows = Array.isArray(analyticsRankRows) ? analyticsRankRows : [];
+    if (!rows.length) return;
+
+    const labels = rows.map(r => r.machineName || r.machineId || 'Unknown');
+    const values = rows.map(r => Number(r.avgUsageMinutes) || 0);
+    const maxValue = Math.max(...values, 0);
+    const yMax = Math.ceil(maxValue + 10);
+
+    chartInstancesRef.current.avg = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Avg Usage (min)',
+          data: values,
+          backgroundColor: '#7C3AED',
+          borderRadius: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: true, labels: { color: '#e5e7eb' } } },
+        scales: {
+          x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+          y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: yMax },
+        },
+        interaction: { mode: 'nearest', intersect: false },
       }
+    });
+  };
+
+  const fetchUsageSearchRows = async () => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) {
+      setAvgUsageRows([]);
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({ gymId: String(gymId) });
+      if (selectedSearchRange !== 'all') {
+        params.set('hours', String(selectedSearchRange));
+      }
+      const res = await fetch(`${backendURL}/api/weekly/usage?${params.toString()}`);
+      const data = await res.json();
+      if (!Array.isArray(data.result)) {
+        setAvgUsageRows([]);
+        return;
+      }
+      const normalizedRows = data.result.map((d) => ({
+        machineId: String(d.machineId || '').trim(),
+        machineName: String(d.machineName || d.machineId || 'Unknown').trim(),
+        type: String(d.type || '').trim(),
+        avgMinutes: Number.isFinite(Number(d.avgMinutes)) ? Number(d.avgMinutes) : 0,
+      }));
+      setAvgUsageRows(normalizedRows);
     } catch (err) {
-      console.error('Failed to build weekly average chart:', err);
+      console.error('Failed to fetch usage search rows:', err);
+      setAvgUsageRows([]);
     }
   };
 
@@ -426,6 +817,69 @@ function TempDashboard() {
     }
   };
 
+  const fetchTopZonesToday = async () => {
+    const gymId = localStorage.getItem('gymId');
+    if (!gymId) {
+      setTopZonesToday([]);
+      setRemainingZonesToday([]);
+      return;
+    }
+
+    setTopZonesTodayLoading(true);
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const hoursSinceStart = Math.max(1, (now.getTime() - startOfDay.getTime()) / (60 * 60 * 1000));
+
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${hoursSinceStart.toFixed(3)}`);
+      const data = await res.json();
+      if (!res.ok || !data) {
+        setTopZonesToday([]);
+        setRemainingZonesToday([]);
+        return;
+      }
+
+      const aggregated = {};
+      (data.machines || []).forEach((m) => {
+        const derivedZone = deriveZoneFromMachineId(m.machineId);
+        const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
+        if (!zoneId || zoneId === 'unknown' || isExcludedZone(zoneId)) return;
+        const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
+        const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        aggregated[zoneId] = (aggregated[zoneId] || 0) + minutes;
+      });
+
+      (data.zones || []).forEach((z) => {
+        const zoneId = normalizeZoneId(z.zone) || 'unknown';
+        if (!zoneId || zoneId === 'unknown' || isExcludedZone(zoneId)) return;
+        const minutes = Number(z.minutes || 0);
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        aggregated[zoneId] = (aggregated[zoneId] || 0) + minutes;
+      });
+
+      const ranked = Object.entries(aggregated)
+        .map(([zone, minutes]) => ({ zone, minutes }))
+        .sort((a, b) => b.minutes - a.minutes);
+
+      const top3 = ranked.slice(0, 3);
+      const remaining = ranked.slice(3);
+
+      const padded = [...top3];
+      while (padded.length < 3) {
+        padded.push({ zone: `--${padded.length + 1}`, minutes: 0, empty: true });
+      }
+      setTopZonesToday(padded);
+      setRemainingZonesToday(remaining);
+    } catch (e) {
+      console.error('Failed to fetch top zones today:', e);
+      setTopZonesToday([]);
+      setRemainingZonesToday([]);
+    } finally {
+      setTopZonesTodayLoading(false);
+    }
+  };
+
   const fetchFacilityHeatmap = async (rangeHours = 12) => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
@@ -434,8 +888,11 @@ function TempDashboard() {
       const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${rangeHours}`);
       const data = await res.json();
       if (res.ok && data) {
-        const mapCfg = (data.map && data.map.zones && data.map.zones.length) ? data.map : null;
-        const fallbackMapCfg = mapCfg || {
+        const mapCfg = (data.map && (
+          (Array.isArray(data.map.zones) && data.map.zones.length) ||
+          (Array.isArray(data.map.floors) && data.map.floors.length)
+        )) ? normalizeMapConfig(data.map) : null;
+        const fallbackMapCfg = mapCfg || normalizeMapConfig({
           layout: 'svg',
           floorplanUrl: 'floorplans/default-gym.svg',
           zones: [
@@ -443,55 +900,88 @@ function TempDashboard() {
             { id: 'machines', label: 'Machines', svgId: 'zone-machines' },
             { id: 'cables', label: 'Cable Area', svgId: 'zone-cables' },
           ]
-        };
+        });
         setMapConfig(fallbackMapCfg);
-        const zonesFromConfig = Array.isArray(fallbackMapCfg?.zones)
-          ? fallbackMapCfg.zones.map(z => ({ zone: z.id, minutes: 0 }))
-          : [];
+        const configuredZones = getConfiguredZones(fallbackMapCfg);
+        const zonesFromConfig = configuredZones.map(z => ({
+          zone: z.id,
+          label: z.label || z.id,
+          minutes: 0,
+          lastSeenAt: null,
+          isDisconnected: false,
+        }));
         const aggregated = {};
-        // Aggregate by zone directly from backend
+        const zoneInfoMap = new Map();
+        // Aggregate by zone directly from backend (usage for selected range)
         (data.machines || []).forEach(m => {
-          const zoneId = m.zone || 'unknown';
+          const derivedZone = deriveZoneFromMachineId(m.machineId);
+          const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
+          if (isExcludedZone(zoneId)) return;
           const rawVal = m.minutes ?? m.usage ?? m.totalMinutes ?? m.total_minutes ?? m.value ?? 0;
           const minutes = m.unit === 'seconds' ? Number(rawVal) / 60 : Number(rawVal) || 0;
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
           aggregated[zoneId] += minutes;
         });
-        // Merge with any zone-level minutes provided directly
+        // Prefer zone-level values from API when present (includes connectivity state)
         (data.zones || []).forEach(z => {
-          const rawZone = z.zone || 'unknown';
-          const zoneId = rawZone;
-          const minutes = z.minutes || 0;
+          const zoneId = normalizeZoneId(z.zone) || 'unknown';
+          if (isExcludedZone(zoneId)) return;
+          zoneInfoMap.set(zoneId, {
+            zone: zoneId,
+            label: z.label || formatZoneLabel(zoneId),
+            minutes: Number(z.minutes || 0),
+            lastSeenAt: z.lastSeenAt || null,
+            isDisconnected: typeof z.isDisconnected === 'boolean' ? z.isDisconnected : !z.lastSeenAt,
+          });
           if (!aggregated[zoneId]) aggregated[zoneId] = 0;
-          aggregated[zoneId] += minutes;
+          aggregated[zoneId] += Number(z.minutes || 0);
         });
-        const mergedZones = (fallbackMapCfg?.zones || []).map(z => ({
+        const mergedZones = configuredZones.map(z => ({
           zone: z.id,
-          minutes: aggregated[z.id] || 0,
+          label: z.label || z.id,
+          minutes: zoneInfoMap.get(String(z.id))?.minutes ?? aggregated[z.id] ?? 0,
+          lastSeenAt: zoneInfoMap.get(String(z.id))?.lastSeenAt || null,
+          isDisconnected: zoneInfoMap.get(String(z.id))?.isDisconnected ?? false,
         }));
         const fallbackZones = (data.zones || []).map(z => ({
-          zone: z.zone || 'unknown',
-          minutes: z.minutes || 0,
-        }));
+          zone: normalizeZoneId(z.zone) || 'unknown',
+          label: z.label || formatZoneLabel(z.zone),
+          minutes: Number(z.minutes || 0),
+          lastSeenAt: z.lastSeenAt || null,
+          isDisconnected: typeof z.isDisconnected === 'boolean' ? z.isDisconnected : !z.lastSeenAt,
+        })).filter(z => !isExcludedZone(z.zone));
         const zonesToSet = mergedZones.length ? mergedZones : (zonesFromConfig.length ? zonesFromConfig : fallbackZones);
         setFacilityZones(zonesToSet);
         const normalizedMachines = (data.machines || []).map(m => {
-          const zoneId = m.zone || 'unknown';
+          const derivedZone = deriveZoneFromMachineId(m.machineId);
+          const zoneId = normalizeZoneId(m.zone || derivedZone) || 'unknown';
           return {
             machineId: m.machineId,
             machineName: m.machineName || m.machineId,
             zone: zoneId
           };
-        });
+        }).filter(m => !isExcludedZone(m.zone));
         setFacilityMachines(normalizedMachines);
       } else {
-        const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+        const zeroZones = getConfiguredZones(mapConfig).map(z => ({
+          zone: z.id,
+          label: z.label || z.id,
+          minutes: 0,
+          lastSeenAt: null,
+          isDisconnected: false,
+        }));
         setFacilityZones(zeroZones);
         setFacilityMachines([]);
       }
     } catch (e) {
       console.error('Failed to fetch facility heatmap:', e);
-      const zeroZones = (mapConfig?.zones || []).map(z => ({ zone: z.id, minutes: 0 }));
+      const zeroZones = getConfiguredZones(mapConfig).map(z => ({
+        zone: z.id,
+        label: z.label || z.id,
+        minutes: 0,
+        lastSeenAt: null,
+        isDisconnected: false,
+      }));
       setFacilityZones(zeroZones);
       setFacilityMachines([]);
     } finally {
@@ -499,38 +989,68 @@ function TempDashboard() {
     }
   };
 
-  const getZoneColor = (minutes, maxMinutes) => {
+  const getZoneColor = (minutes, maxMinutes, disconnected = false) => {
+    if (disconnected) {
+      return 'rgba(148, 163, 184, 0.72)';
+    }
     const denom = Math.max(1, maxMinutes);
     const t = Math.min(1, minutes / denom);
-    return `rgba(${Math.round(239 * t + 34 * (1 - t))}, ${Math.round(68 * t + 197 * (1 - t))}, ${Math.round(68 * t + 94 * (1 - t))}, 0.7)`;
+    const [r, g, b] = interpolateHeatmapColor(t);
+    return `rgba(${r}, ${g}, ${b}, 0.78)`;
   };
 
   const applySvgZoneStyles = () => {
-    if (!mapConfig || !mapConfig.zones || mapConfig.zones.length === 0) return;
     const obj = svgObjectRef.current;
     if (!obj || !obj.contentDocument) return;
     const svgDoc = obj.contentDocument;
     const svgRoot = svgDoc.querySelector('svg');
     if (!svgRoot) return;
-    const vb = svgRoot.viewBox?.baseVal;
-    const viewBoxWidth = vb?.width || svgRoot.getBoundingClientRect().width || 1;
-    const viewBoxHeight = vb?.height || svgRoot.getBoundingClientRect().height || 1;
-    const maxMinutes = Math.max(1, ...(facilityZones || []).map(z => z.minutes || 0));
-    const labelFontSize = 18;
-    const labelPadding = 6;
+    const zoneElements = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
+      .filter(el => {
+        const id = String(el?.id || '');
+        return id && !canonicalZoneKey(id).startsWith('zone-label');
+      });
+    if (!zoneElements.length) return;
 
-    mapConfig.zones.forEach(z => {
-      const el = svgDoc.getElementById(z.svgId);
-      if (!el) return;
-      const entry = (facilityZones || []).find(fz => String(fz.zone) === String(z.id)) || {};
-      const minutes = entry.minutes || 0;
-      const color = getZoneColor(minutes, maxMinutes);
-      const selected = String(selectedZone) === String(z.id);
+    const activeZoneList = Array.isArray(activeZones) ? activeZones : [];
+    const zoneBySvgCandidate = new Map();
+    activeZoneList.forEach(z => {
+      getZoneSvgCandidates(z).forEach(candidate => {
+        zoneBySvgCandidate.set(canonicalZoneKey(candidate), z);
+      });
+    });
+
+    const maxMinutes = Math.max(
+      1,
+      ...((facilityZones || []).map(z => Number(z?.minutes) || 0))
+    );
+
+    // Disable pointer interception from non-zone SVG elements (invisible text boxes, guides, etc.)
+    svgDoc.querySelectorAll('*').forEach(node => {
+      node.style.pointerEvents = 'none';
+    });
+    svgDoc.querySelectorAll('[id^="onsight-label-"], [id^="onsight-status-"]').forEach(el => el.remove());
+
+    zoneElements.forEach(el => {
+      const rawId = String(el?.id || '').trim();
+      const mappedZone = zoneBySvgCandidate.get(canonicalZoneKey(rawId));
+      const resolvedZoneId = normalizeZoneId(mappedZone?.id || rawId) || String(mappedZone?.id || '').trim();
+      if (!resolvedZoneId || isExcludedZone(resolvedZoneId)) return;
+
+      const entry = (facilityZones || []).find(fz => (
+        String(normalizeZoneId(fz?.zone)) === String(resolvedZoneId)
+      )) || {};
+      const minutes = Number(entry?.minutes) || 0;
+      const disconnected = Boolean(entry?.isDisconnected);
+      const color = getZoneColor(minutes, maxMinutes, disconnected);
+      const selected = String(selectedZone) === String(resolvedZoneId);
+
       el.style.fill = color;
-      el.style.stroke = selected ? '#facc15' : '#000000';
+      el.style.stroke = selected ? '#facc15' : (disconnected ? '#64748b' : '#000000');
       el.style.strokeWidth = selected ? '3' : '1';
       el.style.cursor = 'pointer';
-      el.onclick = () => setSelectedZone(z.id);
+      el.style.pointerEvents = 'all';
+      el.onclick = () => setSelectedZone(String(resolvedZoneId));
 
       // Tooltip via <title> inside each zone
       let titleEl = el.querySelector('title');
@@ -538,79 +1058,88 @@ function TempDashboard() {
         titleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'title');
         el.prepend(titleEl);
       }
-      titleEl.textContent = `${z.label || z.id}: ${minutes.toFixed(1)} min`;
+      const statusText = disconnected ? 'Disconnected (no data in past 2h)' : 'Connected';
+      const lastSeenText = entry?.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString() : 'N/A';
+      titleEl.textContent = `${mappedZone?.label || resolvedZoneId}: ${minutes.toFixed(1)} min • ${statusText} • Last seen: ${lastSeenText}`;
 
-      // Inline label centered on the shape with a consistent-size chip behind it
-      try {
-        const bbox = el.getBBox();
-        const cx = bbox.x + bbox.width / 2;
-        const cy = bbox.y + bbox.height / 2;
-        const labelId = `onsight-label-${z.id}`;
-        let labelGroup = svgDoc.getElementById(labelId);
-        let rectEl = labelGroup?.querySelector('rect');
-        let textEl = labelGroup?.querySelector('text');
-        if (!labelGroup) {
-          labelGroup = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
-          labelGroup.setAttribute('id', labelId);
-          labelGroup.style.pointerEvents = 'none';
-          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
-          labelGroup.appendChild(rectEl);
-          labelGroup.appendChild(textEl);
-          svgRoot.appendChild(labelGroup);
+      if (disconnected) {
+        try {
+          const bbox = el.getBBox();
+          const radius = Math.max(8, Math.min(14, Math.min(bbox.width, bbox.height) * 0.12));
+          const cx = bbox.x + bbox.width - radius - 4;
+          const cy = bbox.y + radius + 4;
+
+          const marker = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+          marker.setAttribute('id', `onsight-status-${resolvedZoneId}`);
+          marker.style.pointerEvents = 'none';
+
+          const bubble = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          bubble.setAttribute('cx', String(cx));
+          bubble.setAttribute('cy', String(cy));
+          bubble.setAttribute('r', String(radius));
+          bubble.setAttribute('fill', '#334155');
+          bubble.setAttribute('stroke', '#cbd5e1');
+          bubble.setAttribute('stroke-width', '1.5');
+
+          const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', String(cx));
+          text.setAttribute('y', String(cy + 0.5));
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
+          text.setAttribute('font-size', String(Math.max(10, radius * 1.2)));
+          text.setAttribute('font-weight', '700');
+          text.setAttribute('fill', '#f8fafc');
+          text.textContent = '!';
+
+          marker.appendChild(bubble);
+          marker.appendChild(text);
+          svgRoot.appendChild(marker);
+        } catch (e) {
+          // Ignore SVG marker drawing issues for malformed paths; zone remains styled.
         }
-        if (!rectEl) {
-          rectEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          labelGroup.insertBefore(rectEl, labelGroup.firstChild);
-        }
-        if (!textEl) {
-          textEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
-          labelGroup.appendChild(textEl);
-        }
-
-        textEl.setAttribute('x', `${cx}`);
-        textEl.setAttribute('y', `${cy}`);
-        textEl.setAttribute('text-anchor', 'middle');
-        textEl.setAttribute('dominant-baseline', 'middle');
-        textEl.setAttribute('fill', '#ffffff');
-        textEl.setAttribute('font-size', `${labelFontSize}`);
-        textEl.setAttribute('font-weight', '700');
-        textEl.textContent = z.label || z.id;
-
-        const textBBox = textEl.getBBox();
-        const rectWidth = textBBox.width + labelPadding * 2;
-        const rectHeight = textBBox.height + labelPadding * 2;
-        const rectX = cx - rectWidth / 2;
-        const rectY = cy - rectHeight / 2;
-
-        rectEl.setAttribute('x', `${rectX}`);
-        rectEl.setAttribute('y', `${rectY}`);
-        rectEl.setAttribute('width', `${rectWidth}`);
-        rectEl.setAttribute('height', `${rectHeight}`);
-        rectEl.setAttribute('rx', '6');
-        rectEl.setAttribute('ry', '6');
-        rectEl.setAttribute('fill', '#0f172a');
-        rectEl.setAttribute('fill-opacity', '0.8');
-        rectEl.setAttribute('stroke', selected ? '#facc15' : '#111827');
-        rectEl.setAttribute('stroke-width', selected ? '2' : '1');
-        rectEl.setAttribute('shape-rendering', 'crispEdges');
-      } catch (e) {
-        // If getBBox fails, skip label placement for this zone
       }
     });
   };
 
+  const discoverZonesFromSvg = () => {
+    const obj = svgObjectRef.current;
+    if (!obj || !obj.contentDocument) return;
+    const svgDoc = obj.contentDocument;
+    const rawZones = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
+      .map(el => String(el?.id || '').trim())
+      .filter(id => id && !canonicalZoneKey(id).startsWith('zone-label'));
+
+    const seen = new Set();
+    const discovered = [];
+    rawZones.forEach(rawId => {
+      const zoneId = normalizeZoneId(rawId);
+      if (!zoneId || isExcludedZone(zoneId) || seen.has(zoneId)) return;
+      seen.add(zoneId);
+      discovered.push({
+        id: zoneId,
+        label: zoneId,
+        svgId: rawId,
+      });
+    });
+
+    setSvgDiscoveredZones(discovered);
+  };
+
   useEffect(() => {
+    setSvgDiscoveredZones([]);
     const obj = svgObjectRef.current;
     if (!obj) return;
-    const handleLoad = () => applySvgZoneStyles();
+    const handleLoad = () => {
+      discoverZonesFromSvg();
+      applySvgZoneStyles();
+    };
     obj.addEventListener('load', handleLoad);
     return () => obj.removeEventListener('load', handleLoad);
-  }, [mapConfig]);
+  }, [activeFloorplanUrl]);
 
   useEffect(() => {
     applySvgZoneStyles();
-  }, [facilityZones, selectedZone, mapConfig]);
+  }, [facilityZones, selectedZone, activeZones, activeFloorplanUrl]);
 
   // Memoize processed analytics data to prevent dependency array size changes
   const processedAnalyticsData = useMemo(() => {
@@ -643,14 +1172,218 @@ function TempDashboard() {
     return options;
   }, [processedAnalyticsData.length]);
 
+  const analyticsZoneLookup = useMemo(() => {
+    const lookup = {};
+
+    Object.entries(machineZoneMap || {}).forEach(([machineId, zoneId]) => {
+      const normalized = normalizeZoneId(zoneId);
+      if (machineId && normalized && !isExcludedZone(normalized)) {
+        lookup[String(machineId)] = normalized;
+      }
+    });
+
+    (facilityMachines || []).forEach(m => {
+      const machineId = String(m?.machineId || '').trim();
+      const normalized = normalizeZoneId(m?.zone);
+      if (machineId && normalized && !isExcludedZone(normalized)) {
+        lookup[machineId] = normalized;
+      }
+    });
+
+    return lookup;
+  }, [machineZoneMap, facilityMachines]);
+
+  const analyticsRankRows = useMemo(() => {
+    const selectedZonesSet = new Set((selectedAnalyticsZones || []).map(String));
+    const q = String(analyticsSearchTerm || '').trim().toLowerCase();
+
+    const rows = (avgUsageRows || [])
+      .map((m) => {
+        const machineId = String(m?.machineId || '').trim();
+        const machineName = String(m?.machineName || machineId || 'Unknown').trim();
+        const derivedZone = normalizeZoneId(deriveZoneFromMachineId(machineId));
+        const zone = analyticsZoneLookup[machineId] || derivedZone || 'unknown';
+        const avgUsageMinutes = Number.isFinite(Number(m?.avgMinutes)) ? Number(m.avgMinutes) : 0;
+        return {
+          machineId,
+          machineName,
+          zone,
+          avgUsageMinutes,
+        };
+      })
+      .filter(row => row.machineId && !isExcludedZone(row.zone));
+
+    const filteredRows = rows.filter(row => {
+      const inZoneFilter = selectedZonesSet.size === 0 || selectedZonesSet.has(String(row.zone));
+      if (!inZoneFilter) return false;
+      if (!q) return true;
+      const name = row.machineName.toLowerCase();
+      const id = row.machineId.toLowerCase();
+      return name.includes(q) || id.includes(q);
+    });
+
+    filteredRows.sort((a, b) => {
+      const diff = usageRankSort === 'least'
+        ? a.avgUsageMinutes - b.avgUsageMinutes
+        : b.avgUsageMinutes - a.avgUsageMinutes;
+      if (Math.abs(diff) > 0.0001) return diff;
+      return a.machineName.localeCompare(b.machineName);
+    });
+
+    return filteredRows.map((row, idx) => ({ ...row, rank: idx + 1 }));
+  }, [avgUsageRows, analyticsZoneLookup, selectedAnalyticsZones, analyticsSearchTerm, usageRankSort]);
+
+  const analyticsZoneOptions = useMemo(() => {
+    const zoneSet = new Set();
+    Object.values(analyticsZoneLookup || {}).forEach(zone => {
+      const normalized = normalizeZoneId(zone);
+      if (normalized && normalized !== 'unknown' && !isExcludedZone(normalized)) {
+        zoneSet.add(String(normalized));
+      }
+    });
+
+    return Array.from(zoneSet)
+      .sort((a, b) => {
+        if (/^\d+$/.test(a) && /^\d+$/.test(b)) return Number(a) - Number(b);
+        return a.localeCompare(b);
+      })
+      .map(zone => ({ value: zone, label: /^\d+$/.test(zone) ? `Zone ${zone}` : zone }));
+  }, [analyticsZoneLookup]);
+
+  const equipmentTypeMix = useMemo(() => {
+    let cardio = 0;
+    let strength = 0;
+    if (Array.isArray(gymMachines) && gymMachines.length) {
+      gymMachines.forEach((machine) => {
+        const typeGroup = toUsageGroup(machine?.type);
+        if (typeGroup === 'cardio') cardio += 1;
+        else strength += 1;
+      });
+      return { cardio, strength };
+    }
+    Object.values(machineTypeMap || {}).forEach(typeGroup => {
+      if (typeGroup === 'cardio') cardio += 1;
+      else strength += 1;
+    });
+    return { cardio, strength };
+  }, [gymMachines, machineTypeMap]);
+
+  const usageTypeMix = useMemo(() => {
+    let cardio = 0;
+    let strength = 0;
+
+    if (Array.isArray(analyticsData) && analyticsData.length) {
+      analyticsData.forEach((m) => {
+        const machineId = normalizeMachineIdValue(m?.machineId);
+        const usage = (m?.days || []).reduce((acc, d) => acc + (Number(d?.avgMinutes) || 0), 0);
+        if (!Number.isFinite(usage) || usage <= 0) return;
+        const group = machineTypeMap[machineId] || toUsageGroup(m?.type);
+        if (group === 'cardio') cardio += usage;
+        else strength += usage;
+      });
+      return { cardio, strength };
+    }
+
+    // Fallback if DOW analytics has not loaded yet.
+    (avgUsageRows || []).forEach((m) => {
+      const machineId = normalizeMachineIdValue(m?.machineId);
+      const usage = Number(m?.avgMinutes) || 0;
+      if (usage <= 0) return;
+      const group = machineTypeMap[machineId] || toUsageGroup(m?.type);
+      if (group === 'cardio') cardio += usage;
+      else strength += usage;
+    });
+    return { cardio, strength };
+  }, [analyticsData, avgUsageRows, machineTypeMap]);
+
+  const renderTypePieCard = (title, subtitle, mix, valueSuffix = '') => {
+    const cardio = Number(mix?.cardio) || 0;
+    const strength = Number(mix?.strength) || 0;
+    const total = cardio + strength;
+    const cardioPct = total > 0 ? (cardio / total) * 100 : 0;
+    const strengthPct = total > 0 ? (strength / total) * 100 : 0;
+    const pieBackground = `conic-gradient(#22c55e 0deg ${(cardioPct / 100) * 360}deg, #f97316 ${(cardioPct / 100) * 360}deg 360deg)`;
+
+    return (
+      <div className="nx-card" style={{gridColumn:'span 6'}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">{title}</div>
+            <div className="nx-subtle">{subtitle}</div>
+          </div>
+        </div>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap'}}>
+          <div style={{
+            width: 150,
+            height: 150,
+            borderRadius: '50%',
+            background: pieBackground,
+            position:'relative',
+            boxShadow:'0 0 0 1px rgba(255,255,255,0.1) inset'
+          }}>
+            <div style={{
+              position:'absolute',
+              inset:24,
+              borderRadius:'50%',
+              background:'#111119',
+              border:'1px solid #1d1d29',
+              display:'flex',
+              alignItems:'center',
+              justifyContent:'center',
+              color:'#e5e7eb',
+              fontSize:13,
+              fontWeight:700
+            }}>
+              {Math.round(cardioPct)} / {Math.round(strengthPct)}
+            </div>
+          </div>
+          <div style={{display:'grid', gap:10, minWidth:220}}>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <span style={{width:10, height:10, borderRadius:'50%', background:'#22c55e', display:'inline-block'}} />
+                <span style={{color:'#e5e7eb'}}>Cardio</span>
+              </div>
+              <div className="nx-subtle">{cardio.toFixed(valueSuffix ? 1 : 0)}{valueSuffix} ({cardioPct.toFixed(1)}%)</div>
+            </div>
+            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <span style={{width:10, height:10, borderRadius:'50%', background:'#f97316', display:'inline-block'}} />
+                <span style={{color:'#e5e7eb'}}>Strength</span>
+              </div>
+              <div className="nx-subtle">{strength.toFixed(valueSuffix ? 1 : 0)}{valueSuffix} ({strengthPct.toFixed(1)}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const analyticsRankTotalPages = useMemo(() => (
+    Math.max(1, Math.ceil((analyticsRankRows.length || 0) / ANALYTICS_RANK_PAGE_SIZE))
+  ), [analyticsRankRows.length, ANALYTICS_RANK_PAGE_SIZE]);
+
+  const safeAnalyticsPage = useMemo(() => (
+    Math.min(analyticsPage, analyticsRankTotalPages - 1)
+  ), [analyticsPage, analyticsRankTotalPages]);
+
+  const analyticsRankPageRows = useMemo(() => {
+    const start = safeAnalyticsPage * ANALYTICS_RANK_PAGE_SIZE;
+    return analyticsRankRows.slice(start, start + ANALYTICS_RANK_PAGE_SIZE);
+  }, [safeAnalyticsPage, analyticsRankRows, ANALYTICS_RANK_PAGE_SIZE]);
+
   // Build analytics chart
   useEffect(() => {
     if (activeTab !== 'analytics') return;
     if (!analyticsChartRef.current || processedAnalyticsData.length === 0) return;
     
-    const ctx = analyticsChartRef.current.getContext('2d');
+    const canvas = analyticsChartRef.current;
+    const ctx = canvas.getContext('2d');
+    // Defensive destroy in case Chart.js still has this canvas registered.
+    const existingCanvasChart = Chart.getChart(canvas);
+    if (existingCanvasChart) existingCanvasChart.destroy();
     if (chartInstancesRef.current.analytics) {
       chartInstancesRef.current.analytics.destroy();
+      chartInstancesRef.current.analytics = null;
     }
 
     const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -722,7 +1455,12 @@ function TempDashboard() {
       },
     });
 
-    return () => { chartInstancesRef.current.analytics?.destroy(); };
+    return () => {
+      chartInstancesRef.current.analytics?.destroy();
+      chartInstancesRef.current.analytics = null;
+      const lingering = Chart.getChart(canvas);
+      if (lingering) lingering.destroy();
+    };
   }, [activeTab, processedAnalyticsData, selectedTopN]);
 
   // Initialize data on mount and user load
@@ -731,6 +1469,7 @@ function TempDashboard() {
       fetchDashboardData();
       fetchMachineOptions();
       fetchAnalyticsData();
+      fetchAlertsData(); // Fetch gym-specific alerts
     }
   }, [user]);
 
@@ -741,10 +1480,25 @@ function TempDashboard() {
       buildCumulativeChart();
       fetchFacilityHeatmap(facilityRange);
     }
-    if (activeTab === 'analytics') {
-      buildWeeklyChart();
-    }
-  }, [user, selectedAvgRange, selectedCumRange, activeTab, facilityRange]);
+  }, [user, selectedCumRange, activeTab, facilityRange]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'dashboard') return;
+    fetchUsageSearchRows();
+  }, [user, activeTab, selectedSearchRange]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'analytics') return;
+    fetchMachineOptions();
+    fetchTopZonesToday();
+    const id = setInterval(fetchTopZonesToday, 60000);
+    return () => clearInterval(id);
+  }, [user, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+    buildWeeklyChart();
+  }, [activeTab, analyticsRankRows]);
 
   useEffect(() => {
     if (selectedMachine && activeTab === 'dashboard') {
@@ -781,6 +1535,45 @@ function TempDashboard() {
     }
   }, [selectedZone, filteredMachineOptions, machineOptions, selectedMachine, activeTab, user]);
 
+  useEffect(() => {
+    const normalizedZone = normalizeZoneId(selectedZone);
+    if (!normalizedZone || isExcludedZone(normalizedZone)) return;
+    setSelectedAnalyticsZones(prev => (
+      prev.length === 1 && String(prev[0]) === String(normalizedZone)
+        ? prev
+        : [String(normalizedZone)]
+    ));
+  }, [selectedZone]);
+
+  useEffect(() => {
+    setAnalyticsPage(0);
+  }, [analyticsSearchTerm, usageRankSort, selectedAnalyticsZones, selectedSearchRange]);
+
+  useEffect(() => {
+    if (analyticsPage > safeAnalyticsPage) {
+      setAnalyticsPage(safeAnalyticsPage);
+    }
+  }, [analyticsPage, safeAnalyticsPage]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!analyticsZoneFilterRef.current) return;
+      if (!analyticsZoneFilterRef.current.contains(e.target)) {
+        setAnalyticsZoneFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggleAnalyticsZoneSelection = (zoneId) => {
+    setSelectedAnalyticsZones(prev => (
+      prev.includes(zoneId)
+        ? prev.filter(z => z !== zoneId)
+        : [...prev, zoneId]
+    ));
+  };
+
   // Tab change handler
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -809,17 +1602,154 @@ function TempDashboard() {
 
   // Alert management functions
   const snapshotAlerts = () => alerts.map(a => ({ ...a }));
-  const resolveAlert = (id) => {
+  const resolveAlert = (alert) => {
+    setAlertToResolve(alert);
+    setResolveModalOpen(true);
+  };
+
+const handleResolveYes = async () => {
+  const alert = alertToResolve;
+  if (!alert) return;
+
+  const gymId = localStorage.getItem('gymId');
+  const userEmail = localStorage.getItem('userEmail') || 'unknown';
+  if (!gymId) {
+    setAlertsError('No gym selected');
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+    return;
+  }
+
+  try {
+    setAlertsLoading(true);
+    setAlertsError('');
+
+    // If this alert came from backend (has ticketId), close it on the backend first
+    if (backendURL && alert.ticketId) {
+      try {
+        console.log('Closing backend ticket/alert:', alert.ticketId);
+        const closeRes = await fetch(`${backendURL}/api/maintenance/tickets/${alert.ticketId}/close`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            gymId,
+            checklistUpdates: [],
+            resolvedBy: userEmail,
+            notes: 'Converted to ticket from dashboard alert'
+          })
+        });
+        
+        if (!closeRes.ok) {
+          console.warn('Failed to close alert on backend:', closeRes.status);
+        } else {
+          console.log('Alert closed on backend successfully');
+        }
+      } catch (e) {
+        console.warn('Error closing alert on backend:', e);
+        // Continue anyway - we'll still remove it locally
+      }
+    }
+
+    // Remove the alert from local state
     setUndoStack(prev => [...prev, snapshotAlerts()]);
     setRedoStack([]);
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, resolved: true } : a));
-  };
+    const newAlerts = alerts.filter(a => a.id !== alert.id);
+    setAlerts(newAlerts);
+    
+    // Persist alert removal to localStorage
+    try {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+      console.log('Alert removed from localStorage, remaining alerts:', newAlerts.length);
+    } catch (e) {
+      console.warn('Failed to persist alerts to localStorage', e);
+    }
+
+    // Create ticket purely on frontend (localStorage) — no backend calls
+    const ticketsKey = `tickets_${gymId}`;
+    let tickets = [];
+    try {
+      const raw = localStorage.getItem(ticketsKey);
+      tickets = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(tickets)) tickets = [];
+    } catch (e) {
+      tickets = [];
+    }
+
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Use machineId as the primary name, fallback to title
+    const machineName = alert.machineId || alert.machineName || 'Unknown Machine';
+    const ticketTitle = `${machineName}`;
+
+    const newTicket = {
+      _id: localId,
+      title: ticketTitle,
+      description: alert.description || alert.title || 'Alert generated ticket',
+      equipment: machineName,
+      machineName: machineName,
+      category: 'Alert',
+      status: 'open',
+      priority: 'medium',
+      createdBy: userEmail,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      source: 'alert'
+    };
+
+    tickets.push(newTicket);
+    localStorage.setItem(ticketsKey, JSON.stringify(tickets));
+    
+    console.log('Ticket created:', newTicket);
+    console.log('Alert removed, new alerts count:', newAlerts.length);
+
+    // close modal UI and clear selection pointer AFTER alert removal
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+
+    // Switch to tickets tab
+    setActiveTab('tickets');
+  } catch (e) {
+    console.error('Error creating ticket locally for alert', e);
+    setAlertsError(e?.message || 'Failed to create ticket');
+    setResolveModalOpen(false);
+    setAlertToResolve(null);
+  } finally {
+    setAlertsLoading(false);
+  }
+};
+
+const handleResolveNo = () => {
+  if (alertToResolve) {
+    setUndoStack(prev => [...prev, snapshotAlerts()]);
+    setRedoStack([]);
+
+    const newAlerts = alerts.map(a =>
+      a.id === alertToResolve.id ? { ...a, resolved: true } : a
+    );
+    setAlerts(newAlerts);
+
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(newAlerts));
+    }
+  }
+
+  setResolveModalOpen(false);
+  setAlertToResolve(null);
+};
+
+  
   const undoResolve = () => {
     if (undoStack.length === 0) return;
     const prevState = undoStack[undoStack.length - 1];
     setUndoStack(s => s.slice(0, -1));
     setRedoStack(s => [...s, snapshotAlerts()]);
     setAlerts(prevState);
+    
+    // Update localStorage
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(prevState));
+    }
   };
   const redoResolve = () => {
     if (redoStack.length === 0) return;
@@ -827,6 +1757,12 @@ function TempDashboard() {
     setRedoStack(s => s.slice(0, -1));
     setUndoStack(s => [...s, snapshotAlerts()]);
     setAlerts(nextState);
+    
+    // Update localStorage
+    const gymId = localStorage.getItem('gymId');
+    if (gymId) {
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(nextState));
+    }
   };
   const openMaint = (alert) => {
     setActiveAlert(alert);
@@ -846,6 +1782,97 @@ function TempDashboard() {
 
   const statusLabel = (s) => s === 'active' ? 'In Use' : s === 'inactive' ? 'Available' : s === 'maintenance' ? 'Maintenance' : 'Unknown';
   const statusClass = (s) => s === 'active' ? 'status--active' : s === 'inactive' ? 'status--inactive' : s === 'maintenance' ? 'status--maintenance' : 'status--unknown';
+
+  const fetchAlerts = async () => {
+    if (!backendURL) return;
+    setAlertsLoading(true);
+    setAlertsError('');
+    try {
+      const gymId = localStorage.getItem('gymId');
+      if (!gymId) return;
+      const res = await fetch(`${backendURL}/api/maintenance/gyms/${gymId}/tickets`);
+      if (!res.ok) throw new Error(`Alerts HTTP ${res.status}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      const lowUsage = list.filter(t =>
+        t.status === 'open' && (t.category === 'Low Usage' || t.createdBy === 'low_usage_monitor')
+      );
+      setAlerts(lowUsage.map(t => ({
+        id: `ticket_${t._id}`,
+        ticketId: t._id,
+        title: t.machineName || 'Low usage detected',
+        machineId: t.machineName || t.equipment || 'Unknown',
+        description: t.description || 'Low usage alert',
+        resolved: false
+      })));
+    } catch (err) {
+      console.error('Failed to fetch alerts', err);
+      setAlertsError(err.message);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  // Fetch alerts data from localStorage (gym-specific)
+  const fetchAlertsData = async () => {
+    try {
+      const gymId = localStorage.getItem('gymId');
+      const userEmail = localStorage.getItem('userEmail');
+      if (!gymId || !userEmail) return;
+
+      // Read persisted per-gym alerts or seed sample alerts
+      const storedAlerts = localStorage.getItem(`alerts_${gymId}`);
+      if (storedAlerts) {
+        try {
+          const parsedAlerts = JSON.parse(storedAlerts);
+          if (Array.isArray(parsedAlerts)) {
+            setAlerts(parsedAlerts);
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse stored alerts for gym, will seed sample data');
+        }
+      }
+
+      // Seed sample alerts for this gym if none exist
+      const alertId1 = `${gymId}_alert1`;
+      const alertId2 = `${gymId}_alert2`;
+      const gymSpecificAlerts = [
+        {
+          id: alertId1,
+          title: 'Sensor Malfunction',
+          machineId: `Treadmill-${gymId.slice(-2)}`,
+          description: 'Usage sensor not responding',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        },
+        {
+          id: alertId2,
+          title: 'Maintenance Required',
+          machineId: `Elliptical-${gymId.slice(-2)}`,
+          description: 'Unusual vibration detected',
+          resolved: false,
+          timestamp: new Date().toISOString(),
+          gymId: gymId
+        }
+      ];
+
+      setAlerts(gymSpecificAlerts);
+      localStorage.setItem(`alerts_${gymId}`, JSON.stringify(gymSpecificAlerts));
+
+    } catch (error) {
+      console.error('Error fetching alerts data:', error);
+      setAlerts([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!backendURL || activeTab !== 'dashboard') return;
+    fetchAlerts();
+    const id = setInterval(fetchAlerts, 60000);
+    return () => clearInterval(id);
+  }, [activeTab]);
 
   // Space allocation suggestions
   // useEffect(() => {
@@ -880,6 +1907,197 @@ function TempDashboard() {
     setSuggestions(next);
     persistSuggestions(next);
   }
+
+  const renderMachineUsageSearchAndAverage = () => (
+    <>
+      <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">Machine Usage Search</div>
+            <div className="nx-subtle">Full machine ranking by daily average usage with zone filters</div>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}>
+            <input
+              value={analyticsSearchTerm}
+              onChange={(e) => setAnalyticsSearchTerm(e.target.value)}
+              placeholder="Search machine name or ID"
+              style={{
+                height: 32,
+                minWidth: 220,
+                padding: '0 10px',
+                borderRadius: 8,
+                border: '1px solid #262633',
+                background: '#13131a',
+                color: '#e5e7eb',
+                fontSize: 12,
+                outline: 'none'
+              }}
+            />
+            <NxDropdown
+              value={usageRankSort}
+              onChange={setUsageRankSort}
+              options={[
+                { value: 'most', label: 'Most Used' },
+                { value: 'least', label: 'Least Used' },
+              ]}
+              minWidth={110}
+            />
+            <NxDropdown
+              value={selectedSearchRange}
+              onChange={setSelectedSearchRange}
+              options={SEARCH_RANGE_OPTIONS}
+              minWidth={140}
+            />
+            <div ref={analyticsZoneFilterRef} style={{ position:'relative' }}>
+              <button
+                className="nx-btn"
+                onClick={() => setAnalyticsZoneFilterOpen(v => !v)}
+                style={{ minWidth: 145, height: 32, padding: '0 10px' }}
+              >
+                {selectedAnalyticsZones.length
+                  ? `Zones: ${selectedAnalyticsZones.join(', ')}`
+                  : 'All Zones'}
+              </button>
+              {analyticsZoneFilterOpen && (
+                <div className="nx-dd-menu" style={{ right: 0, left: 'auto', minWidth: 220 }}>
+                  <div
+                    className="nx-dd-item"
+                    onClick={() => setSelectedAnalyticsZones([])}
+                    style={{ fontWeight: selectedAnalyticsZones.length === 0 ? 700 : 500 }}
+                  >
+                    All Zones
+                  </div>
+                  {analyticsZoneOptions.length === 0 ? (
+                    <div className="nx-subtle" style={{ padding:'8px 10px' }}>No zone data</div>
+                  ) : (
+                    analyticsZoneOptions.map(opt => (
+                      <label
+                        key={opt.value}
+                        style={{
+                          display:'flex',
+                          alignItems:'center',
+                          gap:8,
+                          padding:'8px 10px',
+                          borderRadius:8,
+                          cursor:'pointer',
+                          color:'#e5e7eb',
+                          fontSize:13
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAnalyticsZones.includes(opt.value)}
+                          onChange={() => toggleAnalyticsZoneSelection(opt.value)}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex', flexDirection:'column', height:'calc(100% - 60px)'}}>
+          <div style={{overflow:'auto', flex:1}}>
+            <div className="nx-thead" style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}>
+              <div>Rank</div>
+              <div>Machine</div>
+              <div>Zone</div>
+              <div>Avg Usage</div>
+            </div>
+            {analyticsLoading ? (
+              <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading machine ranking...</div>
+            ) : analyticsRankRows.length === 0 ? (
+              <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No machines match the current search/filter.</div>
+            ) : (
+              analyticsRankPageRows.map(row => (
+                <div
+                  key={`rank_${row.machineId}`}
+                  className="nx-trow"
+                  style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}
+                >
+                  <div style={{fontWeight:700, color:'#cbd5e1'}}>#{row.rank}</div>
+                  <div>
+                    <div style={{color:'#e5e7eb', fontWeight:600}}>{row.machineName || row.machineId}</div>
+                  </div>
+                  <div className="nx-subtle">
+                    {row.zone === 'unknown'
+                      ? 'Unknown'
+                      : (/^\d+$/.test(String(row.zone)) ? `Zone ${row.zone}` : row.zone)}
+                  </div>
+                  <div style={{fontWeight:600, color:'#e5e7eb'}}>{Math.round(row.avgUsageMinutes)} min</div>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'space-between',
+            gap:10,
+            paddingTop:10,
+            borderTop:'1px solid #1f2430'
+          }}>
+            <div className="nx-subtle">
+              {analyticsRankRows.length === 0
+                ? '0 results'
+                : `Showing ${safeAnalyticsPage * ANALYTICS_RANK_PAGE_SIZE + 1}-${Math.min((safeAnalyticsPage + 1) * ANALYTICS_RANK_PAGE_SIZE, analyticsRankRows.length)} of ${analyticsRankRows.length}`}
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:8}}>
+              <button
+                className="nx-btn"
+                onClick={() => setAnalyticsPage(p => Math.max(0, p - 1))}
+                disabled={safeAnalyticsPage <= 0}
+                style={{height:30, minWidth:36, padding:'0 8px'}}
+                title="Previous page"
+              >
+                ◀
+              </button>
+              <div className="nx-subtle">{analyticsRankRows.length ? `Page ${safeAnalyticsPage + 1} / ${analyticsRankTotalPages}` : 'Page 0 / 0'}</div>
+              <button
+                className="nx-btn"
+                onClick={() => setAnalyticsPage(p => Math.min(analyticsRankTotalPages - 1, p + 1))}
+                disabled={safeAnalyticsPage >= analyticsRankTotalPages - 1 || analyticsRankRows.length === 0}
+                style={{height:30, minWidth:36, padding:'0 8px'}}
+                title="Next page"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="nx-card" style={{marginTop:8}}>
+        <div className="nx-card-header">
+          <div>
+            <div className="nx-card-title">Average Machine Usage</div>
+            <div className="nx-subtle">Matches current Machine Usage Search filters</div>
+          </div>
+          <NxDropdown
+            value={selectedSearchRange}
+            onChange={setSelectedSearchRange}
+            options={SEARCH_RANGE_OPTIONS}
+            minWidth={140}
+          />
+        </div>
+        <div className="nx-chart" style={{position:'relative'}}>
+          <canvas ref={avgUsageChartRef}></canvas>
+          {analyticsLoading && (
+            <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af', background:'rgba(0,0,0,0.2)'}}>
+              Loading usage data...
+            </div>
+          )}
+          {!analyticsLoading && analyticsRankRows.length === 0 && (
+            <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af'}}>
+              No machines match the current search/filter.
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
 
   const back = async() => {
     try {
@@ -917,8 +2135,6 @@ function TempDashboard() {
         .nx-card-title { font-size:13px; font-weight:600; color:#a3a3b2; }
         .nx-metric { font-size:28px; font-weight:700; color:#ffffff; letter-spacing:0.2px; }
         .nx-subtle { font-size:12px; color:#9ca3af; }
-        .nx-chip { background:rgba(124,58,237,0.15); color:#c4b5fd; font-size:11px; padding:2px 6px; border-radius:999px; margin-left:8px; border:1px solid rgba(124,58,237,0.35); }
-        .nx-chip.red { background:rgba(239,68,68,0.12); color:#fecaca; border-color:rgba(239,68,68,0.35); }
         .nx-chart { height:260px; }
         .nx-select { padding:6px 10px; border-radius:8px; border:1px solid #262633; background:#13131a; color:#e5e7eb; font-size:12px; }
         .nx-mobile-tabs { display:none; }
@@ -1027,6 +2243,77 @@ function TempDashboard() {
               </div>
             ) : activeTab === 'analytics' ? (
               <div className="nx-dashboard-content">
+                <div className="nx-card" style={{marginBottom:'8px'}}>
+                  <div className="nx-card-header" style={{alignItems:'baseline'}}>
+                    <div style={{fontSize:'26px', fontWeight:800, color:'#ffffff', lineHeight:1.1}}>Top 3 Zones Today</div>
+                    <div className="nx-subtle">Usage from midnight to now</div>
+                  </div>
+                  <div style={{minHeight:220, display:'flex', alignItems:'flex-end', justifyContent:'space-around', gap:20, padding:'10px 8px 4px'}}>
+                    {topZonesTodayLoading ? (
+                      <div className="nx-subtle" style={{padding:'20px'}}>Loading zone usage...</div>
+                    ) : topZonesToday.length === 0 ? (
+                      <div className="nx-subtle" style={{padding:'20px'}}>No zone usage data available for today.</div>
+                    ) : (
+                      (() => {
+                        const maxMinutes = Math.max(1, ...topZonesToday.map(z => Number(z.minutes) || 0));
+                        const barColors = ['rgba(34,197,94,0.9)', 'rgba(249,115,22,0.9)', 'rgba(239,68,68,0.9)'];
+                        return topZonesToday.map((zone, idx) => {
+                          const ratio = (Number(zone.minutes) || 0) / maxMinutes;
+                          const barHeight = Math.max(18, Math.round(170 * ratio));
+                          const label = zone.empty ? '--' : formatZoneLabel(zone.zone);
+                          return (
+                            <div key={`top_zone_${idx}_${zone.zone}`} style={{display:'flex', flexDirection:'column', alignItems:'center', minWidth:180}}>
+                              <div style={{fontSize:14, fontWeight:700, color:'#e5e7eb', marginBottom:8}}>{label}</div>
+                              <div style={{display:'flex', alignItems:'flex-end', gap:10, minHeight:190}}>
+                                <div style={{
+                                  width:58,
+                                  height: `${barHeight}px`,
+                                  borderRadius:'10px 10px 4px 4px',
+                                  background: barColors[idx % barColors.length],
+                                  boxShadow:'0 0 0 1px rgba(255,255,255,0.12) inset'
+                                }} />
+                                <div className="nx-subtle" style={{fontWeight:600, color:'#cbd5e1'}}>{Math.round(zone.minutes || 0)} min</div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
+                    )}
+                  </div>
+                </div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  {topZonesTodayLoading ? (
+                    <div className="nx-card" style={{gridColumn:'span 12'}}>
+                      <div className="nx-subtle" style={{padding:'8px 4px'}}>Loading remaining zones...</div>
+                    </div>
+                  ) : remainingZonesToday.length === 0 ? (
+                    <div className="nx-card" style={{gridColumn:'span 12'}}>
+                      <div className="nx-subtle" style={{padding:'8px 4px'}}>No additional zones to show for today.</div>
+                    </div>
+                  ) : (
+                    remainingZonesToday.map((zone) => (
+                      <div key={`remaining_zone_${zone.zone}`} className="nx-card" style={{gridColumn:'span 3', padding:'12px 14px'}}>
+                        <div className="nx-card-title" style={{fontSize:15, color:'#e5e7eb', marginBottom:6}}>
+                          {formatZoneLabel(zone.zone)}
+                        </div>
+                        <div className="nx-subtle">Time used: {Math.round(zone.minutes || 0)} min</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  {renderTypePieCard(
+                    'Equipment Type Mix',
+                    'Percent of equipment by type',
+                    equipmentTypeMix
+                  )}
+                  {renderTypePieCard(
+                    'Usage Type Mix',
+                    'Percent of usage by type',
+                    usageTypeMix,
+                    ' min'
+                  )}
+                </div>
                 <div className="nx-analytics-grid" style={{marginBottom:'8px'}}>
                   <div className="nx-card" style={{height:`${DASHBOARD_CONTENT_HEIGHT * 0.65}px`}}>
                     <div className="nx-card-header">
@@ -1069,7 +2356,7 @@ function TempDashboard() {
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{machineOptions.length}</div>
                       </div>
                       <div style={{marginBottom:'12px'}}>
-                        <div className="nx-subtle">Active Today</div>
+                        <div className="nx-subtle">Connected Machines</div>
                         <div style={{fontSize:'24px', fontWeight:'700', color:'#22c55e'}}>{stats.currentOccupancy}</div>
                       </div>
                       <div style={{marginBottom:'12px'}}>
@@ -1080,49 +2367,6 @@ function TempDashboard() {
                 </div>
               </div>
 
-                <div className="nx-card" style={{marginTop:8}}>
-                  <div className="nx-card-header">
-                    <div>
-                      <div className="nx-card-title">Average Machine Usage</div>
-                      <div className="nx-subtle">Per machine</div>
-                    </div>
-                    <NxDropdown
-                      value={selectedAvgRange}
-                      onChange={(v) => setSelectedAvgRange(parseInt(v))}
-                      options={[
-                        { value: 6, label: 'Past 6 Hours' },
-                        { value: 8, label: 'Past 8 Hours' },
-                        { value: 12, label: 'Past 12 Hours' },
-                        { value: 24, label: 'Past 24 Hours' },
-                        { value: 168, label: 'Past Week' },
-                        { value: 720, label: 'Past Month' },
-                        { value: 1000, label: 'All Time' }
-                      ]}
-                      minWidth={150}
-                    />
-                  </div>
-                  <div className="nx-chart"><canvas ref={avgUsageChartRef}></canvas></div>
-                </div>
-
-                <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
-                  <div className="nx-card-header">
-                    <div>
-                      <div className="nx-card-title">Maintenance Prioritization</div>
-                      <div className="nx-subtle">Equipment ranked by maintenance urgency based on usage patterns</div>
-                    </div>
-                  </div>
-                  <div style={{overflow:'auto', height:'calc(100% - 60px)'}}>
-                    <div className="nx-thead" style={{gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', padding:'12px 0'}}>
-                      <div>Equipment</div>
-                      <div>Usage Hours</div>
-                      <div>Last Maintenance</div>
-                      <div>Priority</div>
-                      <div style={{textAlign:'right'}}>Schedule</div>
-                    </div>
-                    {/* Placeholder maintenance data - can be connected to backend later */}
-                    <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Maintenance data coming soon</div>
-                  </div>
-                </div>
               </div>
             ) : activeTab === 'tickets' ? (
               <div className="nx-dashboard-content">
@@ -1146,35 +2390,23 @@ function TempDashboard() {
                 <div className="nx-grid" style={{marginBottom:'0px'}}>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Daily Favorite</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.dailyFav?.machineName || '--'}
-                      <span className="nx-chip">New</span>
-                    </div>
+                    <div className="nx-metric">{stats.dailyFav?.machineName || '--'}</div>
                     <div className="nx-subtle">Today's most used machine</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Peak Hours</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.peakHours}
-                      <span className="nx-chip">+15.8%</span>
-                    </div>
+                    <div className="nx-metric">{stats.peakHours}</div>
                     <div className="nx-subtle">Most active time today</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
-                    <div className="nx-card-header"><span className="nx-card-title">Current Occupancy</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.currentOccupancy}
-                      <span className="nx-chip">Live</span>
-                    </div>
-                    <div className="nx-subtle">Machines in use</div>
+                    <div className="nx-card-header"><span className="nx-card-title">Connected Machines</span></div>
+                    <div className="nx-metric">{stats.currentOccupancy}</div>
+                    <div className="nx-subtle">Machines being tracked</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
-                    <div className="nx-card-header"><span className="nx-card-title">Machine Sensors</span></div>
-                    <div className="nx-metric" style={{display:'flex', alignItems:'center'}}>
-                      {stats.numDevices}
-                      <span className="nx-chip">Stable</span>
-                    </div>
-                    <div className="nx-subtle">Connected sensors</div>
+                    <div className="nx-card-header"><span className="nx-card-title">Connected Sensors</span></div>
+                    <div className="nx-metric">{stats.numDevices}</div>
+                    <div className="nx-subtle">Sensors online</div>
                   </div>
                 </div>
 
@@ -1185,26 +2417,36 @@ function TempDashboard() {
                       <div className="nx-card-title">Facility Usage Map</div>
                       <div className="nx-subtle">Color intensity shows recent usage by zone</div>
                     </div>
-                    <NxDropdown
-                      value={facilityRange}
-                      onChange={(v) => setFacilityRange(parseInt(v))}
-                      options={[
-                        { value: 1, label: 'Past 1 Hour' },
-                        { value: 3, label: 'Past 3 Hours' },
-                        { value: 6, label: 'Past 6 Hours' },
-                        { value: 12, label: 'Past 12 Hours' },
-                        { value: 24, label: 'Past 24 Hours' },
-                        { value: 1000, label: 'All Time' },
-                      ]}
-                      minWidth={150}
-                    />
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <NxDropdown
+                        value={facilityRange}
+                        onChange={(v) => setFacilityRange(parseInt(v))}
+                        options={[
+                          { value: 1, label: 'Past 1 Hour' },
+                          { value: 3, label: 'Past 3 Hours' },
+                          { value: 6, label: 'Past 6 Hours' },
+                          { value: 12, label: 'Past 12 Hours' },
+                          { value: 24, label: 'Past 24 Hours' },
+                          { value: 1000, label: 'All Time' },
+                        ]}
+                        minWidth={150}
+                      />
+                      {floorOptions.length > 0 && (
+                        <NxDropdown
+                          value={activeFloorId || floorOptions[0]?.value}
+                          onChange={(v) => setSelectedFloorId(String(v))}
+                          options={floorOptions}
+                          minWidth={130}
+                        />
+                      )}
+                    </div>
                   </div>
                   <div style={{ position:'relative', paddingBottom:'55%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
-                    {mapConfig && mapConfig.floorplanUrl ? (
+                    {activeFloorplanUrl ? (
                       <object
                         ref={svgObjectRef}
                         type="image/svg+xml"
-                        data={mapConfig.floorplanUrl}
+                        data={activeFloorplanUrl}
                         style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
                         aria-label="Facility floor plan"
                       />
@@ -1221,10 +2463,27 @@ function TempDashboard() {
                           flex:1,
                           height:10,
                           borderRadius:999,
-                          background:'linear-gradient(90deg, rgba(34,197,94,0.8) 0%, rgba(239,68,68,0.8) 100%)',
+                          background:'linear-gradient(90deg, rgba(34,197,94,0.82) 0%, rgba(250,204,21,0.82) 35%, rgba(249,115,22,0.82) 70%, rgba(239,68,68,0.82) 100%)',
                           boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset'
                         }} />
                         <span style={{ fontSize:12, color:'#cbd5e1' }}>High</span>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+                        <span style={{ width:10, height:10, borderRadius:'50%', background:'rgba(148, 163, 184, 0.82)', display:'inline-block' }} />
+                        <span style={{ fontSize:12, color:'#cbd5e1' }}>Disconnected</span>
+                        <span style={{
+                          width:16,
+                          height:16,
+                          borderRadius:'50%',
+                          display:'inline-flex',
+                          alignItems:'center',
+                          justifyContent:'center',
+                          fontSize:11,
+                          fontWeight:700,
+                          color:'#f8fafc',
+                          background:'#334155',
+                          border:'1px solid #cbd5e1'
+                        }}>!</span>
                       </div>
                     </div>
                     {facilityLoading && (
@@ -1232,8 +2491,8 @@ function TempDashboard() {
                         Loading facility map...
                       </div>
                     )}
-                    {!facilityLoading && (facilityZones || []).every(z => (z.minutes || 0) === 0) && (
-                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af' }}>
+                    {shouldShowNoFacilityData && (
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af', pointerEvents:'none' }}>
                         No facility data returned for this range.
                       </div>
                     )}
@@ -1274,7 +2533,11 @@ function TempDashboard() {
                       </div>
                     </div>
                     <div>
-                      {alerts.filter(a=>!a.resolved).length === 0 ? (
+                      {alertsLoading ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>Loading alerts…</div>
+                      ) : alertsError ? (
+                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>{alertsError}</div>
+                      ) : alerts.filter(a=>!a.resolved).length === 0 ? (
                         <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No active alerts</div>
                       ) : (
                         alerts.filter(a=>!a.resolved).map(a => (
@@ -1284,7 +2547,7 @@ function TempDashboard() {
                               <div className="nx-subtle">{a.machineId} • {a.description}</div>
                             </div>
                             <div style={{display:'flex', gap:8}}>
-                              <button className="nx-pill primary" onClick={()=>resolveAlert(a.id)}>Resolve</button>
+                              <button className="nx-pill primary" onClick={()=>resolveAlert(a)}>Resolve</button>
                               <button className="nx-pill" onClick={()=>openMaint(a)}>Details</button>
                             </div>
                           </div>
@@ -1294,66 +2557,7 @@ function TempDashboard() {
                   </div>
                 </div>
 
-                {/* Bottom row */}
-                <div className="nx-grid" style={{marginTop:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 12'}}>
-                    <div className="nx-card-header">
-                      <div className="nx-card-title">Equipment Status</div>
-                    </div>
-                    <div className="nx-table-wrap" style={{maxHeight:'280px', overflowY:'auto'}}>
-                      <div className="nx-thead">
-                        <div>Equipment</div>
-                        <div>Status</div>
-                        <div>Last Seen</div>
-                      </div>
-                      {equipmentRows.length === 0 ? (
-                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No equipment data</div>
-                      ) : (
-                        equipmentRows.map((row) => (
-                          <div className="nx-trow" key={row.name}>
-                            <div>{row.name}</div>
-                            <div>
-                              <span className={`nx-badge ${row.status === 'active' ? 'active' : row.status === 'inactive' ? 'inactive' : 'maintenance'}`}>
-                                {statusLabel(row.status)}
-                              </span>
-                            </div>
-                            <div className="nx-subtle">{row.lastSeen}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Space Allocation Suggestions - DISABLED FOR PILOT PROGRAM */}
-                <div className="nx-grid" style={{marginTop:'8px'}}>
-                  <div className="nx-card" style={{gridColumn:'span 12', height:'245px', display:'flex', flexDirection:'column'}}>
-                    <div className="nx-card-header">
-                      <div>
-                        <div className="nx-card-title">Space Allocation Suggestions</div>
-                        <div className="nx-subtle">Based on recent usage/occupancy patterns</div>
-                      </div>
-                    </div>
-                    <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto'}}>
-                      {/* Suggestions display commented out - keeping 245px height for layout */}
-                      {/* {(suggestions || []).filter(s => s.status !== 'dismissed').length === 0 ? (
-                        <div className="nx-subtle" style={{padding:'20px', textAlign:'center'}}>No suggestions at this time</div>
-                      ) : (
-                        <div style={{width:'100%'}}>
-                          {(suggestions || []).filter(s => s.status !== 'dismissed').map(s => (
-                            <div key={s.id} className="nx-alert-row" style={{gridTemplateColumns:'1fr auto'}}>
-                              <div style={{color:'#e5e7eb'}}>{s.text}</div>
-                              <div style={{display:'flex', gap:8}}>
-                                {s.status !== 'accepted' && <button className="nx-pill primary" onClick={()=>acceptSuggestion(s.id)} aria-label="Accept suggestion">Accept</button>}
-                                <button className="nx-pill" onClick={()=>dismissSuggestion(s.id)} aria-label="Dismiss suggestion">Dismiss</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )} */}
-                    </div>
-                  </div>
-                </div>
+                {renderMachineUsageSearchAndAverage()}
               </div>
             )}
           </div>
@@ -1439,9 +2643,32 @@ function TempDashboard() {
             </div>
           </div>
         )}
+
+        {/* Resolve Alert Modal */}
+        {resolveModalOpen && (
+          <div className="nx-modal-overlay" role="dialog" aria-modal="true">
+            <div className="nx-modal">
+              <div className="nx-modal-title">Resolve Alert — {alertToResolve?.machineId}</div>
+              <div>
+                <div className="nx-modal-q">Are you sure?</div>
+                <div className="nx-subtle" style={{marginBottom: '16px'}}>
+                  {alertToResolve?.title} • {alertToResolve?.description}
+                </div>
+                <div className="nx-modal-row">
+                  <button className="nx-modal-btn" onClick={handleResolveYes}>Yes, create ticket</button>
+                  <button className="nx-modal-btn" onClick={handleResolveNo}>No, dismiss alert</button>
+                </div>
+                <div className="nx-modal-actions">
+                  <button className="nx-modal-btn" onClick={() => setResolveModalOpen(false)}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 
 export default TempDashboard;

@@ -31,6 +31,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@prerenderer/renderer-puppeteer": "^1.2.4",
+    "@prerenderer/rollup-plugin": "^0.3.12",
     "@tailwindcss/postcss": "^4.1.11",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
@@ -44,6 +46,7 @@
     "gulp-clean-css": "^4.3.0",
     "html-minifier-terser": "^7.2.0",
     "postcss": "^8.5.3",
+    "puppeteer": "^22.15.0",
     "tailwindcss": "^4.1.7",
     "vite": "^6.4.1"
   }
