@@ -18,7 +18,7 @@ function HeroSection() {
         <div className="relative z-10 max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
           <div className="space-y-8">
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-black leading-[1.1] text-[#d7acffff]">
-              The Future of Gym <br /> Management
+              Equipment Intelligence <br /> for Gyms
             </h1>
             <p className="text-lg md:text-xl text-slate-200/80 max-w-xl leading-relaxed">
               Stop guessing. Start knowing. OnSight uses non-invasive sensors to track your facility and optimize your floor space.
