@@ -79,56 +79,72 @@ function BlogsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {featuredPost && (
-              <Link
-                to={`/blogs/${featuredPost.slug}`}
-                className="group md:col-span-2 rounded-xl overflow-hidden border border-gray-800 bg-gray-950/80 hover:border-gray-600 transition"
-              >
-                <div className="h-56 border-b border-gray-800" style={featuredPost.heroStyle} />
-                <div className="p-6">
-                  <div className="mb-2 text-xs uppercase tracking-wide text-cyan-300">{featuredPost.category}</div>
-                  <h2 className="text-3xl font-bold text-white group-hover:text-cyan-200 transition">{featuredPost.title}</h2>
-                  <p className="mt-3 text-gray-300">{featuredPost.summary}</p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {(featuredPost.tags || []).map((tag) => (
-                      <span key={`${featuredPost.slug}_${tag}`} className="text-xs rounded-full border border-gray-700 px-2.5 py-1 text-gray-300">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-5 flex items-center justify-between text-xs text-gray-400">
-                    <span>{featuredPost.author}</span>
-                    <span>{formatDate(featuredPost.publishedAt)}</span>
-                  </div>
-                </div>
-              </Link>
-            )}
+            {featuredPost && (() => {
+              const isExternal = Boolean(featuredPost.externalUrl);
+              const Wrapper = isExternal ? 'a' : Link;
+              const linkProps = isExternal
+                ? { href: featuredPost.externalUrl, target: '_blank', rel: 'noopener noreferrer' }
+                : { to: `/blogs/${featuredPost.slug}` };
 
-            {remainingPosts.map((post) => (
-              <Link
-                key={post.slug}
-                to={`/blogs/${post.slug}`}
-                className="group rounded-xl overflow-hidden border border-gray-800 bg-gray-950/80 hover:border-gray-600 transition"
-              >
-                <div className="h-40 border-b border-gray-800" style={post.heroStyle} />
-                <div className="p-5">
-                  <div className="mb-2 text-xs uppercase tracking-wide text-cyan-300">{post.category}</div>
-                  <h2 className="text-2xl font-bold text-white leading-tight group-hover:text-cyan-200 transition">{post.title}</h2>
-                  <p className="mt-3 text-sm text-gray-300">{post.summary}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {(post.tags || []).map((tag) => (
-                      <span key={`${post.slug}_${tag}`} className="text-xs rounded-full border border-gray-700 px-2.5 py-1 text-gray-300">
-                        #{tag}
-                      </span>
-                    ))}
+              return (
+                <Wrapper
+                  {...linkProps}
+                  className="group md:col-span-2 rounded-xl overflow-hidden border border-gray-800 bg-gray-950/80 hover:border-gray-600 transition"
+                >
+                  <div className="h-56 border-b border-gray-800" style={featuredPost.heroStyle} />
+                  <div className="p-6">
+                    <div className="mb-2 text-xs uppercase tracking-wide text-cyan-300">{featuredPost.category}</div>
+                    <h2 className="text-3xl font-bold text-white group-hover:text-cyan-200 transition">{featuredPost.title}</h2>
+                    <p className="mt-3 text-gray-300">{featuredPost.summary}</p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {(featuredPost.tags || []).map((tag) => (
+                        <span key={`${featuredPost.slug}_${tag}`} className="text-xs rounded-full border border-gray-700 px-2.5 py-1 text-gray-300">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-5 flex items-center justify-between text-xs text-gray-400">
+                      <span>{featuredPost.author}</span>
+                      <span>{formatDate(featuredPost.publishedAt)}</span>
+                    </div>
                   </div>
-                  <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
-                    <span>{post.readTime}</span>
-                    <span>{formatDate(post.publishedAt)}</span>
+                </Wrapper>
+              );
+            })()}
+
+            {remainingPosts.map((post) => {
+              const isExternal = Boolean(post.externalUrl);
+              const Wrapper = isExternal ? 'a' : Link;
+              const linkProps = isExternal
+                ? { href: post.externalUrl, target: '_blank', rel: 'noopener noreferrer' }
+                : { to: `/blogs/${post.slug}` };
+
+              return (
+                <Wrapper
+                  key={post.slug}
+                  {...linkProps}
+                  className="group rounded-xl overflow-hidden border border-gray-800 bg-gray-950/80 hover:border-gray-600 transition"
+                >
+                  <div className="h-40 border-b border-gray-800" style={post.heroStyle} />
+                  <div className="p-5">
+                    <div className="mb-2 text-xs uppercase tracking-wide text-cyan-300">{post.category}</div>
+                    <h2 className="text-2xl font-bold text-white leading-tight group-hover:text-cyan-200 transition">{post.title}</h2>
+                    <p className="mt-3 text-sm text-gray-300">{post.summary}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {(post.tags || []).map((tag) => (
+                        <span key={`${post.slug}_${tag}`} className="text-xs rounded-full border border-gray-700 px-2.5 py-1 text-gray-300">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
+                      <span>{post.readTime}</span>
+                      <span>{formatDate(post.publishedAt)}</span>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Wrapper>
+              );
+            })}
           </div>
         )}
       </div>
