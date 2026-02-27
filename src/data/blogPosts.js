@@ -1,123 +1,94 @@
 export const BLOG_POSTS = [
   {
-    slug: 'capital-intensity-of-telematics-scaling',
-    title: 'The Capital Intensity of Telematics Scaling',
-    category: 'Research',
-    tags: ['Research', 'Operations', 'Scaling'],
-    author: 'OnSight Team',
-    publishedAt: '2026-02-20',
-    readTime: '6 min read',
-    summary:
-      'Hardware-heavy tracking stacks can delay operational insight. Here is how modern facilities can scale visibility with less friction.',
-    heroStyle: {
-      background:
-        'linear-gradient(130deg, rgba(34,197,94,0.3) 0%, rgba(59,130,246,0.26) 55%, rgba(14,116,144,0.34) 100%)',
-    },
-    content: [
-      'Legacy telemetry often scales linearly with installation complexity. Each new machine can add setup overhead before data becomes usable.',
-      'A stronger approach separates collection from insight. Deploy instrumentation that is easy to maintain, then optimize event quality.',
-      'Teams should track deployment friction as a KPI. If one added machine causes days of manual ops, growth will stall.',
-    ],
-  },
-  {
-    slug: 'infrastructure-cost-of-hardware-fleet-systems',
-    title: 'The Infrastructure Cost of Hardware-Based Fleet Systems',
+    slug: 'what-is-preventive-maintenance',
+    title: 'What Is Preventive Maintenance?',
     category: 'Post',
-    tags: ['Post', 'Hardware', 'Cost'],
-    author: 'OnSight Team',
-    publishedAt: '2026-02-16',
-    readTime: '5 min read',
+    tags: ['Post', 'Maintenance', 'Operations'],
+    author: 'Yoon Choi',
+    publishedAt: '2026-02-26',
+    readTime: '8 min read',
     summary:
-      'A practical breakdown of hidden installation and support costs in hardware-centric tracking systems.',
+      'Preventive maintenance helps gyms avoid costly breakdowns by using routine inspections, servicing, and replacements before failures happen.',
     heroStyle: {
       background:
-        'linear-gradient(125deg, rgba(249,115,22,0.3) 0%, rgba(239,68,68,0.24) 55%, rgba(127,29,29,0.36) 100%)',
+        'linear-gradient(130deg, rgba(14,165,233,0.3) 0%, rgba(34,197,94,0.24) 48%, rgba(15,118,110,0.36) 100%)',
     },
-    content: [
-      'Hardware-first systems can look cheap at purchase time, then become expensive in maintenance and replacement cycles.',
-      'Model ownership cost over 24 months, including downtime, support burden, and retraining overhead.',
-      'In many facilities, lower operational drag beats maximum device count and produces cleaner analytics.',
-    ],
-  },
-  {
-    slug: 'satellite-dependent-telematics-are-going-extinct',
-    title: 'Why Satellite-Dependent Telematics Are Going Extinct',
-    category: 'Announcement',
-    tags: ['Announcement', 'Visibility', 'Future'],
-    author: 'OnSight Team',
-    publishedAt: '2026-02-12',
-    readTime: '4 min read',
-    summary:
-      'Visibility is moving toward resilient hybrid telemetry models that stay reliable in complex indoor environments.',
-    heroStyle: {
-      background:
-        'linear-gradient(130deg, rgba(59,130,246,0.28) 0%, rgba(56,189,248,0.24) 48%, rgba(13,148,136,0.35) 100%)',
-    },
-    content: [
-      'Satellite-first assumptions break in indoor zones and dense facilities, where operators still need reliable coverage.',
-      'Hybrid telemetry stacks combine edge signals and local context, so operations remain visible through gaps.',
-      'Reliability should come before precision. That ordering creates stronger long-term alerting and planning.',
-    ],
-  },
-  {
-    slug: 'fleet-tracking-without-cellular-dependency',
-    title: 'Fleet Tracking Without Cellular Dependency',
-    category: 'Research',
-    tags: ['Research', 'Reliability', 'Connectivity'],
-    author: 'OnSight Team',
-    publishedAt: '2026-02-09',
-    readTime: '7 min read',
-    summary:
-      'How to keep telemetry useful when connectivity quality varies across rooms, floors, and facilities.',
-    heroStyle: {
-      background:
-        'linear-gradient(130deg, rgba(71,85,105,0.45) 0%, rgba(30,41,59,0.42) 50%, rgba(2,6,23,0.55) 100%)',
-    },
-    content: [
-      'Intermittent connectivity should not erase context. Systems need buffering, recovery, and freshness metadata.',
-      'Dashboards must distinguish no usage from no signal. Conflating these states creates false alerts.',
-      'Operational trust grows when uncertain data is clearly labeled instead of silently converted.',
-    ],
-  },
-  {
-    slug: 'asset-tracking-without-infrastructure',
-    title: 'Asset Tracking Without Infrastructure: Alternative to GPS & RTLS',
-    category: 'Post',
-    tags: ['Post', 'Tracking', 'Asset'],
-    author: 'OnSight Team',
-    publishedAt: '2026-02-05',
-    readTime: '6 min read',
-    summary:
-      'A lightweight playbook for positioning and usage visibility without costly full-facility infrastructure.',
-    heroStyle: {
-      background:
-        'linear-gradient(130deg, rgba(99,102,241,0.3) 0%, rgba(14,165,233,0.24) 50%, rgba(3,105,161,0.36) 100%)',
-    },
-    content: [
-      'Many teams can skip heavy RTLS deployments and still answer high-value operational questions.',
-      'When planning starts with decisions, not coordinates, implementation gets faster and cheaper.',
-      'Choose the smallest data architecture that can reliably support staffing, maintenance, and layout decisions.',
-    ],
-  },
-  {
-    slug: 'top-benefits-of-usage-intelligence-for-facilities',
-    title: 'Top Benefits of Usage Intelligence for Facilities',
-    category: 'Post',
-    tags: ['Post', 'Analytics', 'Facility'],
-    author: 'OnSight Team',
-    publishedAt: '2026-02-01',
-    readTime: '5 min read',
-    summary:
-      'Usage analytics helps operators improve uptime, staffing, and member experience with fewer blind spots.',
-    heroStyle: {
-      background:
-        'linear-gradient(130deg, rgba(16,185,129,0.3) 0%, rgba(132,204,22,0.24) 50%, rgba(63,98,18,0.36) 100%)',
-    },
-    content: [
-      'Usage intelligence reduces guesswork in purchases, maintenance planning, and schedule design.',
-      'The largest gains come from combining machine-level data with zone-level peak behavior.',
-      'Alert rules become effective only when upstream usage data quality is stable and interpretable.',
-    ],
+    contentMarkdown: `## What Is Preventive Maintenance?
+
+Preventive maintenance (PM) is a proactive approach to maintaining equipment and facilities. It involves routine inspections, servicing, and minor repairs before complete breakdowns occur.
+
+Instead of fixing machines after total failure, preventive maintenance prioritizes recurring interventions to:
+
+- extend asset life
+- reduce downtime
+- lower repair and replacement costs
+
+For gyms in particular, preventive maintenance is essential for preserving equipment quality and floor performance. Treadmills, weights, machines, and flooring all experience heavy daily usage. Even one major breakdown can lead to poorer member experience, higher liability risk, and costly emergency repairs.
+
+## How Does Preventive Maintenance Work?
+
+Successful PM operations typically follow a structured cycle:
+
+### 1. Inspection
+
+Possibly the most important step. Staff checks whether machines are functioning correctly and whether there are irregularities in performance.
+
+### 2. Servicing
+
+Routine servicing includes:
+
+- lubricating moving parts
+- cleaning components
+- tightening bolts and fittings
+
+These actions help protect equipment from major malfunction.
+
+### 3. Replacement
+
+High-wear parts are swapped before failure, such as:
+
+- cables
+- clips
+- pins
+
+### 4. Documentation
+
+All inspections and maintenance actions are recorded in a Computerized Maintenance Management System (CMMS), creating a centralized history and an integrated operating view.
+
+Effective modern PM programs are data-driven and integrated with gym maintenance software.
+
+## Why Is Preventive Maintenance Important for Gyms?
+
+Preventive maintenance offers direct operational and financial upside for gym owners.
+
+### Cost Savings and Asset Life
+
+- Gyms can save **up to 40%** on maintenance compared to fully reactive approaches.
+- PM can add **2-3 years** of life to high-usage equipment.
+- Reduced downtime preserves productivity across floors and facilities.
+
+### Member Retention and Experience
+
+- Well-maintained equipment improves member satisfaction and renewal likelihood.
+- PM gives gyms a competitive edge over facilities that wait for failures.
+- **72%** of fitness businesses using data-driven systems reported increased retention.
+
+PM is a long-term investment in operational stability and stronger margins. It helps maximize equipment value while improving day-to-day member experience.
+
+## Getting Started With Preventive Maintenance
+
+OnSight combines radar sensing technology with a live dashboard to deliver a unified preventive maintenance solution for gym owners.
+
+With one-time-install sensors and an integrated cloud platform, teams can monitor:
+
+- maintenance schedules
+- machine usage
+- floor heatmaps
+- real-time irregularities
+
+This reduces manual inspection burden while improving visibility and response speed.
+
+Check out how OnSight can save costs in real time, or book a free demo to start improving your gym for the long term.`,
   },
 ];
 
