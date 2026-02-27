@@ -7,7 +7,11 @@ function Header() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => (
+    path === '/blogs'
+      ? location.pathname === '/blogs' || location.pathname.startsWith('/blogs/')
+      : location.pathname === path
+  );
   const activeClass = 'text-white font-semibold drop-shadow-[0_0_6px_rgba(255,255,255,0.35)]';
   const baseClass = 'text-gray-300 hover:text-white';
 
@@ -54,6 +58,7 @@ function Header() {
           {/* <Link to="/dashboard" className={isActive('/dashboard') ? activeClass : baseClass}>Dashboard</Link> */}
           <Link to="/roi" className={isActive('/roi') ? activeClass : baseClass}>The Numbers</Link>
           <Link to="/foundersNote" className={isActive('/foundersNote') ? activeClass : baseClass}>Founders' Note</Link>
+          <Link to="/blogs" className={isActive('/blogs') ? activeClass : baseClass}>Blogs</Link>
           <Link to="/waitlist" className={isActive('/waitlist') ? activeClass : baseClass}>Book A Demo</Link>
           <Link to="/login" className="bg-transparent hover:bg-white/10 text-gray-300 hover:text-white px-4 py-2 rounded">Login</Link>
         </nav>
@@ -77,13 +82,14 @@ function Header() {
             <div className="px-6 pt-6 pb-10 flex flex-col gap-6">
               <button className={`menu-item mi-0 text-left text-2xl ${isActive('/roi') ? 'text-white font-semibold' : 'text-white/90'}`} onClick={() => { setMobileOpen(false); navigate('/roi'); }}>The Numbers</button>
               <button className={`menu-item mi-1 text-left text-2xl ${isActive('/foundersNote') ? 'text-white font-semibold' : 'text-white/90'}`} onClick={() => { setMobileOpen(false); navigate('/foundersNote'); }}>Founders' Note</button>
+              <button className={`menu-item mi-2 text-left text-2xl ${isActive('/blogs') ? 'text-white font-semibold' : 'text-white/90'}`} onClick={() => { setMobileOpen(false); navigate('/blogs'); }}>Blogs</button>
               <div className="h-2" />
               <div className="menu-item mi-4 flex items-center gap-3">
                 <button
                   onClick={() => { setMobileOpen(false); navigate('/waitlist'); }}
                   className={`px-5 py-2 rounded-full border border-white/20 bg-white/10 text-sm ${isActive('/waitlist') ? 'text-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.35)]' : 'text-white'}`}
                 >
-                  WAITLIST
+                  BOOK A DEMO
                 </button>
                 <button
                   onClick={() => { setMobileOpen(false); navigate('/login'); }}
