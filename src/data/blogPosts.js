@@ -90,6 +90,23 @@ This reduces manual inspection burden while improving visibility and response sp
 
 Check out how OnSight can save costs in real time, or book a free demo to start improving your gym for the long term.`,
   },
+  {
+    slug: 'onsight-first-to-receive-the-manufacturing-fund',
+    title: 'OnSight First to Receive The Manufacturing Fund',
+    category: 'Announcement',
+    tags: ['funding', 'blog', 'news'],
+    author: 'OnSight Team',
+    publishedAt: '2026-02-27',
+    readTime: '3 min read',
+    summary:
+      'Northwestern’s Manufacturing Fund backs OnSight as its first recipient, helping accelerate the journey from pilot to production.',
+    heroStyle: {
+      backgroundImage: 'url(/ManufFundSS.png)',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    },
+    externalUrl: 'https://www.thegarage.northwestern.edu/news/from-pilot-to-production-the-manufacturing-fund-in-action-with-onsight',
+  },
 ];
 
 export const BLOG_CATEGORIES = ['All', 'Post', 'Research', 'Announcement'];
