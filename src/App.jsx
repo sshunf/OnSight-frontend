@@ -20,6 +20,8 @@ import TempDashboardPage from './pages/TempDashboardPage';
 import SchedulePage from './pages/SchedulePage';
 import RoiCalculatorPage from './pages/RoiCalculatorPage';
 import StatsShowcasePage from './pages/StatsShowcasePage';
+import BlogsPage from './pages/BlogsPage';
+import BlogDetailPage from './pages/BlogDetailPage';
 
 
 function App() {
@@ -38,6 +40,8 @@ function App() {
         <Route path="/gym-select" element={<Layout><GymSelectScreen /></Layout>} />
         <Route path="/roi" element={<Layout><StatsShowcasePage /></Layout>} />
         <Route path="/roi-calculator" element={<Layout><RoiCalculatorPage /></Layout>} />
+        <Route path="/blogs" element={<Layout><BlogsPage /></Layout>} />
+        <Route path="/blogs/:slug" element={<Layout><BlogDetailPage /></Layout>} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         
         {/* Routes without header and footer */}
