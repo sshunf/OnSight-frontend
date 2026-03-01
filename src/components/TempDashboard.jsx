@@ -311,6 +311,8 @@ const FACILITY_WINDOW_OPTIONS = Object.freeze([
   { value: 6, label: '6 Hour Window' },
   { value: 12, label: '12 Hour Window' },
   { value: 24, label: '24 Hour Window' },
+  { value: 720, label: 'Past Month' },
+  { value: 1000, label: 'All Time' },
 ]);
 
 function interpolateHeatmapColor(t) {
