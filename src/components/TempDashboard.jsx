@@ -168,9 +168,9 @@ function NxDropdown({ options, value, onChange, minWidth = 160 }) {
   );
 }
 
-function formatHeatmapWindowLabel(hours) {
+function formatHeatmapOffsetLabel(hours) {
   const safeHours = Math.max(1, Math.min(24, Number(hours) || 1));
-  return safeHours === 1 ? 'Past 1 Hour' : `Past ${safeHours} Hours`;
+  return safeHours === 1 ? '1 Hour Ago' : `${safeHours} Hours Ago`;
 }
 
 function HeatmapRangeSlider({ marks, value, onChange }) {
@@ -189,8 +189,8 @@ function HeatmapRangeSlider({ marks, value, onChange }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-        <span className="nx-subtle" style={{ fontSize: 12 }}>Heatmap Window</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>{formatHeatmapWindowLabel(safeValue)}</span>
+        <span className="nx-subtle" style={{ fontSize: 12 }}>Heatmap Hour</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>{formatHeatmapOffsetLabel(safeValue)}</span>
       </div>
       <input
         type="range"
@@ -305,6 +305,13 @@ const FACILITY_RANGE_MARKS = Object.freeze([
   { value: 18, label: '18h' },
   { value: 24, label: '24h' },
 ]);
+const FACILITY_WINDOW_OPTIONS = Object.freeze([
+  { value: 1, label: '1 Hour Window' },
+  { value: 3, label: '3 Hour Window' },
+  { value: 6, label: '6 Hour Window' },
+  { value: 12, label: '12 Hour Window' },
+  { value: 24, label: '24 Hour Window' },
+]);
 
 function interpolateHeatmapColor(t) {
   const clamped = Math.max(0, Math.min(1, Number(t) || 0));
@@ -394,7 +401,8 @@ function TempDashboard() {
   const analyticsChartRef = useRef(null);
   const [facilityZones, setFacilityZones] = useState([]);
   const [facilityLoading, setFacilityLoading] = useState(false);
-  const [facilityRange, setFacilityRange] = useState(12);
+  const [facilityOffsetHours, setFacilityOffsetHours] = useState(1);
+  const [facilityWindowHours, setFacilityWindowHours] = useState(1);
   const [selectedFloorId, setSelectedFloorId] = useState('');
   const [facilityMachines, setFacilityMachines] = useState([]);
   const [mapConfig, setMapConfig] = useState(null);
@@ -1065,12 +1073,17 @@ function TempDashboard() {
     }
   };
 
-  const fetchFacilityHeatmap = async (rangeHours = 12) => {
+  const fetchFacilityHeatmap = async ({ offsetHours = 1, windowHours = 1 } = {}) => {
     const gymId = localStorage.getItem('gymId');
     if (!gymId) return;
     setFacilityLoading(true);
     try {
-      const res = await fetch(`${backendURL}/api/heatmap/heatmap?gymId=${gymId}&hours=${rangeHours}`);
+      const params = new URLSearchParams({
+        gymId: String(gymId),
+        hours: String(windowHours),
+        offsetHours: String(offsetHours),
+      });
+      const res = await fetch(`${backendURL}/api/heatmap/heatmap?${params.toString()}`);
       const data = await res.json();
       if (res.ok && data) {
         const mapCfg = (data.map && (
@@ -1705,13 +1718,13 @@ function TempDashboard() {
     if (!user) return;
     if (activeTab === 'dashboard') {
       buildCumulativeChart();
-      fetchFacilityHeatmap(facilityRange);
+      fetchFacilityHeatmap({ offsetHours: facilityOffsetHours, windowHours: facilityWindowHours });
       return;
     }
     if (activeTab === 'analytics') {
-      fetchFacilityHeatmap(facilityRange);
+      fetchFacilityHeatmap({ offsetHours: facilityOffsetHours, windowHours: facilityWindowHours });
     }
-  }, [user, selectedCumRange, activeTab, facilityRange]);
+  }, [user, selectedCumRange, activeTab, facilityOffsetHours, facilityWindowHours]);
 
   useEffect(() => {
     if (activeTab === 'analytics') return;
@@ -2783,13 +2796,19 @@ const handleResolveNo = () => {
                   <div className="nx-card-header">
                     <div>
                       <div className="nx-card-title">Facility Usage Map</div>
-                      <div className="nx-subtle">Color intensity shows recent usage by zone</div>
+                      <div className="nx-subtle">Color intensity shows usage for the selected hour and window</div>
                     </div>
                     <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-start', flexWrap:'wrap', marginLeft:'auto' }}>
                       <HeatmapRangeSlider
                         marks={FACILITY_RANGE_MARKS}
-                        value={facilityRange}
-                        onChange={setFacilityRange}
+                        value={facilityOffsetHours}
+                        onChange={setFacilityOffsetHours}
+                      />
+                      <NxDropdown
+                        value={facilityWindowHours}
+                        onChange={(v) => setFacilityWindowHours(parseInt(v, 10))}
+                        options={FACILITY_WINDOW_OPTIONS}
+                        minWidth={140}
                       />
                       {floorOptions.length > 0 && (
                         <NxDropdown
