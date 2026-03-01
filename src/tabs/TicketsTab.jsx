@@ -1659,6 +1659,13 @@ function extractZones(mapCfg) {
                       <strong style={{ color: '#e5e7eb' }}>Created:</strong> {new Date(active.createdAt).toLocaleDateString()}
                     </div>
                   )}
+                  {active.notes && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong style={{ color: '#e5e7eb' }}>
+                        {isMemberReported(active) ? 'Reporter info:' : 'Notes:'}
+                      </strong> {active.notes}
+                    </div>
+                  )}
                   {active.ruleInterval && (
                     <div style={{ marginBottom: '12px' }}>
                       <strong style={{ color: '#e5e7eb' }}>Maintenance Interval:</strong> {active.ruleInterval} {active.ruleUnit || ''}
