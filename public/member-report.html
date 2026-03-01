@@ -148,6 +148,17 @@
         <label for="description">What’s wrong? *</label>
         <textarea id="description" name="description" required placeholder="Describe the issue (noise, broken part, display not working, etc.)"></textarea>
       </div>
+      <div>
+        <p style="margin:0; font-size:13px;">Optional: add your name and email if you want us to get back to you about the fix.</p>
+      </div>
+      <div>
+        <label for="contactName">Name (optional)</label>
+        <input id="contactName" name="contactName" type="text" placeholder="Your name">
+      </div>
+      <div>
+        <label for="contactEmail">Email (optional)</label>
+        <input id="contactEmail" name="contactEmail" type="email" placeholder="you@example.com">
+      </div>
       <button type="submit">Submit issue</button>
       <div class="status hidden" id="status"></div>
     </form>
@@ -206,6 +217,8 @@
         statusEl.classList.remove('error', 'success');
         const description = document.getElementById('description').value.trim();
         const machineName = document.getElementById('machineName').value.trim();
+        const contactName = document.getElementById('contactName').value.trim();
+        const contactEmail = document.getElementById('contactEmail').value.trim();
         if (!description) {
           statusEl.textContent = 'Description is required.';
           statusEl.classList.remove('hidden');
@@ -217,7 +230,9 @@
           description,
           machineName: machineName || undefined,
           machineId: machineId || undefined,
-          zone: zone || undefined
+          zone: zone || undefined,
+          contactName: contactName || undefined,
+          contactEmail: contactEmail || undefined
         };
         try {
           let success = false;
