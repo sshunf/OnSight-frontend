@@ -547,7 +547,7 @@ return (
       <div className="stat-card">
         <h3>Peak Hours</h3>
         <p className="stat-value">{stats.peakHours}</p>
-        <p className="stat-label">Time Interval With Most Activity Today</p>
+        <p className="stat-label">Time Interval With Most Activity In The Past Month</p>
       </div>
       <div className="stat-card">
         <h3>Weekly Favorite</h3>
