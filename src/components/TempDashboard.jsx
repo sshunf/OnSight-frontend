@@ -168,6 +168,92 @@ function NxDropdown({ options, value, onChange, minWidth = 160 }) {
   );
 }
 
+function formatHeatmapWindowLabel(hours) {
+  const safeHours = Math.max(1, Math.min(24, Number(hours) || 1));
+  return safeHours === 1 ? 'Past 1 Hour' : `Past ${safeHours} Hours`;
+}
+
+function HeatmapRangeSlider({ marks, value, onChange }) {
+  const safeValue = Math.max(1, Math.min(24, Number(value) || 12));
+
+  return (
+    <div
+      style={{
+        width: 440,
+        maxWidth: '100%',
+        flex: '0 1 440px',
+        padding: '10px 12px',
+        borderRadius: 12,
+        border: '1px solid #262633',
+        background: '#13131a',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <span className="nx-subtle" style={{ fontSize: 12 }}>Heatmap Window</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>{formatHeatmapWindowLabel(safeValue)}</span>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="24"
+        step="1"
+        value={safeValue}
+        onChange={(event) => {
+          onChange(Number(event.target.value));
+        }}
+        aria-label="Facility heatmap time range"
+        style={{ width: '100%', cursor: 'pointer', accentColor: '#7C3AED' }}
+      />
+      <div
+        style={{
+          position: 'relative',
+          height: 24,
+          marginTop: 8,
+        }}
+      >
+        {marks.map((mark) => {
+          const isActive = safeValue === mark.value;
+          const left = `${((mark.value - 1) / 23) * 100}%`;
+          return (
+            <button
+              key={mark.label}
+              type="button"
+              onClick={() => onChange(mark.value)}
+              aria-pressed={isActive}
+              style={{
+                position: 'absolute',
+                left,
+                transform: 'translateX(-50%)',
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: isActive ? '#f8fafc' : '#94a3b8',
+                fontSize: 11,
+                fontWeight: isActive ? 700 : 500,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span
+                style={{
+                  width: 2,
+                  height: 8,
+                  borderRadius: 999,
+                  background: isActive ? '#7C3AED' : '#475569',
+                }}
+              />
+              <span>{mark.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function getConfiguredZones(mapCfg) {
   if (!mapCfg) return [];
   if (Array.isArray(mapCfg.floors) && mapCfg.floors.length) {
@@ -210,6 +296,14 @@ const SEARCH_RANGE_OPTIONS = Object.freeze([
   { value: '24', label: 'Past 24 Hours' },
   { value: '168', label: 'Past Week' },
   { value: '720', label: 'Past Month' },
+]);
+const FACILITY_RANGE_MARKS = Object.freeze([
+  { value: 1, label: '1h' },
+  { value: 3, label: '3h' },
+  { value: 6, label: '6h' },
+  { value: 12, label: '12h' },
+  { value: 18, label: '18h' },
+  { value: 24, label: '24h' },
 ]);
 
 function interpolateHeatmapColor(t) {
@@ -269,6 +363,8 @@ function TempDashboard() {
   const [topZonesToday, setTopZonesToday] = useState([]);
   const [remainingZonesToday, setRemainingZonesToday] = useState([]);
   const [topZonesTodayLoading, setTopZonesTodayLoading] = useState(false);
+  const [analyticsHoveredTarget, setAnalyticsHoveredTarget] = useState(null);
+  const [analyticsPinnedTarget, setAnalyticsPinnedTarget] = useState(null);
   
   // Alerts and maintenance state
   const [alerts, setAlerts] = useState([]);
@@ -303,8 +399,18 @@ function TempDashboard() {
   const [facilityMachines, setFacilityMachines] = useState([]);
   const [mapConfig, setMapConfig] = useState(null);
   const [svgDiscoveredZones, setSvgDiscoveredZones] = useState([]);
-  const svgObjectRef = useRef(null);
+  const dashboardSvgObjectRef = useRef(null);
+  const analyticsTopSvgObjectRef = useRef(null);
+  const analyticsSideSvgObjectRef = useRef(null);
   const analyticsZoneFilterRef = useRef(null);
+
+  const getSvgObjects = () => (
+    [
+      dashboardSvgObjectRef.current,
+      analyticsTopSvgObjectRef.current,
+      analyticsSideSvgObjectRef.current,
+    ].filter(Boolean)
+  );
 
   const mapFloors = useMemo(() => {
     if (!mapConfig || !Array.isArray(mapConfig.floors)) return [];
@@ -314,6 +420,19 @@ function TempDashboard() {
   const floorOptions = useMemo(() => (
     mapFloors.map(f => ({ value: f.id, label: f.label || f.id }))
   ), [mapFloors]);
+
+  const zoneFloorLookup = useMemo(() => {
+    const lookup = {};
+    mapFloors.forEach((floor) => {
+      (floor?.zones || []).forEach((zone) => {
+        const zoneId = normalizeZoneId(zone?.id);
+        if (zoneId && !isExcludedZone(zoneId)) {
+          lookup[String(zoneId)] = String(floor.id);
+        }
+      });
+    });
+    return lookup;
+  }, [mapFloors]);
 
   const defaultFloorId = useMemo(() => (
     mapConfig?.defaultFloorId || mapFloors[0]?.id || ''
@@ -357,6 +476,11 @@ function TempDashboard() {
   }, [activeFloor, mapConfig, svgDiscoveredZones]);
 
   const activeFloorplanUrl = activeFloor?.svgUrl || mapConfig?.floorplanUrl || '';
+  const analyticsFocusedTarget = analyticsPinnedTarget || analyticsHoveredTarget;
+  const analyticsFocusedZoneId = normalizeZoneId(analyticsFocusedTarget?.zoneId);
+  const activeMapFocusZoneId = activeTab === 'analytics'
+    ? analyticsFocusedZoneId
+    : normalizeZoneId(selectedZone);
 
   const activeZoneMinutes = useMemo(() => {
     if (!activeZones.length) return [];
@@ -390,6 +514,40 @@ function TempDashboard() {
     return machineOptions.filter(m => zoneSet.has(String(m.machineId)));
   }, [selectedZone, machineOptions, facilityMachines]);
 
+  const buildAnalyticsFocusTarget = (zoneId, overrides = {}) => {
+    const normalizedZone = normalizeZoneId(zoneId);
+    if (!normalizedZone || normalizedZone === 'unknown' || isExcludedZone(normalizedZone)) return null;
+    return {
+      zoneId: normalizedZone,
+      title: overrides.title || formatZoneLabel(normalizedZone),
+      subtitle: overrides.subtitle || '',
+    };
+  };
+
+  const setAnalyticsZoneHover = (zoneId, overrides = {}) => {
+    if (activeTab !== 'analytics') return;
+    setAnalyticsHoveredTarget(buildAnalyticsFocusTarget(zoneId, overrides));
+  };
+
+  const clearAnalyticsZoneHover = () => {
+    if (activeTab !== 'analytics') return;
+    setAnalyticsHoveredTarget(null);
+  };
+
+  const toggleAnalyticsZonePin = (zoneId, overrides = {}) => {
+    if (activeTab !== 'analytics') return;
+    const nextTarget = buildAnalyticsFocusTarget(zoneId, overrides);
+    if (!nextTarget) return;
+    setAnalyticsPinnedTarget((prev) => (
+      String(normalizeZoneId(prev?.zoneId)) === String(nextTarget.zoneId) ? null : nextTarget
+    ));
+  };
+
+  const isAnalyticsFocusMatch = (zoneId) => (
+    Boolean(analyticsFocusedZoneId) &&
+    String(normalizeZoneId(zoneId)) === String(analyticsFocusedZoneId)
+  );
+
   useEffect(() => {
     if (!mapFloors.length) return;
     const hasSelection = mapFloors.some(f => String(f.id) === String(selectedFloorId));
@@ -404,6 +562,14 @@ function TempDashboard() {
     const inActiveFloor = activeZones.some(z => String(z.id) === String(selectedZone));
     if (!inActiveFloor) setSelectedZone('');
   }, [activeZones, selectedZone]);
+
+  useEffect(() => {
+    if (activeTab !== 'analytics') return;
+    const targetFloorId = zoneFloorLookup[String(analyticsFocusedZoneId || '')];
+    if (targetFloorId && String(targetFloorId) !== String(selectedFloorId || '')) {
+      setSelectedFloorId(String(targetFloorId));
+    }
+  }, [activeTab, analyticsFocusedZoneId, zoneFloorLookup, selectedFloorId]);
 
   // User authentication check
   useEffect(() => {
@@ -670,6 +836,25 @@ function TempDashboard() {
           y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: yMax },
         },
         interaction: { mode: 'nearest', intersect: false },
+        onHover: (_event, elements) => {
+          const hoveredRow = elements?.length ? rows[elements[0].index] : null;
+          if (!hoveredRow) {
+            clearAnalyticsZoneHover();
+            return;
+          }
+          setAnalyticsZoneHover(hoveredRow.zone, {
+            title: hoveredRow.machineName || hoveredRow.machineId,
+            subtitle: `${formatZoneLabel(hoveredRow.zone)} | ${Math.round(hoveredRow.avgUsageMinutes)} min average`,
+          });
+        },
+        onClick: (_event, elements) => {
+          const clickedRow = elements?.length ? rows[elements[0].index] : null;
+          if (!clickedRow) return;
+          toggleAnalyticsZonePin(clickedRow.zone, {
+            title: clickedRow.machineName || clickedRow.machineId,
+            subtitle: `${formatZoneLabel(clickedRow.zone)} | ${Math.round(clickedRow.avgUsageMinutes)} min average`,
+          });
+        },
       }
     });
   };
@@ -1000,18 +1185,6 @@ function TempDashboard() {
   };
 
   const applySvgZoneStyles = () => {
-    const obj = svgObjectRef.current;
-    if (!obj || !obj.contentDocument) return;
-    const svgDoc = obj.contentDocument;
-    const svgRoot = svgDoc.querySelector('svg');
-    if (!svgRoot) return;
-    const zoneElements = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
-      .filter(el => {
-        const id = String(el?.id || '');
-        return id && !canonicalZoneKey(id).startsWith('zone-label');
-      });
-    if (!zoneElements.length) return;
-
     const activeZoneList = Array.isArray(activeZones) ? activeZones : [];
     const zoneBySvgCandidate = new Map();
     activeZoneList.forEach(z => {
@@ -1024,85 +1197,118 @@ function TempDashboard() {
       1,
       ...((facilityZones || []).map(z => Number(z?.minutes) || 0))
     );
+    const focusedZoneId = String(activeMapFocusZoneId || '').trim();
+    const hasFocusedZone = Boolean(focusedZoneId);
+    const focusStroke = activeTab === 'analytics' ? '#c4b5fd' : '#facc15';
+    const focusGlow = activeTab === 'analytics'
+      ? 'drop-shadow(0 0 12px rgba(124,58,237,0.72))'
+      : 'drop-shadow(0 0 10px rgba(250,204,21,0.45))';
 
-    // Disable pointer interception from non-zone SVG elements (invisible text boxes, guides, etc.)
-    svgDoc.querySelectorAll('*').forEach(node => {
-      node.style.pointerEvents = 'none';
-    });
-    svgDoc.querySelectorAll('[id^="onsight-label-"], [id^="onsight-status-"]').forEach(el => el.remove());
+    getSvgObjects().forEach((obj) => {
+      if (!obj || !obj.contentDocument) return;
+      const svgDoc = obj.contentDocument;
+      const svgRoot = svgDoc.querySelector('svg');
+      if (!svgRoot) return;
+      const zoneElements = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
+        .filter(el => {
+          const id = String(el?.id || '');
+          return id && !canonicalZoneKey(id).startsWith('zone-label');
+        });
+      if (!zoneElements.length) return;
 
-    zoneElements.forEach(el => {
-      const rawId = String(el?.id || '').trim();
-      const mappedZone = zoneBySvgCandidate.get(canonicalZoneKey(rawId));
-      const resolvedZoneId = normalizeZoneId(mappedZone?.id || rawId) || String(mappedZone?.id || '').trim();
-      if (!resolvedZoneId || isExcludedZone(resolvedZoneId)) return;
+      svgDoc.querySelectorAll('*').forEach(node => {
+        node.style.pointerEvents = 'none';
+      });
+      svgDoc.querySelectorAll('[id^="onsight-label-"], [id^="onsight-status-"]').forEach(el => el.remove());
 
-      const entry = (facilityZones || []).find(fz => (
-        String(normalizeZoneId(fz?.zone)) === String(resolvedZoneId)
-      )) || {};
-      const minutes = Number(entry?.minutes) || 0;
-      const disconnected = Boolean(entry?.isDisconnected);
-      const color = getZoneColor(minutes, maxMinutes, disconnected);
-      const selected = String(selectedZone) === String(resolvedZoneId);
+      zoneElements.forEach(el => {
+        const rawId = String(el?.id || '').trim();
+        const mappedZone = zoneBySvgCandidate.get(canonicalZoneKey(rawId));
+        const resolvedZoneId = normalizeZoneId(mappedZone?.id || rawId) || String(mappedZone?.id || '').trim();
+        if (!resolvedZoneId || isExcludedZone(resolvedZoneId)) return;
 
-      el.style.fill = color;
-      el.style.stroke = selected ? '#facc15' : (disconnected ? '#64748b' : '#000000');
-      el.style.strokeWidth = selected ? '3' : '1';
-      el.style.cursor = 'pointer';
-      el.style.pointerEvents = 'all';
-      el.onclick = () => setSelectedZone(String(resolvedZoneId));
+        const entry = (facilityZones || []).find(fz => (
+          String(normalizeZoneId(fz?.zone)) === String(resolvedZoneId)
+        )) || {};
+        const minutes = Number(entry?.minutes) || 0;
+        const disconnected = Boolean(entry?.isDisconnected);
+        const color = getZoneColor(minutes, maxMinutes, disconnected);
+        const focused = hasFocusedZone && String(resolvedZoneId) === focusedZoneId;
 
-      // Tooltip via <title> inside each zone
-      let titleEl = el.querySelector('title');
-      if (!titleEl) {
-        titleEl = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'title');
-        el.prepend(titleEl);
-      }
-      const statusText = disconnected ? 'Disconnected (no data in past 2h)' : 'Connected';
-      const lastSeenText = entry?.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString() : 'N/A';
-      titleEl.textContent = `${mappedZone?.label || resolvedZoneId}: ${minutes.toFixed(1)} min • ${statusText} • Last seen: ${lastSeenText}`;
+        el.style.fill = color;
+        el.style.stroke = focused ? focusStroke : (disconnected ? '#64748b' : '#000000');
+        el.style.strokeWidth = focused ? '4' : '1';
+        el.style.filter = focused ? focusGlow : 'none';
+        el.style.opacity = hasFocusedZone && !focused ? '0.42' : '1';
+        el.style.cursor = 'pointer';
+        el.style.pointerEvents = 'all';
+        el.onmouseenter = () => {
+          if (activeTab !== 'analytics') return;
+          setAnalyticsZoneHover(resolvedZoneId, {
+            title: mappedZone?.label || formatZoneLabel(resolvedZoneId),
+            subtitle: `${minutes.toFixed(1)} min in current heatmap range`,
+          });
+        };
+        el.onmouseleave = () => {
+          if (activeTab !== 'analytics') return;
+          clearAnalyticsZoneHover();
+        };
+        el.onclick = () => {
+          if (activeTab === 'analytics') {
+            toggleAnalyticsZonePin(resolvedZoneId, {
+              title: mappedZone?.label || formatZoneLabel(resolvedZoneId),
+              subtitle: `${minutes.toFixed(1)} min in current heatmap range`,
+            });
+            return;
+          }
+          setSelectedZone(String(resolvedZoneId));
+        };
 
-      if (disconnected) {
-        try {
-          const bbox = el.getBBox();
-          const radius = Math.max(8, Math.min(14, Math.min(bbox.width, bbox.height) * 0.12));
-          const cx = bbox.x + bbox.width - radius - 4;
-          const cy = bbox.y + radius + 4;
+        const titleEl = el.querySelector('title');
+        if (titleEl) titleEl.remove();
 
-          const marker = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
-          marker.setAttribute('id', `onsight-status-${resolvedZoneId}`);
-          marker.style.pointerEvents = 'none';
+        if (disconnected) {
+          try {
+            const bbox = el.getBBox();
+            const radius = Math.max(8, Math.min(14, Math.min(bbox.width, bbox.height) * 0.12));
+            const cx = bbox.x + bbox.width - radius - 4;
+            const cy = bbox.y + radius + 4;
 
-          const bubble = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          bubble.setAttribute('cx', String(cx));
-          bubble.setAttribute('cy', String(cy));
-          bubble.setAttribute('r', String(radius));
-          bubble.setAttribute('fill', '#334155');
-          bubble.setAttribute('stroke', '#cbd5e1');
-          bubble.setAttribute('stroke-width', '1.5');
+            const marker = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'g');
+            marker.setAttribute('id', `onsight-status-${resolvedZoneId}`);
+            marker.style.pointerEvents = 'none';
 
-          const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
-          text.setAttribute('x', String(cx));
-          text.setAttribute('y', String(cy + 0.5));
-          text.setAttribute('text-anchor', 'middle');
-          text.setAttribute('dominant-baseline', 'middle');
-          text.setAttribute('font-size', String(Math.max(10, radius * 1.2)));
-          text.setAttribute('font-weight', '700');
-          text.setAttribute('fill', '#f8fafc');
-          text.textContent = '!';
+            const bubble = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            bubble.setAttribute('cx', String(cx));
+            bubble.setAttribute('cy', String(cy));
+            bubble.setAttribute('r', String(radius));
+            bubble.setAttribute('fill', '#334155');
+            bubble.setAttribute('stroke', '#cbd5e1');
+            bubble.setAttribute('stroke-width', '1.5');
 
-          marker.appendChild(bubble);
-          marker.appendChild(text);
-          svgRoot.appendChild(marker);
-        } catch (e) {
-          // Ignore SVG marker drawing issues for malformed paths; zone remains styled.
+            const text = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', String(cx));
+            text.setAttribute('y', String(cy + 0.5));
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            text.setAttribute('font-size', String(Math.max(10, radius * 1.2)));
+            text.setAttribute('font-weight', '700');
+            text.setAttribute('fill', '#f8fafc');
+            text.textContent = '!';
+
+            marker.appendChild(bubble);
+            marker.appendChild(text);
+            svgRoot.appendChild(marker);
+          } catch (e) {
+            // Ignore SVG marker drawing issues for malformed paths; zone remains styled.
+          }
         }
-      }
+      });
     });
   };
 
-  const discoverZonesFromSvg = () => {
-    const obj = svgObjectRef.current;
+  const discoverZonesFromSvg = (targetObject = null) => {
+    const obj = targetObject || getSvgObjects().find(candidate => candidate?.contentDocument);
     if (!obj || !obj.contentDocument) return;
     const svgDoc = obj.contentDocument;
     const rawZones = Array.from(svgDoc.querySelectorAll('[id^="zone-"]'))
@@ -1125,21 +1331,20 @@ function TempDashboard() {
     setSvgDiscoveredZones(discovered);
   };
 
+  const handleSvgObjectLoad = (targetObject = null) => {
+    discoverZonesFromSvg(targetObject);
+    applySvgZoneStyles();
+  };
+
   useEffect(() => {
     setSvgDiscoveredZones([]);
-    const obj = svgObjectRef.current;
-    if (!obj) return;
-    const handleLoad = () => {
-      discoverZonesFromSvg();
-      applySvgZoneStyles();
-    };
-    obj.addEventListener('load', handleLoad);
-    return () => obj.removeEventListener('load', handleLoad);
-  }, [activeFloorplanUrl]);
+    const loadedObject = getSvgObjects().find(obj => obj?.contentDocument);
+    if (loadedObject) handleSvgObjectLoad(loadedObject);
+  }, [activeFloorplanUrl, activeTab]);
 
   useEffect(() => {
     applySvgZoneStyles();
-  }, [facilityZones, selectedZone, activeZones, activeFloorplanUrl]);
+  }, [facilityZones, selectedZone, activeZones, activeFloorplanUrl, activeTab, activeMapFocusZoneId]);
 
   // Memoize processed analytics data to prevent dependency array size changes
   const processedAnalyticsData = useMemo(() => {
@@ -1452,6 +1657,28 @@ function TempDashboard() {
             beginAtZero: true,
           },
         },
+        interaction: { mode: 'nearest', intersect: false },
+        onHover: (_event, elements) => {
+          const hoveredMachine = elements?.length ? machinesToShow[elements[0].datasetIndex] : null;
+          if (!hoveredMachine) {
+            clearAnalyticsZoneHover();
+            return;
+          }
+          const zoneId = analyticsZoneLookup[String(hoveredMachine.machineId || '')] || normalizeZoneId(deriveZoneFromMachineId(hoveredMachine.machineId));
+          setAnalyticsZoneHover(zoneId, {
+            title: hoveredMachine.machineName || hoveredMachine.machineId,
+            subtitle: `${formatZoneLabel(zoneId)} | average by day of week`,
+          });
+        },
+        onClick: (_event, elements) => {
+          const clickedMachine = elements?.length ? machinesToShow[elements[0].datasetIndex] : null;
+          if (!clickedMachine) return;
+          const zoneId = analyticsZoneLookup[String(clickedMachine.machineId || '')] || normalizeZoneId(deriveZoneFromMachineId(clickedMachine.machineId));
+          toggleAnalyticsZonePin(zoneId, {
+            title: clickedMachine.machineName || clickedMachine.machineId,
+            subtitle: `${formatZoneLabel(zoneId)} | average by day of week`,
+          });
+        },
       },
     });
 
@@ -1461,7 +1688,7 @@ function TempDashboard() {
       const lingering = Chart.getChart(canvas);
       if (lingering) lingering.destroy();
     };
-  }, [activeTab, processedAnalyticsData, selectedTopN]);
+  }, [activeTab, processedAnalyticsData, selectedTopN, analyticsZoneLookup]);
 
   // Initialize data on mount and user load
   useEffect(() => {
@@ -1479,8 +1706,18 @@ function TempDashboard() {
     if (activeTab === 'dashboard') {
       buildCumulativeChart();
       fetchFacilityHeatmap(facilityRange);
+      return;
+    }
+    if (activeTab === 'analytics') {
+      fetchFacilityHeatmap(facilityRange);
     }
   }, [user, selectedCumRange, activeTab, facilityRange]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') return;
+    setAnalyticsHoveredTarget(null);
+    setAnalyticsPinnedTarget(null);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!user || activeTab !== 'dashboard') return;
@@ -1908,6 +2145,54 @@ const handleResolveNo = () => {
     persistSuggestions(next);
   }
 
+  const renderAnalyticsMapFocusCard = (options = {}) => {
+    const { minHeight = 360, mapRef = analyticsTopSvgObjectRef, ariaLabel = 'Analytics zone focus map' } = options;
+
+    return (
+      <div className="nx-card" style={{height:'100%', minHeight, display:'flex', flexDirection:'column'}}>
+        <div className="nx-card-header" style={{alignItems:'flex-start'}}>
+          <div className="nx-card-title">Map Focus</div>
+          <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}>
+            {floorOptions.length > 0 && (
+              <NxDropdown
+                value={activeFloorId || floorOptions[0]?.value}
+                onChange={(v) => setSelectedFloorId(String(v))}
+                options={floorOptions}
+                minWidth={110}
+              />
+            )}
+            {analyticsPinnedTarget ? (
+              <button className="nx-btn" onClick={() => setAnalyticsPinnedTarget(null)} style={{height:32, padding:'0 10px'}}>
+                Clear Pin
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div style={{ position:'relative', flex:1, minHeight:Math.max(220, minHeight - 90), background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
+          {activeFloorplanUrl ? (
+            <object
+              ref={mapRef}
+              onLoad={(event) => handleSvgObjectLoad(event.currentTarget)}
+              type="image/svg+xml"
+              data={activeFloorplanUrl}
+              style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
+              aria-label={ariaLabel}
+            />
+          ) : (
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af', padding:'0 24px', textAlign:'center' }}>
+              No floorplan configured for this gym.
+            </div>
+          )}
+          {facilityLoading && (
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'#e5e7eb', background:'rgba(0,0,0,0.35)' }}>
+              Loading facility map...
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderMachineUsageSearchAndAverage = () => (
     <>
       <div className="nx-card" style={{marginTop:8, height:`${DASHBOARD_CONTENT_HEIGHT * 0.335}px`}}>
@@ -2015,7 +2300,23 @@ const handleResolveNo = () => {
                 <div
                   key={`rank_${row.machineId}`}
                   className="nx-trow"
-                  style={{gridTemplateColumns:'70px 1fr 120px 120px', padding:'12px 0'}}
+                  style={{
+                    gridTemplateColumns:'70px 1fr 120px 120px',
+                    padding:'12px 0',
+                    cursor:'pointer',
+                    borderRadius:12,
+                    background: isAnalyticsFocusMatch(row.zone) ? 'rgba(124,58,237,0.1)' : 'transparent',
+                    boxShadow: isAnalyticsFocusMatch(row.zone) ? '0 0 0 1px rgba(124,58,237,0.18) inset' : 'none',
+                  }}
+                  onMouseEnter={() => setAnalyticsZoneHover(row.zone, {
+                    title: row.machineName || row.machineId,
+                    subtitle: `${formatZoneLabel(row.zone)} | ${Math.round(row.avgUsageMinutes)} min average`,
+                  })}
+                  onMouseLeave={clearAnalyticsZoneHover}
+                  onClick={() => toggleAnalyticsZonePin(row.zone, {
+                    title: row.machineName || row.machineId,
+                    subtitle: `${formatZoneLabel(row.zone)} | ${Math.round(row.avgUsageMinutes)} min average`,
+                  })}
                 >
                   <div style={{fontWeight:700, color:'#cbd5e1'}}>#{row.rank}</div>
                   <div>
@@ -2243,42 +2544,83 @@ const handleResolveNo = () => {
               </div>
             ) : activeTab === 'analytics' ? (
               <div className="nx-dashboard-content">
-                <div className="nx-card" style={{marginBottom:'8px'}}>
-                  <div className="nx-card-header" style={{alignItems:'baseline'}}>
-                    <div style={{fontSize:'26px', fontWeight:800, color:'#ffffff', lineHeight:1.1}}>Top 3 Zones Today</div>
-                    <div className="nx-subtle">Usage from midnight to now</div>
-                  </div>
-                  <div style={{minHeight:220, display:'flex', alignItems:'flex-end', justifyContent:'space-around', gap:20, padding:'10px 8px 4px'}}>
-                    {topZonesTodayLoading ? (
-                      <div className="nx-subtle" style={{padding:'20px'}}>Loading zone usage...</div>
-                    ) : topZonesToday.length === 0 ? (
-                      <div className="nx-subtle" style={{padding:'20px'}}>No zone usage data available for today.</div>
-                    ) : (
-                      (() => {
-                        const maxMinutes = Math.max(1, ...topZonesToday.map(z => Number(z.minutes) || 0));
-                        const barColors = ['rgba(34,197,94,0.9)', 'rgba(249,115,22,0.9)', 'rgba(239,68,68,0.9)'];
-                        return topZonesToday.map((zone, idx) => {
-                          const ratio = (Number(zone.minutes) || 0) / maxMinutes;
-                          const barHeight = Math.max(18, Math.round(170 * ratio));
-                          const label = zone.empty ? '--' : formatZoneLabel(zone.zone);
-                          return (
-                            <div key={`top_zone_${idx}_${zone.zone}`} style={{display:'flex', flexDirection:'column', alignItems:'center', minWidth:180}}>
-                              <div style={{fontSize:14, fontWeight:700, color:'#e5e7eb', marginBottom:8}}>{label}</div>
-                              <div style={{display:'flex', alignItems:'flex-end', gap:10, minHeight:190}}>
-                                <div style={{
-                                  width:58,
-                                  height: `${barHeight}px`,
-                                  borderRadius:'10px 10px 4px 4px',
-                                  background: barColors[idx % barColors.length],
-                                  boxShadow:'0 0 0 1px rgba(255,255,255,0.12) inset'
-                                }} />
-                                <div className="nx-subtle" style={{fontWeight:600, color:'#cbd5e1'}}>{Math.round(zone.minutes || 0)} min</div>
+                <div className="nx-grid" style={{marginBottom:'8px'}}>
+                  <div className="nx-card" style={{gridColumn:'span 7', minHeight:340}}>
+                    <div className="nx-card-header" style={{alignItems:'baseline'}}>
+                      <div style={{fontSize:'26px', fontWeight:800, color:'#ffffff', lineHeight:1.1}}>Top 3 Zones Today</div>
+                      <div className="nx-subtle">Usage from midnight to now</div>
+                    </div>
+                    <div style={{minHeight:220, display:'flex', alignItems:'flex-end', justifyContent:'space-around', gap:20, padding:'10px 8px 4px'}}>
+                      {topZonesTodayLoading ? (
+                        <div className="nx-subtle" style={{padding:'20px'}}>Loading zone usage...</div>
+                      ) : topZonesToday.length === 0 ? (
+                        <div className="nx-subtle" style={{padding:'20px'}}>No zone usage data available for today.</div>
+                      ) : (
+                        (() => {
+                          const maxMinutes = Math.max(1, ...topZonesToday.map(z => Number(z.minutes) || 0));
+                          const barColors = ['rgba(34,197,94,0.9)', 'rgba(249,115,22,0.9)', 'rgba(239,68,68,0.9)'];
+                          return topZonesToday.map((zone, idx) => {
+                            const ratio = (Number(zone.minutes) || 0) / maxMinutes;
+                            const barHeight = Math.max(18, Math.round(170 * ratio));
+                            const label = zone.empty ? '--' : formatZoneLabel(zone.zone);
+                            const isFocused = !zone.empty && isAnalyticsFocusMatch(zone.zone);
+                            return (
+                              <div
+                                key={`top_zone_${idx}_${zone.zone}`}
+                                style={{
+                                  display:'flex',
+                                  flexDirection:'column',
+                                  alignItems:'center',
+                                  minWidth:150,
+                                  padding:'8px 10px',
+                                  borderRadius:14,
+                                  border: isFocused ? '1px solid rgba(124,58,237,0.6)' : '1px solid transparent',
+                                  background: isFocused ? 'rgba(124,58,237,0.12)' : 'transparent',
+                                  boxShadow: isFocused ? '0 0 0 1px rgba(124,58,237,0.18) inset' : 'none',
+                                  cursor: zone.empty ? 'default' : 'pointer',
+                                }}
+                                onMouseEnter={() => {
+                                  if (zone.empty) return;
+                                  setAnalyticsZoneHover(zone.zone, {
+                                    title: label,
+                                    subtitle: `${Math.round(zone.minutes || 0)} min from midnight to now`,
+                                  });
+                                }}
+                                onMouseLeave={clearAnalyticsZoneHover}
+                                onClick={() => {
+                                  if (zone.empty) return;
+                                  toggleAnalyticsZonePin(zone.zone, {
+                                    title: label,
+                                    subtitle: `${Math.round(zone.minutes || 0)} min from midnight to now`,
+                                  });
+                                }}
+                              >
+                                <div style={{fontSize:14, fontWeight:700, color:'#e5e7eb', marginBottom:8}}>{label}</div>
+                                <div style={{display:'flex', alignItems:'flex-end', gap:10, minHeight:190}}>
+                                  <div style={{
+                                    width:52,
+                                    height: `${barHeight}px`,
+                                    borderRadius:'10px 10px 4px 4px',
+                                    background: barColors[idx % barColors.length],
+                                    boxShadow: isFocused
+                                      ? '0 0 0 1px rgba(255,255,255,0.16) inset, 0 0 18px rgba(124,58,237,0.45)'
+                                      : '0 0 0 1px rgba(255,255,255,0.12) inset'
+                                  }} />
+                                  <div className="nx-subtle" style={{fontWeight:600, color:'#cbd5e1'}}>{Math.round(zone.minutes || 0)} min</div>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        });
-                      })()
-                    )}
+                            );
+                          });
+                        })()
+                      )}
+                    </div>
+                  </div>
+                  <div style={{gridColumn:'span 5'}}>
+                    {renderAnalyticsMapFocusCard({
+                      minHeight: 340,
+                      mapRef: analyticsTopSvgObjectRef,
+                      ariaLabel: 'Analytics top zone focus map',
+                    })}
                   </div>
                 </div>
                 <div className="nx-grid" style={{marginBottom:'8px'}}>
@@ -2292,7 +2634,26 @@ const handleResolveNo = () => {
                     </div>
                   ) : (
                     remainingZonesToday.map((zone) => (
-                      <div key={`remaining_zone_${zone.zone}`} className="nx-card" style={{gridColumn:'span 3', padding:'12px 14px'}}>
+                      <div
+                        key={`remaining_zone_${zone.zone}`}
+                        className="nx-card"
+                        style={{
+                          gridColumn:'span 3',
+                          padding:'12px 14px',
+                          borderColor: isAnalyticsFocusMatch(zone.zone) ? 'rgba(124,58,237,0.55)' : undefined,
+                          boxShadow: isAnalyticsFocusMatch(zone.zone) ? '0 0 0 1px rgba(124,58,237,0.16) inset' : undefined,
+                          cursor:'pointer',
+                        }}
+                        onMouseEnter={() => setAnalyticsZoneHover(zone.zone, {
+                          title: formatZoneLabel(zone.zone),
+                          subtitle: `${Math.round(zone.minutes || 0)} min from midnight to now`,
+                        })}
+                        onMouseLeave={clearAnalyticsZoneHover}
+                        onClick={() => toggleAnalyticsZonePin(zone.zone, {
+                          title: formatZoneLabel(zone.zone),
+                          subtitle: `${Math.round(zone.minutes || 0)} min from midnight to now`,
+                        })}
+                      >
                         <div className="nx-card-title" style={{fontSize:15, color:'#e5e7eb', marginBottom:6}}>
                           {formatZoneLabel(zone.zone)}
                         </div>
@@ -2346,26 +2707,33 @@ const handleResolveNo = () => {
                       )}
                     </div>
                   </div>
-                  <div className="nx-card" style={{height:`${DASHBOARD_CONTENT_HEIGHT * 0.65}px`}}>
-                    <div className="nx-card-header">
-                      <div className="nx-card-title">Analytics Summary</div>
+                  <div style={{display:'flex', flexDirection:'column', gap:'16px', height:`${DASHBOARD_CONTENT_HEIGHT * 0.65}px`}}>
+                    {renderAnalyticsMapFocusCard({
+                      minHeight: 320,
+                      mapRef: analyticsSideSvgObjectRef,
+                      ariaLabel: 'Analytics side zone focus map',
+                    })}
+                    <div className="nx-card" style={{flex:'0 0 auto'}}>
+                      <div className="nx-card-header">
+                        <div className="nx-card-title">Analytics Summary</div>
+                      </div>
+                      <div style={{padding:'16px'}}>
+                        <div style={{marginBottom:'12px'}}>
+                          <div className="nx-subtle">Total Machines</div>
+                          <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{machineOptions.length}</div>
+                        </div>
+                        <div style={{marginBottom:'12px'}}>
+                          <div className="nx-subtle">Connected Machines</div>
+                          <div style={{fontSize:'24px', fontWeight:'700', color:'#22c55e'}}>{stats.currentOccupancy}</div>
+                        </div>
+                        <div style={{marginBottom:'12px'}}>
+                          <div className="nx-subtle">Connected Sensors</div>
+                          <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{stats.numDevices}</div>
+                        </div>
+                      </div>
                     </div>
-                    <div style={{padding:'16px'}}>
-                      <div style={{marginBottom:'12px'}}>
-                        <div className="nx-subtle">Total Machines</div>
-                        <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{machineOptions.length}</div>
-                      </div>
-                      <div style={{marginBottom:'12px'}}>
-                        <div className="nx-subtle">Connected Machines</div>
-                        <div style={{fontSize:'24px', fontWeight:'700', color:'#22c55e'}}>{stats.currentOccupancy}</div>
-                      </div>
-                      <div style={{marginBottom:'12px'}}>
-                        <div className="nx-subtle">Connected Sensors</div>
-                        <div style={{fontSize:'24px', fontWeight:'700', color:'#ffffff'}}>{stats.numDevices}</div>
-                      </div>
-                    </div>
+                  </div>
                 </div>
-              </div>
 
               </div>
             ) : activeTab === 'tickets' ? (
@@ -2396,7 +2764,7 @@ const handleResolveNo = () => {
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Peak Hours</span></div>
                     <div className="nx-metric">{stats.peakHours}</div>
-                    <div className="nx-subtle">Most active time today</div>
+                    <div className="nx-subtle">Most active time in the past month</div>
                   </div>
                   <div className="nx-card" style={{gridColumn:'span 3'}}>
                     <div className="nx-card-header"><span className="nx-card-title">Connected Machines</span></div>
@@ -2417,26 +2785,18 @@ const handleResolveNo = () => {
                       <div className="nx-card-title">Facility Usage Map</div>
                       <div className="nx-subtle">Color intensity shows recent usage by zone</div>
                     </div>
-                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                      <NxDropdown
+                    <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-start', flexWrap:'wrap', marginLeft:'auto' }}>
+                      <HeatmapRangeSlider
+                        marks={FACILITY_RANGE_MARKS}
                         value={facilityRange}
-                        onChange={(v) => setFacilityRange(parseInt(v))}
-                        options={[
-                          { value: 1, label: 'Past 1 Hour' },
-                          { value: 3, label: 'Past 3 Hours' },
-                          { value: 6, label: 'Past 6 Hours' },
-                          { value: 12, label: 'Past 12 Hours' },
-                          { value: 24, label: 'Past 24 Hours' },
-                          { value: 1000, label: 'All Time' },
-                        ]}
-                        minWidth={150}
+                        onChange={setFacilityRange}
                       />
                       {floorOptions.length > 0 && (
                         <NxDropdown
                           value={activeFloorId || floorOptions[0]?.value}
                           onChange={(v) => setSelectedFloorId(String(v))}
                           options={floorOptions}
-                          minWidth={130}
+                          minWidth={110}
                         />
                       )}
                     </div>
@@ -2444,7 +2804,8 @@ const handleResolveNo = () => {
                   <div style={{ position:'relative', paddingBottom:'55%', background:'#0f172a', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, overflow:'hidden' }}>
                     {activeFloorplanUrl ? (
                       <object
-                        ref={svgObjectRef}
+                        ref={dashboardSvgObjectRef}
+                        onLoad={(event) => handleSvgObjectLoad(event.currentTarget)}
                         type="image/svg+xml"
                         data={activeFloorplanUrl}
                         style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
@@ -2672,3 +3033,4 @@ const handleResolveNo = () => {
 
 
 export default TempDashboard;
+
