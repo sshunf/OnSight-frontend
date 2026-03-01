@@ -1212,6 +1212,7 @@ function TempDashboard() {
     );
     const focusedZoneId = String(activeMapFocusZoneId || '').trim();
     const hasFocusedZone = Boolean(focusedZoneId);
+    const dimNonFocusedZones = activeTab === 'analytics' && hasFocusedZone;
     const focusStroke = activeTab === 'analytics' ? '#c4b5fd' : '#facc15';
     const focusGlow = activeTab === 'analytics'
       ? 'drop-shadow(0 0 12px rgba(124,58,237,0.72))'
@@ -1252,7 +1253,7 @@ function TempDashboard() {
         el.style.stroke = focused ? focusStroke : (disconnected ? '#64748b' : '#000000');
         el.style.strokeWidth = focused ? '4' : '1';
         el.style.filter = focused ? focusGlow : 'none';
-        el.style.opacity = hasFocusedZone && !focused ? '0.42' : '1';
+        el.style.opacity = dimNonFocusedZones && !focused ? '0.42' : '1';
         el.style.cursor = 'pointer';
         el.style.pointerEvents = 'all';
         el.onmouseenter = () => {
