@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
+const MANUAL_TICKET_MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MANUAL_TICKET_ALLOWED_ATTACHMENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const LEGACY_ZONE_ID_MAP = Object.freeze({
   '10': '22',
   '20': '23',
@@ -54,6 +56,33 @@ function formatZoneLabel(value) {
   if (lower.startsWith('zone')) return trimmed;
   if (/^\d+$/.test(trimmed)) return `Zone ${trimmed}`;
   return trimmed;
+}
+
+function getInitialTicketForm() {
+  return {
+    title: '',
+    machineName: '',
+    technicianId: '',
+    priority: 'Medium',
+    notesText: '',
+    sendEmail: false,
+    attachment: null
+  };
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '0 KB';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read image attachment'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function generateTimes() {
@@ -184,14 +213,7 @@ export default function TicketsTab() {
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [form, setForm] = useState({
-    title: '',
-    machineName: '',
-    technicianId: '',
-    priority: 'Medium',
-    checklistText: '',
-    sendEmail: false
-  });
+  const [form, setForm] = useState(getInitialTicketForm);
   const [gymMachines, setGymMachines] = useState([]);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [technicians, setTechnicians] = useState([]);
@@ -209,6 +231,7 @@ export default function TicketsTab() {
   const [zoneQrError, setZoneQrError] = useState('');
   const createModalRef = useRef(null);
   const createTitleRef = useRef(null);
+  const attachmentInputRef = useRef(null);
   const detailsModalRef = useRef(null);
   const resolveModalRef = useRef(null);
 
@@ -767,6 +790,58 @@ function extractZones(mapCfg) {
     }
   }
 
+  function resetCreateForm() {
+    setForm(getInitialTicketForm());
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
+    }
+  }
+
+  function clearManualTicketAttachment() {
+    setForm(prev => ({ ...prev, attachment: null }));
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
+    }
+  }
+
+  async function handleManualTicketAttachmentChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setForm(prev => ({ ...prev, attachment: null }));
+      return;
+    }
+
+    if (!MANUAL_TICKET_ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
+      setErrorMsg('Attachment must be a JPG, PNG, GIF, or WebP image');
+      clearManualTicketAttachment();
+      return;
+    }
+
+    if (file.size > MANUAL_TICKET_MAX_ATTACHMENT_BYTES) {
+      setErrorMsg('Attachment must be 5 MB or smaller');
+      clearManualTicketAttachment();
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setForm(prev => ({
+        ...prev,
+        attachment: {
+          name: file.name,
+          contentType: file.type,
+          sizeBytes: file.size,
+          dataUrl
+        }
+      }));
+      setErrorMsg('');
+    } catch (error) {
+      console.error('Attachment read failed', error);
+      setErrorMsg(error.message || 'Failed to read image attachment');
+      clearManualTicketAttachment();
+    }
+  }
+
   async function onCreate(e) {
     e?.preventDefault?.();
     e?.stopPropagation?.();
@@ -777,10 +852,7 @@ function extractZones(mapCfg) {
     }
     
     setErrorMsg('');
-    const checklist = form.checklistText
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean);
+    const notes = String(form.notesText || '').trim();
     
     // If no backend URL, use local storage
     if (!backendURL) {
@@ -792,21 +864,15 @@ function extractZones(mapCfg) {
         priority: form.priority || 'Medium',
         status: 'open',
         manual: true,
-        checklist: checklist.map(item => ({ item, done: false })),
+        notes: notes || undefined,
+        attachment: form.attachment || undefined,
         createdAt: new Date().toISOString(),
       };
       const updatedTickets = [newTicket, ...tickets];
       setTickets(updatedTickets);
       writeState((curr) => ({ ...curr, tickets: updatedTickets, updatedAt: new Date().toISOString() }));
       setCreateOpen(false);
-      setForm({
-        title: '',
-        machineName: '',
-        technicianId: '',
-        priority: 'Medium',
-        checklistText: '',
-        sendEmail: false
-      });
+      resetCreateForm();
       return;
     }
     
@@ -817,7 +883,8 @@ function extractZones(mapCfg) {
         title: form.title,
         machineName: form.machineName,
         priority: form.priority || 'Medium',
-        checklist,
+        notes,
+        hasAttachment: !!form.attachment,
         sendEmail: form.sendEmail
       });
       
@@ -829,7 +896,8 @@ function extractZones(mapCfg) {
           machineName: form.machineName,
           technicianId: form.technicianId || undefined,
           priority: form.priority || 'Medium',
-          checklist,
+          notes: notes || undefined,
+          attachment: form.attachment || undefined,
           sendEmail: form.sendEmail,
           gymId
         })
@@ -845,14 +913,7 @@ function extractZones(mapCfg) {
       console.log('Ticket created successfully:', createdTicket);
       await fetchStatus();
       setCreateOpen(false);
-      setForm({
-        title: '',
-        machineName: '',
-        technicianId: '',
-        priority: 'Medium',
-        checklistText: '',
-        sendEmail: false
-      });
+      resetCreateForm();
     } catch (error) {
       console.error('Create failed', error);
       setErrorMsg(error.message || 'Failed to create ticket');
@@ -974,13 +1035,14 @@ function extractZones(mapCfg) {
         .nx-pill { height:32px; cursor:pointer; }
 
         /* Create Ticket modal refreshed styles */
-        .tk-modal { width:min(640px, 80vw) !important; max-width:640px !important; border:1px solid #1d1d29; background:#0f0f16; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.6); overflow:hidden; }
+        .tk-modal { width:min(640px, 94vw) !important; max-width:640px !important; max-height:calc(100vh - 32px); border:1px solid #1d1d29; background:#0f0f16; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.6); overflow:hidden; display:flex; flex-direction:column; }
+        .tk-modal form { display:flex; flex-direction:column; min-height:0; flex:1; }
         .tk-header { display:flex; align-items:flex-start; justify-content:space-between; padding:20px 24px; border-bottom:1px solid #1d1d29; }
         .tk-title { font-size:18px; font-weight:600; color:#e5e7eb; }
         .tk-close { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; color:#a1a1b3; background:transparent; border:1px solid transparent; cursor:pointer; }
         .tk-close:hover { background:#181824; color:#e5e7eb; }
         .tk-close:focus { outline:2px solid rgba(124,58,237,.5); outline-offset:2px; }
-        .tk-body { padding:20px 24px; }
+        .tk-body { padding:20px 24px; flex:1; min-height:0; overflow-y:auto; }
         .tk-grid { display:grid; grid-template-columns:1fr; gap:16px; }
         @media (min-width: 768px) { .tk-grid { grid-template-columns:1fr 1fr; gap:18px; } }
         .tk-field { display:flex; flex-direction:column; }
@@ -991,7 +1053,7 @@ function extractZones(mapCfg) {
         .tk-input:focus { border-color:#9b8cfb; outline:4px solid rgba(124,58,237,.18); color:#ffffff !important; }
         textarea.tk-input { height:auto; padding:12px; resize:vertical; color:#ffffff !important; }
         textarea.tk-input:focus { color:#ffffff !important; }
-        .tk-footer-bar { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:10px; padding:14px 24px; border-top:1px solid #1d1d29; background:#0f0f16; }
+        .tk-footer-bar { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:10px; padding:14px 24px; border-top:1px solid #1d1d29; background:#0f0f16; flex-shrink:0; }
         .tk-btn { height:40px; border-radius:10px; padding:0 14px; border:1px solid #2a2a38; color:#e5e7eb; background:#161624; cursor:pointer; }
         .tk-btn:hover { background:#1b1b2b; }
         .tk-btn:focus { outline:2px solid rgba(124,58,237,.5); outline-offset:2px; }
@@ -1666,6 +1728,31 @@ function extractZones(mapCfg) {
                       </strong> {active.notes}
                     </div>
                   )}
+                  {active.attachment?.dataUrl && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <strong style={{ color: '#e5e7eb', display: 'block', marginBottom: '8px' }}>Attachment:</strong>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <a
+                          href={active.attachment.dataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#c4b5fd', textDecoration: 'underline', fontSize: '13px' }}
+                        >
+                          {active.attachment.name || 'Open attached image'}
+                        </a>
+                        <img
+                          src={active.attachment.dataUrl}
+                          alt={active.attachment.name || 'Ticket attachment'}
+                          style={{
+                            width: '100%',
+                            maxWidth: '320px',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(148, 163, 184, 0.35)'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   {active.ruleInterval && (
                     <div style={{ marginBottom: '12px' }}>
                       <strong style={{ color: '#e5e7eb' }}>Maintenance Interval:</strong> {active.ruleInterval} {active.ruleUnit || ''}
@@ -1841,15 +1928,65 @@ function extractZones(mapCfg) {
                   </div>
                   
                   <div className="tk-field" style={{ gridColumn: '1 / -1' }}>
-                    <label className="tk-label">Checklist</label>
+                    <label className="tk-label">Notes</label>
                     <textarea
                       className="tk-input"
                       style={{ height: '120px', resize: 'vertical', padding: '12px' }}
-                      placeholder="Enter checklist items (one per line)&#10;Example:&#10;Check equipment power&#10;Inspect for damage&#10;Test functionality"
-                      value={form.checklistText}
-                      onChange={(e) => setForm(prev => ({ ...prev, checklistText: e.target.value }))}
+                      placeholder="Example: Serial number and issue with equipment"
+                      value={form.notesText}
+                      onChange={(e) => setForm(prev => ({ ...prev, notesText: e.target.value }))}
                     />
-                    <div className="tk-helper">Enter each checklist item on a new line</div>
+                    <div className="tk-helper">Add any context the technician should see.</div>
+                  </div>
+
+                  <div className="tk-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="tk-label">Picture (optional)</label>
+                    <input
+                      ref={attachmentInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="tk-input"
+                      onChange={handleManualTicketAttachmentChange}
+                    />
+                    <div className="tk-helper">Upload a JPG, PNG, GIF, or WebP image up to 5 MB.</div>
+                    {form.attachment && (
+                      <div style={{
+                        marginTop: '10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(148, 163, 184, 0.25)',
+                        background: 'rgba(15, 23, 42, 0.45)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ color: '#e5e7eb', fontSize: '13px' }}>
+                            {form.attachment.name} ({formatFileSize(form.attachment.sizeBytes)})
+                          </div>
+                          <button
+                            type="button"
+                            className="tk-btn"
+                            onClick={clearManualTicketAttachment}
+                            style={{ padding: '6px 10px', height: '32px' }}
+                          >
+                            Remove Picture
+                          </button>
+                        </div>
+                        <img
+                          src={form.attachment.dataUrl}
+                          alt={form.attachment.name || 'Attachment preview'}
+                          style={{
+                            width: '100%',
+                            maxWidth: '280px',
+                            maxHeight: '180px',
+                            objectFit: 'contain',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(148, 163, 184, 0.2)'
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                   
                   {/* <div className="tk-field" style={{ gridColumn: '1 / -1' }}>
