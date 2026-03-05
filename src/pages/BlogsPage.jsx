@@ -26,9 +26,6 @@ function BlogsPage() {
     })
   ), [activeCategory, activeTag]);
 
-  const featuredPost = filteredPosts[0] || null;
-  const remainingPosts = filteredPosts.slice(1);
-
   return (
     <section className="relative py-24 px-6 lg:px-8 bg-black/95">
       <div className="mx-auto max-w-7xl">
@@ -78,41 +75,8 @@ function BlogsPage() {
             No posts match your selected filters.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {featuredPost && (() => {
-              const isExternal = Boolean(featuredPost.externalUrl);
-              const Wrapper = isExternal ? 'a' : Link;
-              const linkProps = isExternal
-                ? { href: featuredPost.externalUrl, target: '_blank', rel: 'noopener noreferrer' }
-                : { to: `/blogs/${featuredPost.slug}` };
-
-              return (
-                <Wrapper
-                  {...linkProps}
-                  className="group md:col-span-2 rounded-xl overflow-hidden border border-gray-800 bg-gray-950/80 hover:border-gray-600 transition"
-                >
-                  <div className="h-56 border-b border-gray-800" style={featuredPost.heroStyle} />
-                  <div className="p-6">
-                    <div className="mb-2 text-xs uppercase tracking-wide text-cyan-300">{featuredPost.category}</div>
-                    <h2 className="text-3xl font-bold text-white group-hover:text-cyan-200 transition">{featuredPost.title}</h2>
-                    <p className="mt-3 text-gray-300">{featuredPost.summary}</p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {(featuredPost.tags || []).map((tag) => (
-                        <span key={`${featuredPost.slug}_${tag}`} className="text-xs rounded-full border border-gray-700 px-2.5 py-1 text-gray-300">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-5 flex items-center justify-between text-xs text-gray-400">
-                      <span>{featuredPost.author}</span>
-                      <span>{formatDate(featuredPost.publishedAt)}</span>
-                    </div>
-                  </div>
-                </Wrapper>
-              );
-            })()}
-
-            {remainingPosts.map((post) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredPosts.map((post) => {
               const isExternal = Boolean(post.externalUrl);
               const Wrapper = isExternal ? 'a' : Link;
               const linkProps = isExternal
@@ -125,7 +89,7 @@ function BlogsPage() {
                   {...linkProps}
                   className="group rounded-xl overflow-hidden border border-gray-800 bg-gray-950/80 hover:border-gray-600 transition"
                 >
-                  <div className="h-40 border-b border-gray-800" style={post.heroStyle} />
+                  <div className="h-52 border-b border-gray-800" style={post.heroStyle} />
                   <div className="p-5">
                     <div className="mb-2 text-xs uppercase tracking-wide text-cyan-300">{post.category}</div>
                     <h2 className="text-2xl font-bold text-white leading-tight group-hover:text-cyan-200 transition">{post.title}</h2>
@@ -137,7 +101,8 @@ function BlogsPage() {
                         </span>
                       ))}
                     </div>
-                    <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-400">
+                      <span>{post.author}</span>
                       <span>{post.readTime}</span>
                       <span>{formatDate(post.publishedAt)}</span>
                     </div>
