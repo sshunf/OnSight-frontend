@@ -62,7 +62,17 @@ function BlogDetailPage() {
                   p: ({ children }) => <p className="mb-4">{children}</p>,
                   ul: ({ children }) => <ul className="mb-4 list-disc pl-6 space-y-1">{children}</ul>,
                   ol: ({ children }) => <ol className="mb-4 list-decimal pl-6 space-y-1">{children}</ol>,
-                  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                  a: ({ href, children }) => (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline text-purple-400 hover:text-purple-300 visited:text-purple-500 transition-colors"
+                    >
+                      {children}
+                    </a>
+                  ),
+                  strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
                 }}
               >
                 {post.contentMarkdown}

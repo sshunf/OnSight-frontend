@@ -10,85 +10,55 @@ export const BLOG_POSTS = [
     summary:
       'Preventive maintenance helps gyms avoid costly breakdowns by using routine inspections, servicing, and replacements before failures happen.',
     heroStyle: {
-      background:
-        'linear-gradient(130deg, rgba(14,165,233,0.3) 0%, rgba(34,197,94,0.24) 48%, rgba(15,118,110,0.36) 100%)',
+      backgroundImage: 'url(/pm_blog.png)',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
     },
     contentMarkdown: `## What Is Preventive Maintenance?
 
-Preventive maintenance (PM) is a proactive approach to maintaining equipment and facilities. It involves routine inspections, servicing, and minor repairs before complete breakdowns occur.
+Preventive maintenance (PM) is a proactive approach to maintaining equipment and facilities. It involves routine inspections, servicing, and minor repairs before complete breakdowns occur. Instead of fixing machines and equipment after total failure, preventive maintenance prioritizes repeated interventions to extend asset life, reduce downtime, and lower input costs.
 
-Instead of fixing machines after total failure, preventive maintenance prioritizes recurring interventions to:
+For gyms in particular, preventive maintenance is a key procedure in helping maintain the quality of their equipment and floor. Treadmills, weights, machines, and floors all experience heavy daily usage. It is therefore extremely important to keep all assets functionally operating, as even one breakdown can lead to poorer member experience, increased liability risk, and incur costly emergency repairs.
 
-- extend asset life
-- reduce downtime
-- lower repair and replacement costs
+## How does Preventive Maintenance work?
 
-For gyms in particular, preventive maintenance is essential for preserving equipment quality and floor performance. Treadmills, weights, machines, and flooring all experience heavy daily usage. Even one major breakdown can lead to poorer member experience, higher liability risk, and costly emergency repairs.
+Successful preventive maintenance operations will typically run on a scheduled, structured cycle:
 
-## How Does Preventive Maintenance Work?
+1. Inspection
+   - Possibly the most important part of maintenance, making sure that machines are functioning and there are no irregularities in performance.
+2. Servicing
+   - Lubricating parts, cleaning components, tightening bolts, and other measures to ensure equipment is protected from complete malfunction.
+3. Replacement
+   - Swapping parts before failure (e.g. cables, clips, pins, etc.)
+4. Documentation
+   - Recording all inspection data and logs in a Computerized Maintenance Management System (CMMS) that gives intuitive, integrated data summaries on a unified platform.
+   - Effective modern PM programs will rely on data-driven monitoring, integrating with gym maintenance software.
 
-Successful PM operations typically follow a structured cycle:
+## Why is Preventive Maintenance important for gyms?
 
-### 1. Inspection
+Preventive maintenance offers a myriad of benefits for gym owners, helping to maximize operations and profitability.
 
-Possibly the most important step. Staff checks whether machines are functioning correctly and whether there are irregularities in performance.
+### Saving Costs
 
-### 2. Servicing
+- By performing regular check-ups on gym equipment, gyms can save up to [40%](https://upkeep.com/learning/maintenance-statistics/#:~:text=Predictive%20maintenance%20is%20highly%20cost,years%20to%20complete%20it%20all.) on maintenance compared to reactive measures (relying on fixes after complete breakdowns).
+- PM also adds up to [2-3 years](https://www.itefy.com/blog/post/preventative-gym-equipment-maintenance) on high-usage assets, helping extend the lifespan of machine investments for the long-term.
+- Reduced downtime preserves optimal productivity for floors and gym facilities.
 
-Routine servicing includes:
+### Member Retention
 
-- lubricating moving parts
-- cleaning components
-- tightening bolts and fittings
+- Well-maintained gym equipment improves member satisfaction and experience, incentivizing renewal.
+- Employing preventive maintenance can give gyms a comparative advantage to other market competitors that rely on reactive maintenance.
+- [72% of fitness businesses](https://promotionvault.com/gyms-without-data-will-be-left-behind-in-the-ai-revolution/) that employed data-driven systems reported increased rates for member retention.
 
-These actions help protect equipment from major malfunction.
+PM is ultimately a long-term investment that helps gyms with operational stability and increased profit margins. It is an essential practice for maximizing gym equipment, facilities, and floors, leading to improved member satisfaction.
 
-### 3. Replacement
+## Getting Started with Preventive Maintenance
 
-High-wear parts are swapped before failure, such as:
+[OnSight](https://onsight-tech.com/) combines radar sensing technologies and a live dashboard to offer a simple, unified solution to preventive maintenance for gym owners. Our service was built specifically to help gym owners with floor maintenance, member retention, and extending asset life.
 
-- cables
-- clips
-- pins
+The easily integrable, one-time install sensors allow gym staff to view maintenance schedules, machine usage, and a floor heatmap that offer live analytics at a single glance. OnSight also notifies workers with real-time updates when it detects irregularities, reducing the necessity for manual inspections with an integrated cloud solution.
 
-### 4. Documentation
-
-All inspections and maintenance actions are recorded in a Computerized Maintenance Management System (CMMS), creating a centralized history and an integrated operating view.
-
-Effective modern PM programs are data-driven and integrated with gym maintenance software.
-
-## Why Is Preventive Maintenance Important for Gyms?
-
-Preventive maintenance offers direct operational and financial upside for gym owners.
-
-### Cost Savings and Asset Life
-
-- Gyms can save **up to 40%** on maintenance compared to fully reactive approaches.
-- PM can add **2-3 years** of life to high-usage equipment.
-- Reduced downtime preserves productivity across floors and facilities.
-
-### Member Retention and Experience
-
-- Well-maintained equipment improves member satisfaction and renewal likelihood.
-- PM gives gyms a competitive edge over facilities that wait for failures.
-- **72%** of fitness businesses using data-driven systems reported increased retention.
-
-PM is a long-term investment in operational stability and stronger margins. It helps maximize equipment value while improving day-to-day member experience.
-
-## Getting Started With Preventive Maintenance
-
-OnSight combines radar sensing technology with a live dashboard to deliver a unified preventive maintenance solution for gym owners.
-
-With one-time-install sensors and an integrated cloud platform, teams can monitor:
-
-- maintenance schedules
-- machine usage
-- floor heatmaps
-- real-time irregularities
-
-This reduces manual inspection burden while improving visibility and response speed.
-
-Check out how OnSight can save costs in real time, or book a free demo to start improving your gym for the long term.`,
+Check out [how OnSight can save costs](https://onsight-tech.com/roi) in real time or [book a free demo](https://onsight-tech.com/waitlist) today to get started on improving your gym for the long-term!`,
   },
   {
     slug: 'onsight-first-to-receive-the-manufacturing-fund',
