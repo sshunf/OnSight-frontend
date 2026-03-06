@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import '../css/LoginScreen.css';
 
 const backendURL = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, '');
-console.log(`touch proof`);
-console.log("Backend url:", import.meta.env.VITE_BACKEND_URL);
 function LoginScreen() {
   const [activeScreen, setActiveScreen] = useState('login');
   const [user, setUser] = useState(null);
